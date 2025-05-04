@@ -13,19 +13,14 @@ spec:
         app: mean-gene-bot
     spec:
       containers:
-        - name: mean-gene-bot
-          image: meangene-bot:latest
-          imagePullPolicy: Never
-          env:
-            - name: TWITCH_BOT_USERNAME
-              value: "MeanGeneBot"
-            - name: TWITCH_OAUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: twitch-credentials
-                  key: oauth_token
-            - name: TWITCH_CHANNEL
-              valueFrom:
-                secretKeyRef:
-                  name: twitch-credentials
-                  key: channel
+      - name: mean-gene-bot
+        image: docker.io/library/mean-gene-bot:latest
+        imagePullPolicy: Never
+        env:
+        - name: TWITCH_BOT_USERNAME
+          value: "MeanGeneBot"
+        - name: TWITCH_OAUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: twitch-secrets
+              key: TWITCH_OAUTH_TOKEN
