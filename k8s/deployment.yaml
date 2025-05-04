@@ -1,38 +1,31 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: meangenebot
-  labels:
-    app: meangenebot
+  name: mean-gene-bot
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: meangenebot
+      app: mean-gene-bot
   template:
     metadata:
       labels:
-        app: meangenebot
+        app: mean-gene-bot
     spec:
       containers:
-        - name: meangenebot
-          image: meangenebot:latest
+        - name: mean-gene-bot
+          image: meangene-bot:latest
           imagePullPolicy: Never
-          ports:
-            - containerPort: 8080
           env:
-            - name: TWITCH_BOT_TOKEN
+            - name: TWITCH_BOT_USERNAME
+              value: "MeanGeneBot"
+            - name: TWITCH_OAUTH_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: meangenebot-secrets
-                  key: bot_token
+                  name: twitch-credentials
+                  key: oauth_token
             - name: TWITCH_CHANNEL
-              value: "yourchannelname"
-          resources:
-            limits:
-              memory: "256Mi"
-              cpu: "250m"
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-          restartPolicy: Always
+              valueFrom:
+                secretKeyRef:
+                  name: twitch-credentials
+                  key: channel
