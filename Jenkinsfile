@@ -1,6 +1,8 @@
 pipeline {
     agent {
-        label 'docker-microk8s-agent' // Must match the label on your working pod template
+        kubernetes {
+            label 'docker-microk8s-agent'
+        }
     }
 
     environment {
