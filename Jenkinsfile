@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'microk8s' }
+    agent any
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
