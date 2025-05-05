@@ -1,9 +1,5 @@
 pipeline {
-    agent {
-        kubernetes {
-            label 'docker-microk8s-agent'
-        }
-    }
+    agent { label 'docker-microk8s-agent' }
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
