@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'master' }
+    agent any  // Run this pipeline directly on the controller node
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
@@ -7,17 +7,17 @@ pipeline {
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Build Image with MicroK8s') {
             steps {
-                echo "Building Docker image: ${IMAGE_NAME}"
-                sh 'docker build -t $IMAGE_NAME .'
+                echo "Building image: ${IMAGE_NAME} using MicroK8s"
+                sh 'microk8s ctr image build -t $IMAGE_NAME .'
             }
         }
 
         stage('Save Docker Image') {
             steps {
                 echo "Saving Docker image to tarball: ${TAR_NAME}"
-                sh 'docker save $IMAGE_NAME -o $TAR_NAME'
+                sh 'microk8s ctr images export $TAR_NAME $IMAGE_NAME'
             }
         }
 
