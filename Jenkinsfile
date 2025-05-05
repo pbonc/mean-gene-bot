@@ -1,5 +1,7 @@
 pipeline {
-    agent any  // Run this pipeline directly on the controller node
+    agent {
+        label 'master'
+    }
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
