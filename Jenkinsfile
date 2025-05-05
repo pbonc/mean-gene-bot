@@ -1,46 +1,47 @@
 pipeline {
-    agent {
-        label 'docker-microk8s-agent'
-    }
+    agent any
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
         TAR_NAME = 'meangene-bot.tar'
+        REMOTE_HOST = '192.168.1.10'
     }
 
     stages {
         stage('Build Docker Image') {
             steps {
-                container('docker-cli') {
-                    echo "Building Docker image: ${IMAGE_NAME}"
-                    sh 'docker build -t $IMAGE_NAME .'
-                }
+                echo "Building Docker image: ${IMAGE_NAME}"
+                sh 'docker build -t $IMAGE_NAME .'
             }
         }
 
         stage('Save Docker Image') {
             steps {
-                container('docker-cli') {
-                    echo "Saving Docker image to tarball: ${TAR_NAME}"
-                    sh 'docker save $IMAGE_NAME -o $TAR_NAME'
+                echo "Saving Docker image to tarball: ${TAR_NAME}"
+                sh 'docker save $IMAGE_NAME -o $TAR_NAME'
+            }
+        }
+
+        stage('Copy Image to meangenebrain') {
+            steps {
+                sshagent(['meangenebrain-ssh']) {
+                    sh 'scp -o StrictHostKeyChecking=no $TAR_NAME dar@192.168.1.10:/tmp/$TAR_NAME'
                 }
             }
         }
 
-        stage('Load into MicroK8s') {
+        stage('Load Image into MicroK8s') {
             steps {
-                container('docker-cli') {
-                    echo "Importing image into MicroK8s container runtime"
-                    sh 'microk8s ctr image import $TAR_NAME'
+                sshagent(['meangenebrain-ssh']) {
+                    sh 'ssh -o StrictHostKeyChecking=no dar@192.168.1.10 "microk8s ctr image import /tmp/$TAR_NAME"'
                 }
             }
         }
 
         stage('Restart Deployment') {
             steps {
-                container('docker-cli') {
-                    echo "Restarting Kubernetes deployment"
-                    sh 'microk8s kubectl rollout restart deployment mean-gene-bot'
+                sshagent(['meangenebrain-ssh']) {
+                    sh 'ssh -o StrictHostKeyChecking=no dar@192.168.1.10 "microk8s kubectl rollout restart deployment mean-gene-bot"'
                 }
             }
         }
