@@ -1,7 +1,5 @@
 pipeline {
-    agent {
-        label 'master'
-    }
+    agent { label 'master' }
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
