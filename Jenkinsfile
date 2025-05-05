@@ -1,5 +1,7 @@
 pipeline {
-    agent any
+    agent {
+        label 'docker-microk8s-agent' // Must match the label on your working pod template
+    }
 
     environment {
         IMAGE_NAME = 'meangene-bot:latest'
