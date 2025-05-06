@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     environment {
+        SSH_KEY = '/var/lib/jenkins/.ssh/jenkins_bot_key'
         TARGETS_FILE = 'pipelines/update-hardware/targets.json'
     }
 
@@ -12,22 +13,23 @@ pipeline {
                     def targets = readJSON file: env.TARGETS_FILE
 
                     for (target in targets) {
-                        echo "Updating ${target.host} as ${target.user}..."
+                        def host = target.host
+                        def user = target.user
 
-                        def updateCommand = """
-                            ssh -o StrictHostKeyChecking=no -i ~/.ssh/jenkins_bot_key ${target.user}@${target.host} \\
-                            'sudo apt-get update && sudo apt-get upgrade -y && sudo reboot || true'
-                        """
+                        echo "Updating ${host} as ${user}..."
 
                         def result = sh(
-                            script: updateCommand,
+                            script: """
+                                ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${user}@${host} \\
+                                'sudo apt-get update && sudo apt-get upgrade -y && sudo reboot &' || true
+                            """,
                             returnStatus: true
                         )
 
-                        if (result != 0) {
-                            echo "Update failed on ${target.host} (exit code ${result})"
+                        if (result == 0) {
+                            echo "Update succeeded on ${host}"
                         } else {
-                            echo "Update succeeded on ${target.host}"
+                            echo "Update failed on ${host} (exit code ${result})"
                         }
                     }
                 }
