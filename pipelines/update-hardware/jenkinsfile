@@ -11,6 +11,7 @@ pipeline {
             steps {
                 script {
                     def targets = readJSON file: env.TARGETS_FILE
+                    def results = []
 
                     for (target in targets) {
                         def host = target.host
@@ -27,11 +28,18 @@ pipeline {
                         )
 
                         if (result == 0) {
-                            echo "Update succeeded on ${host}"
+                            echo "✅ Update succeeded on ${host}"
+                            results << "✅ ${host} (${user})"
                         } else {
-                            echo "Update failed on ${host} (exit code ${result})"
+                            echo "❌ Update failed on ${host} (exit code ${result})"
+                            results << "❌ ${host} (${user})"
                         }
                     }
+
+                    echo "\n========================"
+                    echo "🔧 Final Update Summary:"
+                    results.each { line -> echo line }
+                    echo "========================\n"
                 }
             }
         }
