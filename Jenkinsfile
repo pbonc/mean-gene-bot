@@ -2,47 +2,43 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'meangene-bot:latest'
-        TAR_NAME = 'meangene-bot.tar'
-        REMOTE_HOST = '192.168.1.10'
+        SSH_KEY = "~/.ssh/jenkins_bot_key"
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Update meangenebrain') {
             steps {
-                echo "Building Docker image: ${IMAGE_NAME}"
-                sh 'docker build -t $IMAGE_NAME .'
+                echo "Updating meangenebrain..."
+                sh '''
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no dar@localhost << 'EOF'
+                    echo "[meangenebrain] Running apt update and upgrade"
+                    sudo apt-get update && sudo apt-get upgrade -y
+                    if [ -f /var/run/reboot-required ]; then
+                        echo "[meangenebrain] Reboot required, rebooting now..."
+                        sudo reboot
+                    else
+                        echo "[meangenebrain] No reboot required"
+                    fi
+                    EOF
+                '''
             }
         }
 
-        stage('Save Docker Image') {
+        stage('Update meanpi') {
             steps {
-                echo "Saving Docker image to tarball: ${TAR_NAME}"
-                sh 'docker save $IMAGE_NAME -o $TAR_NAME'
-            }
-        }
-
-        stage('Copy Image to meangenebrain') {
-            steps {
-                sshagent(['meangenebrain-ssh']) {
-                    sh 'scp -o StrictHostKeyChecking=no $TAR_NAME dar@192.168.1.10:/tmp/$TAR_NAME'
-                }
-            }
-        }
-
-        stage('Load Image into MicroK8s') {
-            steps {
-                sshagent(['meangenebrain-ssh']) {
-                    sh 'ssh -o StrictHostKeyChecking=no dar@192.168.1.10 "microk8s ctr image import /tmp/$TAR_NAME"'
-                }
-            }
-        }
-
-        stage('Restart Deployment') {
-            steps {
-                sshagent(['meangenebrain-ssh']) {
-                    sh 'ssh -o StrictHostKeyChecking=no dar@192.168.1.10 "microk8s kubectl rollout restart deployment mean-gene-bot"'
-                }
+                echo "Updating meanpi..."
+                sh '''
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no ubuntu@192.168.1.20 << 'EOF'
+                    echo "[meanpi] Running apt update and upgrade"
+                    sudo apt-get update && sudo apt-get upgrade -y
+                    if [ -f /var/run/reboot-required ]; then
+                        echo "[meanpi] Reboot required, rebooting now..."
+                        sudo reboot
+                    else
+                        echo "[meanpi] No reboot required"
+                    fi
+                    EOF
+                '''
             }
         }
     }
