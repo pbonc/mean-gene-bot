@@ -2,34 +2,33 @@ pipeline {
     agent any
 
     environment {
-        SSH_KEY_PATH = "${env.WORKSPACE}/.ssh/jenkins_bot_key"
-        NODES = """[
-            [host: "192.168.1.10", user: "dar"],      // meangenebrain
-            [host: "192.168.1.20", user: "ubuntu"]     // meanpi
-        ]"""
+        TARGETS_FILE = 'pipelines/update-hardware/targets.json'
     }
 
     stages {
         stage('Update & Upgrade Hardware') {
             steps {
                 script {
-                    def nodes = readJSON text: NODES
-                    nodes.each { node ->
-                        echo "Connecting to ${node.host} as ${node.user}..."
+                    def targets = readJSON file: env.TARGETS_FILE
 
-                        sh """
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_KEY_PATH} ${node.user}@${node.host} '
-                            echo "[INFO] Updating system..."
-                            sudo apt-get update &&
-                            sudo apt-get upgrade -y &&
-                            if [ -f /var/run/reboot-required ]; then
-                                echo "[INFO] Reboot required. Rebooting..."
-                                sudo reboot
-                            else
-                                echo "[INFO] No reboot needed."
-                            fi
-                        '
+                    for (target in targets) {
+                        echo "Updating ${target.host} as ${target.user}..."
+
+                        def updateCommand = """
+                            ssh -o StrictHostKeyChecking=no -i ~/.ssh/jenkins_bot_key ${target.user}@${target.host} \\
+                            'sudo apt-get update && sudo apt-get upgrade -y && sudo reboot || true'
                         """
+
+                        def result = sh(
+                            script: updateCommand,
+                            returnStatus: true
+                        )
+
+                        if (result != 0) {
+                            echo "Update failed on ${target.host} (exit code ${result})"
+                        } else {
+                            echo "Update succeeded on ${target.host}"
+                        }
                     }
                 }
             }
