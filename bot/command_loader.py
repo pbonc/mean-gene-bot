@@ -15,31 +15,34 @@ def load_sfx_commands(bot: commands.Bot):
             if not filename.lower().endswith(".mp3"):
                 continue
 
-            name_no_ext = os.path.splitext(filename)[0]
-
-            # !d, !lenny1, !lenny2, etc.
-            command_name = name_no_ext.lower()
-
+            name_no_ext = os.path.splitext(filename)[0].lower()
             file_path = os.path.join(root, filename)
 
-            async def specific_player(ctx, path=file_path):
-                from sfx_player import queue_sfx
-                await queue_sfx(path)
-                await ctx.send(f"{ctx.author.name} triggered !{command_name}")
+            # Closure-safe command creator
+            def make_specific_player(path, cmd_name):
+                async def _cmd(ctx):
+                    from .sfx_player import queue_sfx  # ✅ Relative import
+                    await queue_sfx(path)
+                    await ctx.send(f"{ctx.author.name} triggered !{cmd_name}")
+                return _cmd
 
-            bot.add_command(commands.Command(specific_player, name=command_name))
+            cmd_func = make_specific_player(file_path, name_no_ext)
+            bot.add_command(commands.Command(name=name_no_ext, func=cmd_func))
 
-        # If we're in a subfolder, create a folder-level randomizer command
+        # If it's a subfolder, add a random-play command
         if rel_path != ".":
             folder_command = os.path.basename(rel_path).lower()
             file_paths = [
                 os.path.join(root, f) for f in files if f.lower().endswith(".mp3")
             ]
 
-            async def random_player(ctx, paths=file_paths):
-                chosen = random.choice(paths)
-                from sfx_player import queue_sfx
-                await queue_sfx(chosen)
-                await ctx.send(f"{ctx.author.name} triggered !{folder_command}")
+            def make_random_player(paths, folder_name):
+                async def _cmd(ctx):
+                    from .sfx_player import queue_sfx  # ✅ Relative import
+                    chosen = random.choice(paths)
+                    await queue_sfx(chosen)
+                    await ctx.send(f"{ctx.author.name} triggered !{folder_name}")
+                return _cmd
 
-            bot.add_command(commands.Command(random_player, name=folder_command))
+            cmd_func = make_random_player(file_paths, folder_command)
+            bot.add_command(commands.Command(name=folder_command, func=cmd_func))
