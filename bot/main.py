@@ -12,7 +12,10 @@ class MeanGeneBot(commands.Bot):
         )
 
     async def event_ready(self):
-        print(f'✅ Logged in as | {self.nick}')
+        print(f'✅ Logged in as: {self.nick}')
+        print(f'🎯 Initial Channel: {CHANNEL}')
+        print(f'🛡  Bot Nick: {BOT_NICK}')
+        print(f'🔌 Connected Channels: {self.connected_channels}')
 
     async def event_message(self, message):
         if message.echo:
@@ -24,10 +27,8 @@ class MeanGeneBot(commands.Bot):
     async def ping_command(self, ctx):
         await ctx.send('pong')
 
-    # SFX stub - logic added later
     @commands.command(name='bell')
     async def bell_command(self, ctx):
-        # Placeholder: actual audio trigger logic goes here
         await ctx.send(f"{ctx.author.name} rang the bell! 🔔")
 
 
