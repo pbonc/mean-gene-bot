@@ -1,5 +1,6 @@
 from twitchio.ext import commands
 from config import TWITCH_TOKEN, BOT_NICK, CHANNEL
+from command_loader import load_sfx_commands
 
 
 class MeanGeneBot(commands.Bot):
@@ -11,6 +12,9 @@ class MeanGeneBot(commands.Bot):
             initial_channels=[CHANNEL]
         )
 
+        # Dynamically load SFX-based commands
+        load_sfx_commands(self)
+
     async def event_ready(self):
         print(f'✅ Logged in as: {self.nick}')
         print(f'🎯 Initial Channel: {CHANNEL}')
@@ -20,16 +24,13 @@ class MeanGeneBot(commands.Bot):
     async def event_message(self, message):
         if message.echo:
             return
+
         print(f"[{message.author.name}]: {message.content}")
         await self.handle_commands(message)
 
     @commands.command(name='ping')
     async def ping_command(self, ctx):
         await ctx.send('pong')
-
-    @commands.command(name='bell')
-    async def bell_command(self, ctx):
-        await ctx.send(f"{ctx.author.name} rang the bell! 🔔")
 
 
 if __name__ == "__main__":
