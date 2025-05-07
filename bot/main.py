@@ -1,6 +1,10 @@
 from twitchio.ext import commands
 from config import TWITCH_TOKEN, BOT_NICK, CHANNEL
 from command_loader import load_sfx_commands
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+
 
 
 class MeanGeneBot(commands.Bot):

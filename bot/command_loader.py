@@ -3,6 +3,9 @@
 import os
 import random
 from twitchio.ext import commands
+from sfx_player import queue_sfx
+
+
 
 SFX_ROOT = os.path.join(os.path.dirname(__file__), "sfx")
 
