@@ -1,0 +1,5 @@
+# Ignore all files in sfx/
+bot/sfx/*
+
+# But keep the sfx folder itself
+!bot/sfx/.keep
