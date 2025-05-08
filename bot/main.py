@@ -7,7 +7,7 @@ from twitchio.ext import commands
 from config import TWITCH_TOKEN, BOT_NICK, CHANNEL
 from command_loader import load_sfx_commands
 
-BOT_VERSION = "1.1.0a"
+BOT_VERSION = "1.2.0a"
 
 # Setup logging
 LOG_DIR = "logs"
@@ -88,7 +88,6 @@ class MeanGeneBot(commands.Bot):
         await ctx.send(f"Mean Gene Bot version {BOT_VERSION}")
 
 
-# 🧨 Catch hard startup failures and log them
 if __name__ == "__main__":
     try:
         bot = MeanGeneBot()

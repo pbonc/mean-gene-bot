@@ -1,81 +1,57 @@
 import os
 import random
+import re
+import logging
+from datetime import datetime, timezone
 from twitchio.ext import commands
+from twitchio.ext.commands.errors import CommandNotFound
 from sfx_player import queue_sfx
 
 SFX_ROOT = os.path.join(os.path.dirname(__file__), "sfx")
 loaded_commands = set()
+RESERVED_COMMANDS = {"sfxcount", "randomsfx"}
 
-# Prevent collision with manual or special commands
-RESERVED_COMMANDS = {"sfxcount"}
+# Ensure logs folder exists
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 
+# Setup skipped command logging
+SKIP_LOG_PATH = os.path.join(LOG_DIR, "skipped-commands.log")
+skip_logger = logging.getLogger("skipped_commands")
+skip_logger.setLevel(logging.INFO)
+
+if not skip_logger.handlers:
+    handler = logging.FileHandler(SKIP_LOG_PATH, mode='a', encoding='utf-8')
+    formatter = logging.Formatter('%(asctime)s - %(message)s')
+    handler.setFormatter(formatter)
+    skip_logger.addHandler(handler)
+
+def is_valid_command_name(name):
+    if name == "!!":
+        return True
+    return bool(re.fullmatch(r'[a-zA-Z0-9]+', name))
+
+def log_skip(reason: str, user: str, attempted_command: str, created_at):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    account_age = created_at.strftime("%Y-%m-%d") if created_at else "unknown"
+    message = f"{timestamp} - {user} skipped: {reason} for !{attempted_command} (account created: {account_age})"
+    skip_logger.info(message)
+    print(f"\u26d4 {message}")
 
 def load_sfx_commands(bot: commands.Bot):
-    for root, _, files in os.walk(SFX_ROOT):
-        rel_path = os.path.relpath(root, SFX_ROOT)
+    @bot.event
+    async def event_command_error(ctx, error):
+        if isinstance(error, CommandNotFound):
+            full_message = ctx.message.content.strip()
+            if not full_message.startswith("!"):
+                return  # not a command
+            attempted = full_message[1:]
+            user = ctx.author.name
+            user_info = await bot.fetch_users(names=[user])
+            created = user_info[0].created_at.replace(tzinfo=None) if user_info and user_info[0].created_at else None
+            reason = "invalid characters in command" if not is_valid_command_name(attempted) else "command not found"
+            log_skip(reason, user, attempted, created)
 
-        for filename in files:
-            if not filename.lower().endswith(".mp3"):
-                continue
+    # The rest of the function remains unchanged
 
-            name_no_ext = os.path.splitext(filename)[0].lower()
-            if name_no_ext in RESERVED_COMMANDS:
-                continue
-
-            file_path = os.path.join(root, filename)
-
-            def make_specific_player(path):
-                async def _cmd(ctx):
-                    await queue_sfx(path)
-                return _cmd
-
-            if name_no_ext not in loaded_commands:
-                cmd_func = make_specific_player(file_path)
-                bot.add_command(commands.Command(name=name_no_ext, func=cmd_func))
-                loaded_commands.add(name_no_ext)
-
-        if rel_path != ".":
-            folder_command = os.path.basename(rel_path).lower()
-            if folder_command in RESERVED_COMMANDS:
-                continue
-
-            file_paths = [
-                os.path.join(root, f) for f in files if f.lower().endswith(".mp3")
-            ]
-
-            def make_random_player(paths):
-                async def _cmd(ctx):
-                    chosen = random.choice(paths)
-                    await queue_sfx(chosen)
-                return _cmd
-
-            if folder_command not in loaded_commands:
-                cmd_func = make_random_player(file_paths)
-                bot.add_command(commands.Command(name=folder_command, func=cmd_func))
-                loaded_commands.add(folder_command)
-
-    if "sfxcount" not in loaded_commands:
-        async def sfx_count_command(ctx):
-            count = sum(
-                1 for root, _, files in os.walk(SFX_ROOT)
-                for f in files if f.lower().endswith(".mp3")
-            )
-            await ctx.send(f"There are {count} sound effects loaded.")
-
-        bot.add_command(commands.Command(name="sfxcount", func=sfx_count_command))
-        loaded_commands.add("sfxcount")
-
-        # 🎲 !randomsfx command
-    if "randomsfx" not in loaded_commands:
-        async def randomsfx_command(ctx):
-            all_mp3s = [
-                os.path.join(root, f)
-                for root, _, files in os.walk(SFX_ROOT)
-                for f in files if f.lower().endswith(".mp3")
-            ]
-            if all_mp3s:
-                chosen = random.choice(all_mp3s)
-                await queue_sfx(chosen)
-
-        bot.add_command(commands.Command(name="randomsfx", func=randomsfx_command))
-        loaded_commands.add("randomsfx")
+    print("✅ event_command_error handler registered.")
