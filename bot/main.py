@@ -7,7 +7,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-
 try:
     from twitchio.ext import commands
     print("✅ Imported twitchio.commands")
@@ -31,7 +30,9 @@ except Exception as e:
 
 BOT_VERSION = "1.2.0a"
 
-# Setup crash logging
+# ⏱️ Interval between SFX folder checks (in seconds)
+SFX_WATCH_INTERVAL = 5  # Change this for testing (e.g., 2 for faster reloads)
+
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
@@ -50,7 +51,7 @@ class MeanGeneBot(commands.Bot):
             initial_channels=[CHANNEL]
         )
         print("📦 Loading SFX commands...")
-        load_sfx_commands(self)
+        load_sfx_commands(self, verbose=False)  # Silent on startup
         self.sfx_task = None
 
     async def event_ready(self):
@@ -62,7 +63,7 @@ class MeanGeneBot(commands.Bot):
         for chan in self.connected_channels:
             await chan.send("Welcome to the main event!")
 
-        self.sfx_task = self.loop.create_task(self.watch_sfx_folder())
+        self.sfx_task = asyncio.create_task(self.watch_sfx_folder())
 
     async def event_message(self, message):
         if message.echo or message.author.name.lower() == BOT_NICK.lower():
@@ -86,25 +87,43 @@ class MeanGeneBot(commands.Bot):
             log_skip(reason, user, attempted, created)
 
     async def watch_sfx_folder(self):
-        print("👀 Watching SFX folder...")
+        print("👀 Watching SFX folder for changes...")
         last_hash = self.hash_sfx_directory()
+
         while True:
-            await asyncio.sleep(30)
-            new_hash = self.hash_sfx_directory()
-            if new_hash != last_hash:
-                from command_loader import load_sfx_commands
-                load_sfx_commands(self)
-                last_hash = new_hash
-                for chan in self.connected_channels:
-                    await chan.send("SFX folder updated.")
+            await asyncio.sleep(SFX_WATCH_INTERVAL)
+            try:
+                new_hash = self.hash_sfx_directory()
+                if new_hash != last_hash:
+                    print("🔁 Change detected in SFX folder. Reloading commands...")
+                    from command_loader import load_sfx_commands
+                    new_commands = load_sfx_commands(self, verbose=True)
+                    last_hash = new_hash
+
+                    for chan in self.connected_channels:
+                        if new_commands:
+                            for cmd in new_commands:
+                                await chan.send(f"✅ New SFX command added: !{cmd}")
+                        else:
+                            await chan.send("🎵 SFX folder updated, but no new commands detected.")
+                else:
+                    print("[DEBUG] No change in SFX folder.")
+            except Exception as e:
+                print("💥 Exception in SFX folder watcher loop:")
+                traceback.print_exc()
 
     def hash_sfx_directory(self, sfx_path="sfx"):
         hasher = hashlib.sha256()
         for root, _, files in os.walk(sfx_path):
             for f in sorted(files):
                 path = os.path.join(root, f)
-                hasher.update(path.encode())
-                hasher.update(str(os.path.getmtime(path)).encode())
+                try:
+                    stat = os.stat(path)
+                    hasher.update(path.encode())
+                    hasher.update(str(stat.st_mtime).encode())
+                    hasher.update(str(stat.st_size).encode())
+                except Exception as e:
+                    print(f"⚠️ Failed to read file for hashing: {path} - {e}")
         return hasher.hexdigest()
 
     async def event_error(self, error: Exception, data=None):
@@ -133,5 +152,4 @@ if __name__ == "__main__":
         bot.run()
     except Exception as e:
         print("💥 Bot failed to start.")
-        print(e)
         traceback.print_exc()

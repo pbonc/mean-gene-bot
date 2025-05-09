@@ -1,5 +1,41 @@
-# Ignore all files in sfx/
-bot/sfx/*
+# 🔒 Environment files
+.env
+.env.*
 
-# But keep the sfx folder itself
-!bot/sfx/.keep
+# 📦 Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# 📂 Virtual environments
+venv/
+.env/
+.venv/
+
+# 📁 VS Code
+.vscode/
+
+# 📄 Log files
+logs/
+*.log
+
+# 🔄 JSON state/data
+wrestlers.json
+promos_pending.json
+
+# 🧪 Test artifacts
+*.sqlite3
+*.db
+.DS_Store
+
+# Audio files
+*.mp3
+*.wav
+
+# Ignore everything in sfx/ but keep the folder
+sfx/*
+!sfx/.keep
+bot/__pycache__/command_loader.cpython-313.pyc
+bot/__pycache__/command_loader.cpython-313.pyc
