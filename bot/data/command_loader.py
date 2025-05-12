@@ -1,14 +1,28 @@
 import os
 import random
 import logging
+import glob
+import re
+from datetime import datetime
 from twitchio.ext import commands
 from twitchio.ext.commands.errors import TwitchCommandError
 from bot.sfx_player import queue_sfx
-import re
-from datetime import datetime
-import glob
 
-SFX_FOLDER = os.path.join(os.path.dirname(__file__), "sfx")
+print(f"🧠 USING COMMAND_LOADER FROM: {__file__}")
+
+SFX_FOLDER = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "sfx"))
+print(f"🔍 SFX_FOLDER resolved to: {SFX_FOLDER}")
+
+if not os.path.exists(SFX_FOLDER):
+    print(f"❌ SFX folder does not exist at path: {SFX_FOLDER}")
+else:
+    print(f"📂 SFX folder exists.")
+    try:
+        files = os.listdir(SFX_FOLDER)
+        print(f"📄 Found {len(files)} items in base SFX folder: {files[:10]}")
+    except Exception as e:
+        print(f"⚠️ Error reading contents of SFX folder: {e}")
+
 VALID_COMMAND_RE = re.compile(r"^[a-zA-Z0-9]{1,32}$")
 RANDOMIZER_REGISTRY = {}
 ALLOWED_EXCEPTIONS = {"!", "$2", "!!"}
@@ -27,8 +41,9 @@ def log_skip(reason, user, command, created=None):
             f.write(msg + "\n")
 
 def load_sfx_commands(bot, verbose=False):
+    print("🔍 Scanning for SFX commands...")
     if verbose:
-        print("🔍 Scanning for SFX commands...")
+        print(f"🛍️ Starting os.walk on: {SFX_FOLDER}")
 
     command_names = set()
     registered_count = 0
@@ -36,22 +51,29 @@ def load_sfx_commands(bot, verbose=False):
 
     def make_cmd(path):
         async def _cmd(ctx):
+            print(f"🎮 SFX command triggered for: {path}")
             await queue_sfx(path)
         return _cmd
 
     for root, _, files in os.walk(SFX_FOLDER):
+        if verbose:
+            print(f"📂 Entered folder: {root} — {len(files)} files found")
+
         rel_path = os.path.relpath(root, SFX_FOLDER)
         if rel_path == ".":
             rel_path = ""
 
         mp3s = [f for f in files if f.lower().endswith(".mp3")]
+        if verbose:
+            print(f"📁 Scanning {root} — Found {len(mp3s)} mp3s: {mp3s[:3]}")
+
         if not mp3s:
             continue
 
         for f in mp3s:
             name = os.path.splitext(f)[0]
             command_name = name.lower()
-            full_path = os.path.join(SFX_FOLDER, rel_path, f) if rel_path else os.path.join(SFX_FOLDER, f)
+            full_path = os.path.join(root, f)
 
             if not is_valid_command_name(command_name):
                 if verbose:
@@ -79,12 +101,13 @@ def load_sfx_commands(bot, verbose=False):
         if rel_path and rel_path not in RANDOMIZER_REGISTRY:
             mp3_paths = [os.path.join(root, f) for f in mp3s]
             random_name = rel_path.replace("\\", "/").split("/")[-1].lower()
+
             if is_valid_command_name(random_name):
                 def make_random_cmd(options):
                     async def _random_cmd(ctx):
                         choice = random.choice(options)
                         cmd = os.path.splitext(os.path.basename(choice))[0]
-                        print(f"🎲 {ctx.author.name} triggered random sfx: !{cmd}")
+                        print(f"🎲 {ctx.author.name} triggered random sfx: !{cmd} (from folder randomizer)")
                         await queue_sfx(choice)
                         await ctx.send(f"!{cmd}")
                     return _random_cmd
@@ -94,11 +117,6 @@ def load_sfx_commands(bot, verbose=False):
                     RANDOMIZER_REGISTRY[random_name] = True
                     if verbose:
                         print(f"📂 Registered folder randomizer: !{random_name} ({len(mp3_paths)} files)")
-                except TwitchCommandError as e:
-                    if "already exists" in str(e):
-                        pass
-                    else:
-                        print(f"❌ TwitchCommandError for !{random_name}: {e}")
                 except Exception as e:
                     print(f"❌ Failed to register folder randomizer !{random_name}: {e}")
             else:
@@ -127,7 +145,7 @@ def load_sfx_commands(bot, verbose=False):
             return
         choice = random.choice(all_mp3s)
         cmd = os.path.splitext(os.path.basename(choice))[0]
-        print(f"🎲 {ctx.author.name} triggered global random sfx: !{cmd}")
+        print(f"🎲 {ctx.author.name} triggered global random sfx: !{cmd} (from global)")
         await queue_sfx(choice)
         await ctx.send(f"!{cmd}")
 
@@ -135,7 +153,7 @@ def load_sfx_commands(bot, verbose=False):
         bot.add_command(commands.Command(func=_random, name="random"))
         if verbose:
             print("✅ Registered global randomizer command: !random")
-    except TwitchCommandError as e:
+    except Exception as e:
         print(f"❌ Failed to register !random: {e}")
 
     if verbose:

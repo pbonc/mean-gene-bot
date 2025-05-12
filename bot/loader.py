@@ -1,18 +1,11 @@
+from bot.twitch_commands.worstsfx import register_worstsfx
 from bot.data.command_loader import load_sfx_commands
-from bot.commands.sfxrefresh import SFXRefresh
-from bot.events import setup_events
-import mgb_dwf
 
-def load_all(bot):
+def load_all(bot, sfx_debug=False):
     print("📦 Loading SFX commands...")
-    load_sfx_commands(bot)
+    load_sfx_commands(bot, verbose=sfx_debug)
 
-    print("🎮 Loading DWF commands...")
-    if hasattr(mgb_dwf, "load_dwf_commands"):
-        mgb_dwf.load_dwf_commands(bot)
+    print("📦 Loading utility commands...")
+    register_worstsfx(bot)
 
     print("🧠 Registering internal cogs...")
-    bot.add_cog(SFXRefresh(bot))
-
-    print("🧬 Hooking up events...")
-    setup_events(bot)
