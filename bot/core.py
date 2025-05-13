@@ -3,6 +3,7 @@ from bot.config import TWITCH_TOKEN, CHANNEL, BOT_NICK
 from bot.version import BOT_VERSION
 from bot.loader import load_all
 from bot import mgb_dwf
+from bot.state import set_twitch_channel
 import asyncio
 
 class MeanGeneBot(commands.Bot):
@@ -33,8 +34,8 @@ class MeanGeneBot(commands.Bot):
 
         try:
             if self.connected_channels:
-                mgb_dwf.set_twitch_channel(self.connected_channels[0])
-                print("🔗 Set Twitch channel in mgb_dwf")
+                set_twitch_channel(self.connected_channels[0])
+                print("🔗 Set Twitch channel in global state")
 
             if hasattr(mgb_dwf, "on_ready"):
                 print("📡 Triggering mgb_dwf.on_ready...")

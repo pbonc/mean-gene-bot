@@ -39,3 +39,4 @@ sfx/*
 !sfx/.keep
 bot/__pycache__/command_loader.cpython-313.pyc
 bot/__pycache__/command_loader.cpython-313.pyc
+bot/__pycache__/command_loader.cpython-313.pyc

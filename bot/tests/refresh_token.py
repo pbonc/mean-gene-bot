@@ -2,8 +2,12 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Load client and refresh values
-load_dotenv()
+# Get root directory (2 levels up from this file)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+# Load existing .env values
+load_dotenv(ENV_PATH)
 CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
 CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 REFRESH_TOKEN = os.getenv("TWITCH_REFRESH_TOKEN")
@@ -26,8 +30,21 @@ if "access_token" in data:
 
     print(f"\n✅ New Access Token:\noauth:{access_token}\n")
     print(f"♻️  New Refresh Token:\n{new_refresh_token}\n")
-    print("🔐 Update your .env file with:")
-    print(f"TWITCH_TOKEN=oauth:{access_token}")
-    print(f"TWITCH_REFRESH_TOKEN={new_refresh_token}")
+
+    # Read, update, and write back to .env
+    with open(ENV_PATH, "r") as f:
+        lines = f.readlines()
+
+    with open(ENV_PATH, "w") as f:
+        for line in lines:
+            if line.startswith("TWITCH_TOKEN="):
+                f.write(f"TWITCH_TOKEN=oauth:{access_token}\n")
+            elif line.startswith("TWITCH_REFRESH_TOKEN="):
+                f.write(f"TWITCH_REFRESH_TOKEN={new_refresh_token}\n")
+            else:
+                f.write(line)
+
+    print(f"✅ .env file updated at: {ENV_PATH}")
+
 else:
     print(f"\n❌ Failed to refresh token: {data}")

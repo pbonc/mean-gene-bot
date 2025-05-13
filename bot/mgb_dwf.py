@@ -21,6 +21,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.reactions = True
 intents.guilds = True
+intents.members = True
 
 # Subclass Bot to override setup_hook
 class MeanGeneClient(commands.Bot):
@@ -67,11 +68,15 @@ async def on_ready():
 
 @DISCORD_CLIENT.event
 async def on_message(message):
+    if message.channel.name == "dwf-commissioner":
+        print(f"🧠 Saw message in commissioner: {message.content}")
     await DISCORD_CLIENT.process_commands(message)
 
+# Optional hook
 async def mgb_on_ready():
     print("📡 mgb_dwf.mgb_on_ready() called")
 
+# Needed by main.py
 async def start_discord():
     print("🧪 Calling DISCORD_CLIENT.start()...")
     try:
@@ -79,22 +84,28 @@ async def start_discord():
     except Exception as e:
         print(f"❌ Discord bot failed to start: {e}")
 
-# Utility functions (if still needed elsewhere)
+# Utility functions
+def get_wrestler_path():
+    path = Path(__file__).parent.parent / "dwf" / "wrestlers.json"
+    print(f"📂 wrestler path: {path}")
+    return path
+
 def load_wrestlers():
-    roster_path = Path(__file__).parent / "data" / "wrestlers.json"
-    if roster_path.exists():
+    path = get_wrestler_path()
+    if path.exists():
         try:
-            with open(roster_path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError:
             print("⚠️ Failed to decode wrestlers.json")
     return {}
 
 def save_wrestlers(data):
-    roster_path = Path(__file__).parent / "data" / "wrestlers.json"
+    path = get_wrestler_path()
     try:
-        with open(roster_path, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        print(f"💾 Saved wrestler data to: {path}")
     except Exception as e:
         print(f"❌ Failed to save wrestlers.json: {e}")
 
