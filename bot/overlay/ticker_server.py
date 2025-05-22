@@ -6,6 +6,9 @@ import websockets
 from websockets.protocol import State
 from dotenv import load_dotenv
 import os
+import time
+import datetime
+import pytz
 
 # Load environment variables from the project root .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -19,6 +22,15 @@ LABELS_DIR = Path(__file__).parent.parent / "data" / "labels"
 WEATHER_CITIES_PATH = Path(__file__).parent.parent / "data" / "weather_cities.txt"
 TICKER_INTERVAL = 10  # seconds
 
+# SportsDB API
+THESPORTSDB_API_KEY = "3"  # Free user key
+NBA_LEAGUE_ID = "4387"
+
+# Weather cache globals
+weather_cache = []
+weather_last_update = 0
+WEATHER_UPDATE_INTERVAL = 300  # every 5 minutes (300 seconds)
+
 def read_label_file(filename, formatter):
     file_path = LABELS_DIR / filename
     if file_path.exists():
@@ -31,7 +43,6 @@ def read_label_file(filename, formatter):
 def read_weather_cities():
     if WEATHER_CITIES_PATH.exists():
         with open(WEATHER_CITIES_PATH, "r", encoding="utf-8") as f:
-            # Remove blank lines and strip whitespace
             return [line.strip() for line in f if line.strip()]
     return []
 
@@ -69,10 +80,53 @@ async def get_weather_for_city(session, city):
         print(f"[WEATHER ERROR] {city}: {e}")
         return None
 
+async def get_today_nba_scores():
+    url = f"https://www.thesportsdb.com/api/v1/json/{THESPORTSDB_API_KEY}/eventspastleague.php?id={NBA_LEAGUE_ID}"
+    central = pytz.timezone("America/Chicago")
+    now_central = datetime.datetime.now(central)
+    today_str = now_central.strftime("%Y-%m-%d")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                data = await response.json()
+                events = data.get("events", [])
+                messages = []
+                # Gather games for today in local (CST/CDT)
+                for event in events:
+                    date = event.get("dateEvent")
+                    if date == today_str:
+                        home = event["strHomeTeam"]
+                        away = event["strAwayTeam"]
+                        home_score = event.get("intHomeScore")
+                        away_score = event.get("intAwayScore")
+                        if home_score is not None and away_score is not None:
+                            msg = f"NBA: {home} {home_score}, {away} {away_score} ({date})"
+                            messages.append(msg)
+                # If no games for today yet, fallback to most recent day's games
+                if not messages:
+                    dates = [event.get("dateEvent") for event in events if event.get("dateEvent")]
+                    if dates:
+                        most_recent_date = max(dates)
+                        for event in events:
+                            date = event.get("dateEvent")
+                            if date == most_recent_date:
+                                home = event["strHomeTeam"]
+                                away = event["strAwayTeam"]
+                                home_score = event.get("intHomeScore")
+                                away_score = event.get("intAwayScore")
+                                if home_score is not None and away_score is not None:
+                                    msg = f"NBA: {home} {home_score}, {away} {away_score} ({date})"
+                                    messages.append(msg)
+                return messages
+    except Exception as e:
+        print(f"[NBA ERROR]: {e}")
+        return []
+
 async def build_ticker_messages():
+    global weather_cache, weather_last_update
     messages = []
 
-    # Sub Points & Stats
+    # --- Twitch & Stream Stats ---
     msg = read_label_file("total_subscriber_score.txt", lambda v: f"Current Sub Points: {v}")
     if msg: messages.append(msg)
     msg = read_label_file("total_follower_count.txt", lambda v: f"Total Followers: {v}")
@@ -80,6 +134,8 @@ async def build_ticker_messages():
     msg = read_label_file("all_time_top_donator.txt", lambda v: f"Top Total Dono - {v}")
     if msg: messages.append(msg)
     msg = read_label_file("all_time_top_sub_gifter.txt", lambda v: f"Top Gifter - {v}")
+    if msg: messages.append(msg)
+    msg = read_label_file("all_time_top_cheerer.txt", lambda v: f"Top Bits: {v}")
     if msg: messages.append(msg)
 
     # --- DWF Titleholders ---
@@ -94,17 +150,23 @@ async def build_ticker_messages():
                     f"Current {title_name}: {wrestler} (Defenses: {defenses})"
                 )
 
-    # --- Weather (async) ---
-    cities = read_weather_cities()
-    if cities and OPENWEATHER_API_KEY:
-        async with aiohttp.ClientSession() as session:
-            weather_msgs = await asyncio.gather(
-                *(get_weather_for_city(session, city) for city in cities)
-            )
-            # Only add successful weather messages
-            for wmsg in weather_msgs:
-                if wmsg:
-                    messages.append(wmsg)
+    # --- NBA (SportsDB) ---
+    nba_msgs = await get_today_nba_scores()
+    messages.extend(nba_msgs)
+
+    # --- Weather (cache, update every WEATHER_UPDATE_INTERVAL) ---
+    now = time.time()
+    if now - weather_last_update > WEATHER_UPDATE_INTERVAL:
+        cities = read_weather_cities()
+        if cities and OPENWEATHER_API_KEY:
+            async with aiohttp.ClientSession() as session:
+                weather_msgs = await asyncio.gather(
+                    *(get_weather_for_city(session, city) for city in cities)
+                )
+                weather_cache = [wmsg for wmsg in weather_msgs if wmsg]
+                weather_last_update = now
+    # Add cached weather messages to ticker
+    messages.extend(weather_cache)
 
     if not messages:
         messages = ["Welcome to the Darmunist News Network."]
