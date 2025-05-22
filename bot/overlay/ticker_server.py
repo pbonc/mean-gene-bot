@@ -1,39 +1,110 @@
 import asyncio
 import json
-import os
+import aiohttp
 from pathlib import Path
 import websockets
+from websockets.protocol import State
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from the project root .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+print("OPENWEATHER_API_KEY loaded as:", repr(OPENWEATHER_API_KEY))
 
 WRESTLERS_PATH = Path(__file__).parent.parent.parent / "dwf" / "wrestlers.json"
-LABELS_PATH = Path(__file__).parent.parent.parent / "labels"
-
+LABELS_DIR = Path(__file__).parent.parent / "data" / "labels"
+WEATHER_CITIES_PATH = Path(__file__).parent.parent / "data" / "weather_cities.txt"
 TICKER_INTERVAL = 10  # seconds
+
+def read_label_file(filename, formatter):
+    file_path = LABELS_DIR / filename
+    if file_path.exists():
+        with open(file_path, "r", encoding="utf-8") as f:
+            value = f.read().strip()
+            if value:
+                return formatter(value)
+    return None
+
+def read_weather_cities():
+    if WEATHER_CITIES_PATH.exists():
+        with open(WEATHER_CITIES_PATH, "r", encoding="utf-8") as f:
+            # Remove blank lines and strip whitespace
+            return [line.strip() for line in f if line.strip()]
+    return []
+
+def weather_emoji(cond):
+    cond = cond.lower()
+    if "rain" in cond: return "🌧️"
+    if "cloud" in cond: return "☁️"
+    if "clear" in cond: return "☀️"
+    if "snow" in cond: return "❄️"
+    if "storm" in cond or "thunder" in cond: return "⛈️"
+    if "fog" in cond or "mist" in cond: return "🌫️"
+    if "drizzle" in cond: return "🌦️"
+    return "🌈"
+
+async def get_weather_for_city(session, city):
+    if not OPENWEATHER_API_KEY:
+        print("[WEATHER] API key not set")
+        return None
+    url = (
+        f"http://api.openweathermap.org/data/2.5/weather"
+        f"?q={city}&appid={OPENWEATHER_API_KEY}&units=imperial"
+    )
+    try:
+        async with session.get(url, timeout=10) as resp:
+            data = await resp.json()
+            if resp.status == 200 and "main" in data and "weather" in data:
+                temp = int(round(data["main"]["temp"]))
+                cond = data["weather"][0]["main"]
+                emoji = weather_emoji(cond)
+                return f"{city}: {emoji} {temp}°F"
+            else:
+                print(f"[WEATHER] Failed response for {city}: {data}")
+                return None
+    except Exception as e:
+        print(f"[WEATHER ERROR] {city}: {e}")
+        return None
 
 async def build_ticker_messages():
     messages = []
+
+    # Sub Points & Stats
+    msg = read_label_file("total_subscriber_score.txt", lambda v: f"Current Sub Points: {v}")
+    if msg: messages.append(msg)
+    msg = read_label_file("total_follower_count.txt", lambda v: f"Total Followers: {v}")
+    if msg: messages.append(msg)
+    msg = read_label_file("all_time_top_donator.txt", lambda v: f"Top Total Dono - {v}")
+    if msg: messages.append(msg)
+    msg = read_label_file("all_time_top_sub_gifter.txt", lambda v: f"Top Gifter - {v}")
+    if msg: messages.append(msg)
 
     # --- DWF Titleholders ---
     if WRESTLERS_PATH.exists():
         with open(WRESTLERS_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            for wrestler in data:
-                # Find all title fields (e.g., "champion": true)
-                for key, value in wrestler.items():
-                    if key.lower().endswith("champion") and value:
-                        title_name = key.replace("_", " ").title()
-                        messages.append(f"Current {title_name}: {wrestler.get('name', 'Unknown')}")
-                # Or, if you track titles differently, adjust here
+            current_titles = data.get("current_titles", {})
+            for title_name, info in current_titles.items():
+                wrestler = info.get("name", "Unknown")
+                defenses = info.get("defenses", 0)
+                messages.append(
+                    f"Current {title_name}: {wrestler} (Defenses: {defenses})"
+                )
 
-    # --- Twitch stats from labels/ ---
-    if LABELS_PATH.exists():
-        for file in LABELS_PATH.glob("*.txt"):
-            with open(file, "r", encoding="utf-8") as f:
-                for line in f:
-                    stat = line.strip()
-                    if stat:
-                        messages.append(stat)
-
-    # --- Add more sources here later (API calls, sports, etc) ---
+    # --- Weather (async) ---
+    cities = read_weather_cities()
+    if cities and OPENWEATHER_API_KEY:
+        async with aiohttp.ClientSession() as session:
+            weather_msgs = await asyncio.gather(
+                *(get_weather_for_city(session, city) for city in cities)
+            )
+            # Only add successful weather messages
+            for wmsg in weather_msgs:
+                if wmsg:
+                    messages.append(wmsg)
 
     if not messages:
         messages = ["Welcome to the Darmunist News Network."]
@@ -53,11 +124,11 @@ class TickerServer:
         self.clients.remove(websocket)
         print(f"Overlay disconnected. Total: {len(self.clients)}")
 
-    async def handler(self, websocket, path):
+    async def handler(self, websocket):
         await self.register(websocket)
         try:
-            async for _ in websocket:  # We don't expect messages from the overlay client
-                pass
+            while True:
+                await asyncio.sleep(1)
         finally:
             await self.unregister(websocket)
 
@@ -70,7 +141,11 @@ class TickerServer:
                     "text": self.messages[self.idx % len(self.messages)]
                 }
                 print("Broadcasting:", msg["text"])
-                await asyncio.gather(*[ws.send(json.dumps(msg)) for ws in self.clients if ws.open])
+                await asyncio.gather(*[
+                    ws.send(json.dumps(msg))
+                    for ws in self.clients
+                    if ws.state == State.OPEN
+                ])
                 self.idx += 1
             await asyncio.sleep(TICKER_INTERVAL)
 
