@@ -3,8 +3,11 @@ from discord.ext import commands
 from datetime import datetime
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
+from bot.utils import safe_get_guild, safe_get_channel
+import asyncio  # Added for concurrent reaction adds
 
 TITLE_LIST = [
+    "DWF Christeweight Title",
     "DWF World Heavyweight Title",
     "DWF Intercontinental Title",
     "DWF NDA Title"
@@ -53,8 +56,9 @@ class VacateCommand(commands.Cog):
 
         try:
             prompt = await ctx.send(embed=embed)
-            for i in range(len(held_titles)):
-                await prompt.add_reaction(EMOJI_NUMBERS[i])
+            # Reaction adds concurrently
+            tasks = [prompt.add_reaction(EMOJI_NUMBERS[i]) for i in range(len(held_titles))]
+            await asyncio.gather(*tasks)
         except discord.Forbidden:
             await ctx.send("⚠️ I don't have permission to add reactions in this channel.")
             return
@@ -77,6 +81,7 @@ class VacateCommand(commands.Cog):
             return
 
         emoji = str(payload.emoji)
+
         if ctx["step"] == "select_title":
             if emoji not in EMOJI_NUMBERS:
                 return
@@ -88,8 +93,13 @@ class VacateCommand(commands.Cog):
             selected_title = ctx["titles"][index]
             champ_id, champ_name = ctx["champions"][selected_title]
 
-            guild = self.bot.get_guild(payload.guild_id)
-            channel = guild.get_channel(ctx["channel"])
+            guild = await safe_get_guild(self.bot, payload.guild_id)
+            if not guild:
+                return
+
+            channel = await safe_get_channel(self.bot, guild, channel_id=ctx["channel"])
+            if not channel:
+                return
 
             embed = discord.Embed(
                 title="⚖️ Confirm Title Vacate",
@@ -99,8 +109,11 @@ class VacateCommand(commands.Cog):
 
             try:
                 confirm = await channel.send(embed=embed)
-                await confirm.add_reaction("✅")
-                await confirm.add_reaction("❌")
+                # Reaction adds concurrently
+                await asyncio.gather(
+                    confirm.add_reaction("✅"),
+                    confirm.add_reaction("❌")
+                )
             except discord.Forbidden:
                 await channel.send("⚠️ I can't add reactions here. Check my permissions.")
                 return
@@ -115,13 +128,22 @@ class VacateCommand(commands.Cog):
             }
 
         elif ctx["step"] == "confirm":
-            guild = self.bot.get_guild(payload.guild_id)
-            channel = guild.get_channel(ctx["channel"])
+            if emoji not in {"✅", "❌"}:
+                return
+
+            guild = await safe_get_guild(self.bot, payload.guild_id)
+            if not guild:
+                return
+
+            channel = await safe_get_channel(self.bot, guild, channel_id=ctx["channel"])
+            if not channel:
+                return
+
             title = ctx["title"]
             champ_id = ctx["champ_id"]
             champ_name = ctx["champ_name"]
 
-            if str(payload.emoji) == "✅":
+            if emoji == "✅":
                 wrestlers = load_wrestlers()
                 now = datetime.utcnow().isoformat() + "Z"
 
@@ -134,7 +156,7 @@ class VacateCommand(commands.Cog):
 
                     save_wrestlers(wrestlers)
 
-                    backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
+                    backstage = await safe_get_channel(self.bot, guild, name="dwf-backstage")
                     if backstage:
                         await backstage.send(f"🏳️ The **{title}** has been vacated by **{champ_name}**.")
 

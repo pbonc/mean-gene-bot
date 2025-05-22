@@ -2,7 +2,9 @@ import discord
 from discord.ext import commands
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
+from bot.utils import safe_get_guild, safe_get_channel
 import random
+import asyncio  # For concurrent sends
 
 CHALLENGE_COMMAND_VERSION = "v1.0.0a"
 
@@ -47,8 +49,8 @@ class ChallengeCommand(commands.Cog):
         if message_id not in self.active_challenges:
             return
 
-        guild = self.bot.get_guild(payload.guild_id)
-        if not guild:
+        guild = await safe_get_guild(self.bot, payload.guild_id)
+        if guild is None:
             return
 
         challenger_id = self.active_challenges[message_id]
@@ -85,11 +87,13 @@ class ChallengeCommand(commands.Cog):
 
         twitch_channel = get_twitch_channel()
         if twitch_channel:
-            await twitch_channel.send(f"🎯 Challenge accepted! {fighter1} vs {fighter2}!")
-            await twitch_channel.send("🥁 The battle begins...")
-            await twitch_channel.send(f"🏆 **{winner}** wins the match!")
+            await asyncio.gather(
+                twitch_channel.send(f"🎯 Challenge accepted! {fighter1} vs {fighter2}!"),
+                twitch_channel.send("🥁 The battle begins..."),
+                twitch_channel.send(f"🏆 **{winner}** wins the match!")
+            )
 
-        backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
+        backstage = await safe_get_channel(self.bot, guild, name="dwf-backstage")
         if backstage:
             await backstage.send(f"📊 Match Result: **{winner}** defeated **{loser}** in a challenge match!")
 

@@ -1,14 +1,19 @@
+# File: bot/commands/titlematch.py
+
 import discord
 import random
-import json
+from datetime import datetime
 from discord.ext import commands
+import asyncio
+
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
-from datetime import datetime
+from bot.utils import safe_get_guild, safe_get_channel
 
-TITLEMATCH_COMMAND_VERSION = "v2.0.0a"
+TITLEMATCH_COMMAND_VERSION = "v2.1.0b"
 
 TITLE_LIST = [
+    "DWF Christeweight Title",
     "DWF World Heavyweight Title",
     "DWF Intercontinental Title",
     "DWF NDA Title"
@@ -19,7 +24,7 @@ EMOJI_NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣
 class TitleMatchCommand(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.match_context = {}  # message_id: dict with title and challengers
+        self.match_context = {}
 
     @commands.command(name="titlematch")
     async def titlematch(self, ctx):
@@ -32,8 +37,8 @@ class TitleMatchCommand(commands.Cog):
 
         prompt = await ctx.send(embed=embed)
 
-        for i in range(len(TITLE_LIST)):
-            await prompt.add_reaction(EMOJI_NUMBERS[i])
+        tasks = [prompt.add_reaction(EMOJI_NUMBERS[i]) for i in range(len(TITLE_LIST))]
+        await asyncio.gather(*tasks)
 
         self.match_context[prompt.id] = {
             "step": "select_title",
@@ -50,27 +55,46 @@ class TitleMatchCommand(commands.Cog):
         if not data or payload.user_id != data["user"]:
             return
 
-        guild = self.bot.get_guild(payload.guild_id)
-        channel = guild.get_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
+        guild = await safe_get_guild(self.bot, payload.guild_id)
+        if not guild:
+            return
+
+        channel = await safe_get_channel(self.bot, guild, channel_id=payload.channel_id)
+        if not channel:
+            return
+
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except Exception:
+            return
+
         emoji = str(payload.emoji)
 
         if data["step"] == "select_title":
-            index = EMOJI_NUMBERS.index(emoji) if emoji in EMOJI_NUMBERS else -1
-            if index == -1 or index >= len(TITLE_LIST):
+            if emoji not in EMOJI_NUMBERS:
+                return
+
+            index = EMOJI_NUMBERS.index(emoji)
+            if index >= len(TITLE_LIST):
                 return
 
             selected_title = TITLE_LIST[index]
             wrestlers = load_wrestlers()
 
-            holder_id = next((uid for uid, d in wrestlers.items()
-                              if d.get("current_title") == selected_title), None)
+            valid_wrestlers = {uid: d for uid, d in wrestlers.items() if uid.isdigit()}
 
-            eligible = [(uid, w["wrestler"]) for uid, w in wrestlers.items() if "wrestler" in w]
+            holder_id = next(
+                (uid for uid, d in valid_wrestlers.items()
+                 if (d.get("current_title") or "").strip().lower() == selected_title.strip().lower()),
+                None
+            )
+
+            eligible = [(uid, w["wrestler"]) for uid, w in valid_wrestlers.items() if "wrestler" in w]
+
             if holder_id:
-                champ = wrestlers[holder_id]["wrestler"]
-                eligible = [(uid, name) for uid, name in eligible if uid != holder_id]
-                challengers = random.sample(eligible, min(8, len(eligible)))
+                champ = valid_wrestlers[holder_id]["wrestler"]
+                challengers = [(uid, name) for uid, name in eligible if uid != holder_id]
+                challengers = random.sample(challengers, min(8, len(challengers)))
 
                 embed = discord.Embed(
                     title=f"{selected_title}",
@@ -81,8 +105,9 @@ class TitleMatchCommand(commands.Cog):
                     embed.add_field(name=EMOJI_NUMBERS[i], value=name, inline=False)
 
                 followup = await channel.send(embed=embed)
-                for i in range(len(challengers)):
-                    await followup.add_reaction(EMOJI_NUMBERS[i])
+
+                tasks = [followup.add_reaction(EMOJI_NUMBERS[i]) for i in range(len(challengers))]
+                await asyncio.gather(*tasks)
 
                 self.match_context[followup.id] = {
                     "step": "select_challenger",
@@ -92,19 +117,21 @@ class TitleMatchCommand(commands.Cog):
                     "challengers": challengers,
                     "channel": channel.id
                 }
+
             else:
+                challengers = random.sample(eligible, min(8, len(eligible)))
                 embed = discord.Embed(
                     title=f"{selected_title}",
                     description="🏷️ This title is currently **vacant**.\nChoose two competitors:",
                     color=discord.Color.dark_grey()
                 )
-                challengers = random.sample(eligible, min(8, len(eligible)))
                 for i, (_, name) in enumerate(challengers):
                     embed.add_field(name=EMOJI_NUMBERS[i], value=name, inline=False)
 
                 followup = await channel.send(embed=embed)
-                for i in range(len(challengers)):
-                    await followup.add_reaction(EMOJI_NUMBERS[i])
+
+                tasks = [followup.add_reaction(EMOJI_NUMBERS[i]) for i in range(len(challengers))]
+                await asyncio.gather(*tasks)
 
                 self.match_context[followup.id] = {
                     "step": "select_two",
@@ -117,20 +144,29 @@ class TitleMatchCommand(commands.Cog):
                 }
 
         elif data["step"] == "select_challenger":
+            if emoji not in EMOJI_NUMBERS:
+                return
             index = EMOJI_NUMBERS.index(emoji)
+            if index >= len(data["challengers"]):
+                return
+
             challenger_id, challenger_name = data["challengers"][index]
             champ_id = data["champion_id"]
+            wrestlers = load_wrestlers()
+            competitors = [(champ_id, wrestlers[champ_id]["wrestler"]), (challenger_id, challenger_name)]
 
-            competitors = [(champ_id, load_wrestlers()[champ_id]["wrestler"]), (challenger_id, challenger_name)]
             await self.confirm_match(channel, data["title"], competitors, payload.message_id)
 
         elif data["step"] == "select_two":
+            if emoji not in EMOJI_NUMBERS:
+                return
             index = EMOJI_NUMBERS.index(emoji)
-            picked = data["picked"]
-            if index >= len(data["challengers"]) or len(picked) >= 2:
+            if index >= len(data["challengers"]):
                 return
 
+            picked = data["picked"]
             selected = data["challengers"][index]
+
             if selected[0] not in picked:
                 picked.append(selected[0])
 
@@ -185,11 +221,6 @@ class TitleMatchCommand(commands.Cog):
                     wrestlers[uid]["current_title"] = None
 
         save_wrestlers(wrestlers)
-
-        # Broadcast
-        backstage = discord.utils.get(channel.guild.text_channels, name="dwf-backstage")
-        if backstage:
-            await backstage.send(f"📣 Title Match Result: **{winner_name}** defeated **{loser[1]}** for the {title}!")
 
         twitch_channel = get_twitch_channel()
         if twitch_channel:

@@ -1,0 +1,5 @@
+flask
+websockets
+playsound
+twitchio
+discord.py

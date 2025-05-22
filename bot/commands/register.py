@@ -1,9 +1,12 @@
+import random
 import discord
 import json
 from discord.ext import commands
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
+from bot.utils import safe_get_guild, safe_get_channel
 from datetime import datetime
+import asyncio  # For concurrent reaction adds
 
 class RegisterCommand(commands.Cog):
     def __init__(self, bot):
@@ -53,7 +56,8 @@ class RegisterCommand(commands.Cog):
             await ctx.send("That name is already taken.")
             return
 
-        comm_channel = discord.utils.get(ctx.guild.text_channels, name="dwf-commissioner")
+        guild = ctx.guild
+        comm_channel = await safe_get_channel(self.bot, guild, name="dwf-commissioner")
         if not comm_channel:
             await ctx.send("❌ Could not locate the commissioner channel.")
             return
@@ -66,8 +70,11 @@ class RegisterCommand(commands.Cog):
         wrestlers[user_id] = {"pending": wrestler_name}
         save_wrestlers(wrestlers)
 
-        await msg.add_reaction("✅")
-        await msg.add_reaction("❌")
+        # Reaction adds concurrently
+        await asyncio.gather(
+            msg.add_reaction("✅"),
+            msg.add_reaction("❌")
+        )
 
         try:
             response = await ctx.send("✅ Registration request submitted for approval.")
@@ -84,16 +91,26 @@ class RegisterCommand(commands.Cog):
         if str(payload.emoji) not in {"✅", "❌"}:
             return
 
-        guild = self.bot.get_guild(payload.guild_id)
-        if not guild:
+        guild = await safe_get_guild(self.bot, payload.guild_id)
+        if guild is None:
             return
 
-        member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        try:
+            member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        except Exception:
+            return
+
         if not (member.guild_permissions.manage_messages or member.guild_permissions.administrator):
             return
 
-        channel = guild.get_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
+        channel = await safe_get_channel(self.bot, guild, channel_id=payload.channel_id)
+        if channel is None:
+            return
+
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except Exception:
+            return
 
         wrestlers = load_wrestlers()
         print(f"🐛 Loaded wrestlers: {json.dumps(wrestlers, indent=2)}")
@@ -129,7 +146,7 @@ class RegisterCommand(commands.Cog):
                 "current_title": None
             }
 
-            backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
+            backstage = await safe_get_channel(self.bot, guild, name="dwf-backstage")
             if backstage:
                 await backstage.send(f"📢 **{wrestler_name}** has just signed a new contract with the DWF!")
 

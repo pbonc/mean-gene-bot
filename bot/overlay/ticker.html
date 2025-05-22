@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Mean Gene Bot Ticker Test</title>
+<style>
+  body {
+    background: black;
+    color: white;
+    font-family: monospace, monospace;
+    font-size: 24px;
+    padding: 20px;
+  }
+  #status {
+    margin-bottom: 10px;
+  }
+  #message {
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+  <div id="status">Connecting to ticker websocket...</div>
+  <div id="message">No messages yet.</div>
+
+  <script>
+    const statusDiv = document.getElementById('status');
+    const messageDiv = document.getElementById('message');
+
+    const ws = new WebSocket('ws://127.0.0.1:8765');
+
+    ws.onopen = () => {
+      statusDiv.textContent = 'WebSocket connected';
+    };
+
+    ws.onmessage = (event) => {
+      messageDiv.textContent = event.data;
+    };
+
+    ws.onclose = () => {
+      statusDiv.textContent = 'WebSocket disconnected';
+    };
+
+    ws.onerror = (err) => {
+      statusDiv.textContent = 'WebSocket error';
+      console.error('WebSocket error:', err);
+    };
+  </script>
+</body>
+</html>

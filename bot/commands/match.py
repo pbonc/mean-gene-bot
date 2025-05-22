@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
+import asyncio  # For concurrent sends
 
 MATCH_COMMAND_VERSION = "v1.0.0a"
 
@@ -37,10 +38,12 @@ class MatchCommand(commands.Cog):
 
         twitch_channel = get_twitch_channel()
         if twitch_channel:
-            await twitch_channel.send(f"🥊 It's time for a match!")
-            await twitch_channel.send(f"👊 {fighter1} VS {fighter2}!")
-            await twitch_channel.send("🥁 The crowd goes silent...")
-            await twitch_channel.send(f"🏆 **{winner}** wins the match!")
+            await asyncio.gather(
+                twitch_channel.send(f"🥊 It's time for a match!"),
+                twitch_channel.send(f"👊 {fighter1} VS {fighter2}!"),
+                twitch_channel.send("🥁 The crowd goes silent..."),
+                twitch_channel.send(f"🏆 **{winner}** wins the match!"),
+            )
 
         # Backstage summary
         backstage = discord.utils.get(ctx.guild.text_channels, name="dwf-backstage")

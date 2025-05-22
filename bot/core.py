@@ -1,10 +1,11 @@
+import asyncio
 from twitchio.ext import commands
 from bot.config import TWITCH_TOKEN, CHANNEL, BOT_NICK
 from bot.version import BOT_VERSION
 from bot.loader import load_all
 from bot import mgb_dwf
 from bot.state import set_twitch_channel
-import asyncio
+from bot.tasks.sfx_watcher import SFXWatcher  # ← added
 
 class MeanGeneBot(commands.Bot):
     def __init__(self, sfx_debug=False):
@@ -14,7 +15,8 @@ class MeanGeneBot(commands.Bot):
             initial_channels=[CHANNEL]
         )
 
-        # Load all other bot components
+        self.sfx_debug = sfx_debug
+        self.sfx_watcher = SFXWatcher(self)  # ← added
         load_all(self, sfx_debug=sfx_debug)
 
     async def event_ready(self):
@@ -45,6 +47,10 @@ class MeanGeneBot(commands.Bot):
         except Exception as e:
             print(f"❌ Error while calling mgb_dwf.on_ready: {e}")
 
+        # ✅ Start background SFX watcher
+        self.sfx_watcher.start()
+        print("👂 SFXWatcher started.")
+
         print("🎉 event_ready() completed without errors")
 
     async def event_message(self, message):
@@ -60,7 +66,7 @@ class MeanGeneBot(commands.Bot):
         await self.handle_commands(message)
 
     async def event_command_error(self, ctx, error):
-        from bot.data.command_loader import is_valid_command_name, log_skip
+        from bot.command_loader import is_valid_command_name, log_skip
 
         if isinstance(error, commands.errors.CommandNotFound):
             full_message = ctx.message.content.strip()
@@ -81,12 +87,6 @@ class MeanGeneBot(commands.Bot):
             print(traceback.format_exc())
         else:
             print("Unknown error occurred with no exception object.")
-
-        try:
-            for chan in self.connected_channels:
-                await chan.send("Raz... tired...")
-        except Exception as e:
-            print(f"⚠️ Failed to send crash message: {e}")
 
     @commands.command(name='botver')
     async def botver_command(self, ctx):

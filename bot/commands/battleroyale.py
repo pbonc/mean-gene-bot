@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands, tasks
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
-import asyncio
+import asyncio  # For concurrent sends
 
 BATTLEROYALE_COMMAND_VERSION = "v1.1.0a"
 
@@ -32,7 +32,11 @@ class BattleRoyaleCommand(commands.Cog):
         if backstage:
             msg = await backstage.send("💥 A Battle Royale has been declared! React with ✅ to enter the ring!")
             await msg.add_reaction("✅")
-            self.active_battle = {"message_id": msg.id, "participants": set(), "guild_id": ctx.guild.id}
+            self.active_battle = {
+                "message_id": msg.id,
+                "participants": set(),
+                "guild_id": ctx.guild.id
+            }
             self.timer_started = False
 
         twitch_channel = get_twitch_channel()
@@ -56,10 +60,17 @@ class BattleRoyaleCommand(commands.Cog):
         # Start timer if first real participant
         if not self.timer_started:
             guild = self.bot.get_guild(self.active_battle["guild_id"])
-            if guild:
-                backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
-                if backstage:
-                    await backstage.send("⏳ Battle Royale will begin in 2 minutes. Get your reactions in!")
+            if guild is None:
+                try:
+                    guild = await self.bot.fetch_guild(self.active_battle["guild_id"])
+                except Exception as e:
+                    print(f"⚠️ Failed to fetch guild {self.active_battle['guild_id']}: {e}")
+                    return
+
+            backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
+            if backstage:
+                await backstage.send("⏳ Battle Royale will begin in 2 minutes. Get your reactions in!")
+
             self.bot.loop.create_task(self.start_battle_after_delay())
             self.timer_started = True
 
@@ -69,9 +80,13 @@ class BattleRoyaleCommand(commands.Cog):
         await asyncio.sleep(120)  # 2 minutes
 
         guild = self.bot.get_guild(self.active_battle["guild_id"])
-        if not guild:
-            self.active_battle = None
-            return
+        if guild is None:
+            try:
+                guild = await self.bot.fetch_guild(self.active_battle["guild_id"])
+            except Exception as e:
+                print(f"⚠️ Failed to fetch guild {self.active_battle['guild_id']}: {e}")
+                self.active_battle = None
+                return
 
         wrestlers = load_wrestlers()
         entrants = []
@@ -94,16 +109,17 @@ class BattleRoyaleCommand(commands.Cog):
             if data.get("wrestler") == winner_name:
                 data.setdefault("battle_royale_wins", 0)
                 data["battle_royale_wins"] += 1
-            # No win/loss record updates, only tracking wins
 
         save_wrestlers(wrestlers)
 
         twitch_channel = get_twitch_channel()
         if twitch_channel:
-            await twitch_channel.send("💥 The Battle Royale has begun!")
-            await twitch_channel.send(f"⚔️ Combatants: {', '.join(name for _, name in entrants)}")
-            await twitch_channel.send("🔥 It's absolute chaos in the ring...")
-            await twitch_channel.send(f"👑 **{winner_name}** survives and claims victory!")
+            await asyncio.gather(
+                twitch_channel.send("💥 The Battle Royale has begun!"),
+                twitch_channel.send(f"⚔️ Combatants: {', '.join(name for _, name in entrants)}"),
+                twitch_channel.send("🔥 It's absolute chaos in the ring..."),
+                twitch_channel.send(f"👑 **{winner_name}** survives and claims victory!")
+            )
 
         backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
         if backstage:

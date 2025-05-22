@@ -1,8 +1,11 @@
 import discord
 import json
 from discord.ext import commands
+import asyncio  # For concurrent reaction adds
+
 from bot.mgb_dwf import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
+from bot.utils import safe_get_guild, safe_get_channel
 
 class RebrandCommand(commands.Cog):
     def __init__(self, bot):
@@ -16,7 +19,6 @@ class RebrandCommand(commands.Cog):
 
         user_id = str(ctx.author.id)
         wrestlers = load_wrestlers()
-        print(f"🐛 Loaded wrestlers: {json.dumps(wrestlers, indent=2)}")
 
         if user_id not in wrestlers or "wrestler" not in wrestlers[user_id]:
             await ctx.send("❌ You must have a registered wrestler to rebrand.")
@@ -27,14 +29,12 @@ class RebrandCommand(commands.Cog):
             return
 
         new_name_lower = new_name.lower()
-        if any(
-            data.get("wrestler", "").lower() == new_name_lower
-            for uid, data in wrestlers.items()
-        ):
+        if any(data.get("wrestler", "").lower() == new_name_lower for data in wrestlers.values()):
             await ctx.send("⚠️ That name is already taken by another wrestler.")
             return
 
-        comm_channel = discord.utils.get(ctx.guild.text_channels, name="dwf-commissioner")
+        guild = ctx.guild
+        comm_channel = await safe_get_channel(self.bot, guild, name="dwf-commissioner")
         if not comm_channel:
             await ctx.send("❌ Could not locate the commissioner channel.")
             return
@@ -44,8 +44,11 @@ class RebrandCommand(commands.Cog):
             f"🔁 `{ctx.author}` requests to rebrand **{old_name}** to **{new_name}**. ✅ to approve, ❌ to reject."
         )
 
-        await msg.add_reaction("✅")
-        await msg.add_reaction("❌")
+        # Add reactions concurrently to speed up
+        await asyncio.gather(
+            msg.add_reaction("✅"),
+            msg.add_reaction("❌")
+        )
 
         self.pending_rebrands[msg.id] = user_id
         wrestlers[user_id]["pending_rebrand"] = {"from": old_name, "to": new_name}
@@ -60,57 +63,74 @@ class RebrandCommand(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
+        # Ignore bot's own reactions
         if payload.user_id == self.bot.user.id:
             return
-        if str(payload.emoji) not in {"✅", "❌"}:
-            return
+
+        # Only handle reactions related to pending rebrands
         if payload.message_id not in self.pending_rebrands:
             return
 
-        guild = self.bot.get_guild(payload.guild_id)
+        user_id = self.pending_rebrands[payload.message_id]
+        if payload.user_id != int(user_id):
+            # Ignore reactions from users other than the requester
+            return
+
+        # Fetch guild and channel safely
+        guild = await safe_get_guild(self.bot, payload.guild_id)
         if not guild:
             return
 
-        member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-        if not (member.guild_permissions.manage_messages or member.guild_permissions.administrator):
+        channel = await safe_get_channel(self.bot, guild, channel_id=payload.channel_id)
+        if not channel:
             return
 
-        channel = guild.get_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
+        # Fetch the message to get reaction emoji
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except Exception as e:
+            print(f"❌ Failed to fetch message for reaction handling: {e}")
+            return
 
-        user_id = self.pending_rebrands.pop(payload.message_id)
+        # Identify emoji name
+        emoji = payload.emoji.name
+
+        # Load wrestlers data
         wrestlers = load_wrestlers()
-
         if user_id not in wrestlers or "pending_rebrand" not in wrestlers[user_id]:
+            # No pending rebrand found
             return
 
-        from_name = wrestlers[user_id]["pending_rebrand"]["from"]
-        to_name = wrestlers[user_id]["pending_rebrand"]["to"]
+        rebrand_info = wrestlers[user_id]["pending_rebrand"]
+        old_name = rebrand_info["from"]
+        new_name = rebrand_info["to"]
 
-        if str(payload.emoji) == "✅":
-            wrestlers[user_id]["wrestler"] = to_name
+        if emoji == "✅":
+            # Approve rebrand
+            wrestlers[user_id]["wrestler"] = new_name
             del wrestlers[user_id]["pending_rebrand"]
+            save_wrestlers(wrestlers)
 
-            backstage = discord.utils.get(guild.text_channels, name="dwf-backstage")
-            if backstage:
-                await backstage.send(f"🎭 **{from_name}** has rebranded! From now on, they are known as **{to_name}**!")
+            await channel.send(f"✅ Rebrand approved: **{old_name}** is now **{new_name}**.")
 
-            twitch_channel = get_twitch_channel()
-            if twitch_channel:
-                await twitch_channel.send(f"🎭 {from_name} has rebranded into **{to_name}** in the DWF!")
+        elif emoji == "❌":
+            # Reject rebrand
+            del wrestlers[user_id]["pending_rebrand"]
+            save_wrestlers(wrestlers)
 
-            try:
-                user = await self.bot.fetch_user(int(user_id))
-                await user.send(f"✅ Your rebrand to **{to_name}** has been approved!")
-            except:
-                pass
+            await channel.send(f"❌ Rebrand rejected: **{old_name}** remains unchanged.")
 
-            await message.reply(f"✅ Rebrand approved: {from_name} → {to_name}")
         else:
-            del wrestlers[user_id]["pending_rebrand"]
-            await message.reply(f"❌ Rebrand rejected for {from_name}.")
+            # Ignore other reactions
+            return
 
-        save_wrestlers(wrestlers)
+        # Clean up tracking
+        del self.pending_rebrands[payload.message_id]
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload):
+        # Optional: Handle reaction removals if needed
+        pass
 
 # ✅ Async cog setup
 async def setup(bot):
