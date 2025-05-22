@@ -1,33 +1,84 @@
 import asyncio
+import json
+import os
+from pathlib import Path
 import websockets
 
-connected_clients = set()
+WRESTLERS_PATH = Path(__file__).parent.parent.parent / "dwf" / "wrestlers.json"
+LABELS_PATH = Path(__file__).parent.parent.parent / "labels"
 
-async def ticker_handler(websocket, path):
-    print(f"New connection from {websocket.remote_address}")
-    connected_clients.add(websocket)
-    try:
-        async for msg in websocket:
-            print(f"Received message from client: {msg}")
-            pass
-    except websockets.ConnectionClosed:
-        print("Connection closed")
-    finally:
-        connected_clients.remove(websocket)
-        print(f"Client disconnected: {websocket.remote_address}")
+TICKER_INTERVAL = 10  # seconds
 
+async def build_ticker_messages():
+    messages = []
 
-async def send_heartbeat():
-    while True:
-        if connected_clients:
-            message = "Ticker update: heartbeat"
-            await asyncio.wait([
-                asyncio.create_task(client.send(message)) 
-                for client in connected_clients
-            ])
-        await asyncio.sleep(2)  # send update every 2 seconds
+    # --- DWF Titleholders ---
+    if WRESTLERS_PATH.exists():
+        with open(WRESTLERS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            for wrestler in data:
+                # Find all title fields (e.g., "champion": true)
+                for key, value in wrestler.items():
+                    if key.lower().endswith("champion") and value:
+                        title_name = key.replace("_", " ").title()
+                        messages.append(f"Current {title_name}: {wrestler.get('name', 'Unknown')}")
+                # Or, if you track titles differently, adjust here
 
-async def start_ticker_server():
-    server = await websockets.serve(ticker_handler, "0.0.0.0", 8765)
-    print("🛰️ WebSocket ticker server started on ws://localhost:8765")
-    await send_heartbeat()  # runs forever
+    # --- Twitch stats from labels/ ---
+    if LABELS_PATH.exists():
+        for file in LABELS_PATH.glob("*.txt"):
+            with open(file, "r", encoding="utf-8") as f:
+                for line in f:
+                    stat = line.strip()
+                    if stat:
+                        messages.append(stat)
+
+    # --- Add more sources here later (API calls, sports, etc) ---
+
+    if not messages:
+        messages = ["Welcome to the Darmunist News Network."]
+    return messages
+
+class TickerServer:
+    def __init__(self):
+        self.clients = set()
+        self.messages = []
+        self.idx = 0
+
+    async def register(self, websocket):
+        self.clients.add(websocket)
+        print(f"New overlay connected. Total: {len(self.clients)}")
+
+    async def unregister(self, websocket):
+        self.clients.remove(websocket)
+        print(f"Overlay disconnected. Total: {len(self.clients)}")
+
+    async def handler(self, websocket, path):
+        await self.register(websocket)
+        try:
+            async for _ in websocket:  # We don't expect messages from the overlay client
+                pass
+        finally:
+            await self.unregister(websocket)
+
+    async def ticker_loop(self):
+        while True:
+            self.messages = await build_ticker_messages()
+            if self.messages:
+                msg = {
+                    "type": "ticker",
+                    "text": self.messages[self.idx % len(self.messages)]
+                }
+                print("Broadcasting:", msg["text"])
+                await asyncio.gather(*[ws.send(json.dumps(msg)) for ws in self.clients if ws.open])
+                self.idx += 1
+            await asyncio.sleep(TICKER_INTERVAL)
+
+    async def main(self):
+        server = await websockets.serve(self.handler, "localhost", 6789)
+        print("TickerServer WebSocket running on ws://localhost:6789")
+        await self.ticker_loop()
+
+if __name__ == "__main__":
+    server = TickerServer()
+    asyncio.run(server.main())
