@@ -142,7 +142,7 @@ async def start_discord_with_retry():
 async def main():
     try:
         print("🛠 Constructing MeanGeneBot...")
-        bot = MeanGeneBot(sfx_debug=config.sfx_debug, dev_mode=config.dev_mode)
+        bot = MeanGeneBot(sfx_debug=config.sfx_debug)  # dev_mode removed for now
         load_all(bot)
 
         print("🛰️ Starting Flask, Discord and Twitch bots concurrently...")
