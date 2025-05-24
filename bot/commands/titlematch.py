@@ -128,7 +128,7 @@ class TitleMatch(commands.Cog):
 
                 # Announce results
                 competitors_names = [name for _, name in competitors]
-                result_msg = f"Match for **{title}**!\nCompetitors: {', '.join(competitors_names)}\n\n🏆 **{winner_name}** is the NEW {title} Champion!"
+                result_msg = f"Match for **{title}**!\nCompetitors: {', '.join(competitors_names)}\n\n🏆 **{winner_name}** is the {'defending' if data['champion_id'] and winner_id == data['champion_id'] else 'NEW'} {title} Champion!"
 
                 await channel.send(result_msg)
 
@@ -138,12 +138,16 @@ class TitleMatch(commands.Cog):
                     await asyncio.gather(
                         twitch_channel.send(f"🔥 Title match for {title}!"),
                         twitch_channel.send(f"🤼 Competitors: {', '.join(competitors_names)}"),
-                        twitch_channel.send(f"🏆 {winner_name} is the NEW {title} Champion!")
+                        twitch_channel.send(
+                            f"🏆 {winner_name} is the {'defending' if data['champion_id'] and winner_id == data['champion_id'] else 'NEW'} {title} Champion!"
+                        )
                     )
 
                 # --- Ticker Integration ---
-                self.titlematch_ticker.append(f"{winner_name} is the NEW {title} Champion!")
-                # Optionally: print for debug
+                if data["champion_id"] and winner_id == data["champion_id"]:
+                    self.titlematch_ticker.append(f"{winner_name} successfully defended the {title}!")
+                else:
+                    self.titlematch_ticker.append(f"{winner_name} is the NEW {title} Champion!")
                 print("Ticker now:", self.titlematch_ticker)
 
                 del self.active_sessions[payload.message_id]
