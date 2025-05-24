@@ -176,3 +176,13 @@ def register_sfx_command(bot, command_name: str):
         bot.add_command(commands.Command(func=_sfx_cmd, name=command_name))
     except Exception as e:
         print(f"❌ Could not register dynamic sfx !{command_name}: {e}")
+
+def unregister_sfx_command(bot, command_name: str):
+    """
+    Remove an SFX command from the bot dynamically.
+    """
+    try:
+        bot.remove_command(command_name)
+        print(f"❌ Unregistered SFX command: !{command_name}")
+    except Exception as e:
+        print(f"⚠️ Error unregistering SFX command !{command_name}: {e}")

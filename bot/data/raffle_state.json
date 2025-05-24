@@ -1,18 +1,18 @@
 {
   "raffle_active": false,
   "daily_entry_amount": 1,
-  "raffle_id": "20250520_raffle",
+  "raffle_id": "20250523_raffle",
   "persistent_grants": {
     "tankahdelphia": {
       "total": 17,
       "redeemed": 15
     },
     "caerdwyn": {
-      "total": 5,
+      "total": 10,
       "redeemed": 0
     },
     "uppercumberlandgamers": {
-      "total": 7,
+      "total": 12,
       "redeemed": 7
     },
     "thederpdawg": {
@@ -20,35 +20,35 @@
       "redeemed": 0
     },
     "livesuieng": {
+      "total": 19,
+      "redeemed": 19
+    },
+    "karnave": {
+      "total": 7,
+      "redeemed": 7
+    },
+    "duluthfly_": {
+      "total": 8,
+      "redeemed": 4
+    },
+    "legendcrypt": {
       "total": 10,
       "redeemed": 10
     },
-    "karnave": {
-      "total": 2,
-      "redeemed": 1
-    },
-    "duluthfly_": {
-      "total": 3,
-      "redeemed": 0
-    },
-    "legendcrypt": {
-      "total": 5,
-      "redeemed": 5
-    },
     "hoplon5": {
-      "total": 1,
+      "total": 6,
       "redeemed": 0
     },
     "deputydawg777": {
-      "total": 1,
-      "redeemed": 0
+      "total": 6,
+      "redeemed": 4
     },
     "sirhyrule": {
-      "total": 3,
+      "total": 8,
       "redeemed": 0
     },
     "itsdannicus": {
-      "total": 5,
+      "total": 11,
       "redeemed": 0
     },
     "roningaidin": {
@@ -56,11 +56,31 @@
       "redeemed": 5
     },
     "snipah2012": {
-      "total": 5,
+      "total": 10,
       "redeemed": 0
     },
     "dangerzonerando": {
-      "total": 1,
+      "total": 6,
+      "redeemed": 0
+    },
+    "fal_the_warlock": {
+      "total": 5,
+      "redeemed": 4
+    },
+    "nate048": {
+      "total": 5,
+      "redeemed": 0
+    },
+    "duluthfly": {
+      "total": 5,
+      "redeemed": 0
+    },
+    "tankadelphia": {
+      "total": 5,
+      "redeemed": 0
+    },
+    "colonel_dinggus": {
+      "total": 5,
       "redeemed": 0
     }
   },
@@ -231,7 +251,55 @@
     "261": "tankahdelphia",
     "073": "tankahdelphia",
     "941": "tankahdelphia",
-    "275": "roningaidin"
+    "275": "roningaidin",
+    "983": "uppercumberlandgamers",
+    "456": "fal_the_warlock",
+    "121": "livesuieng",
+    "644": "deputydawg777",
+    "390": "livesuieng",
+    "650": "legendcrypt",
+    "881": "aelfhard",
+    "028": "livesuieng",
+    "076": "roningaidin",
+    "519": "snipah2012",
+    "622": "itsdannicus",
+    "861": "livesuieng",
+    "649": "livesuieng",
+    "572": "livesuieng",
+    "875": "livesuieng",
+    "464": "livesuieng",
+    "323": "deputydawg777",
+    "030": "deputydawg777",
+    "655": "deputydawg777",
+    "933": "deputydawg777",
+    "568": "deputydawg777",
+    "788": "fal_the_warlock",
+    "790": "fal_the_warlock",
+    "791": "fal_the_warlock",
+    "792": "fal_the_warlock",
+    "793": "fal_the_warlock",
+    "044": "legendcrypt",
+    "045": "legendcrypt",
+    "050": "legendcrypt",
+    "260": "legendcrypt",
+    "412": "legendcrypt",
+    "305": "karnave",
+    "929": "karnave",
+    "376": "karnave",
+    "335": "karnave",
+    "772": "karnave",
+    "484": "karnave",
+    "584": "karnave",
+    "013": "livesuieng",
+    "422": "livesuieng",
+    "977": "livesuieng",
+    "001": "duluthfly_",
+    "181": "duluthfly_",
+    "795": "duluthfly_",
+    "138": "duluthfly_",
+    "348": "duluthfly_",
+    "151": "legendcrypt",
+    "406": "slummyzeru_"
   },
   "raffle_locked": true,
   "mommadar_awarded": false

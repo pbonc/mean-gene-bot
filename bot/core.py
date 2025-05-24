@@ -2,13 +2,13 @@ import asyncio
 from twitchio.ext import commands
 from bot.config import TWITCH_TOKEN, CHANNEL, BOT_NICK
 from bot.version import BOT_VERSION
-from bot.loader import load_all
+from bot.loader import load_all, is_valid_command_name, log_skip
 from bot import mgb_dwf
 from bot.state import set_twitch_channel
-from bot.tasks.sfx_watcher import SFXWatcher  # ← added
+from bot.tasks.sfx_watcher import SFXWatcher
 
 class MeanGeneBot(commands.Bot):
-    def __init__(self, sfx_debug=False):
+    def __init__(self, sfx_debug=False, verbose=False):
         super().__init__(
             token=TWITCH_TOKEN,
             prefix="!",
@@ -16,7 +16,8 @@ class MeanGeneBot(commands.Bot):
         )
 
         self.sfx_debug = sfx_debug
-        self.sfx_watcher = SFXWatcher(self)  # ← added
+        self.verbose = verbose
+        self.sfx_watcher = SFXWatcher(self, verbose=(self.sfx_debug or self.verbose))
         load_all(self, sfx_debug=sfx_debug)
 
     async def event_ready(self):
@@ -66,8 +67,6 @@ class MeanGeneBot(commands.Bot):
         await self.handle_commands(message)
 
     async def event_command_error(self, ctx, error):
-        from bot.command_loader import is_valid_command_name, log_skip
-
         if isinstance(error, commands.errors.CommandNotFound):
             full_message = ctx.message.content.strip()
             if not full_message.startswith("!"):
@@ -80,14 +79,9 @@ class MeanGeneBot(commands.Bot):
             log_skip(reason, user, attempted, created)
 
     async def event_error(self, error: Exception, data=None):
-        import logging, traceback
+        import logging
+        import traceback
         logging.error("Unhandled exception", exc_info=error)
         print("\n💥 Unhandled exception in event loop:")
         if error:
-            print(traceback.format_exc())
-        else:
-            print("Unknown error occurred with no exception object.")
-
-    @commands.command(name='botver')
-    async def botver_command(self, ctx):
-        await ctx.send(f"Mean Gene Bot version {BOT_VERSION}")
+            traceback.print_exception(type(error), error, error.__traceback__)

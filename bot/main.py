@@ -1,5 +1,5 @@
 # File: bot/main.py
-# Refactored for argparse and config structure
+# Refactored for proper asyncio event loop (asyncio.run), watcher compatibility, and config structure
 
 import os
 import sys
@@ -15,6 +15,7 @@ from bot import mgb_dwf
 from bot.core import MeanGeneBot
 from bot.config import TWITCH_TOKEN, BOT_NICK, CHANNEL
 from bot.loader import load_all
+from bot.tasks.sfx_watcher import SFXWatcher  # <-- Import the watcher!
 
 # --- Bot Version ---
 BOT_MAIN_VERSION = "v1.3.3"
@@ -85,10 +86,6 @@ def handle_async_exception(loop, context):
         print("🔍 Traceback:")
         traceback.print_exception(type(exc), exc, exc.__traceback__)
 
-loop = asyncio.get_event_loop()
-loop.set_exception_handler(handle_async_exception)
-loop.set_debug(True)
-
 # --- Fallback global exception hook ---
 def global_excepthook(exc_type, exc_value, exc_traceback):
     print("💣 GLOBAL EXCEPTION HOOK TRIGGERED")
@@ -149,6 +146,15 @@ async def main():
 
         # Start Flask server in background thread (non-blocking)
         threading.Thread(target=run_flask, daemon=True).start()
+
+        # --- SFX Watcher: Start it before running other async things!
+        sfx_watcher = SFXWatcher(bot, verbose=True)
+        sfx_watcher.start()
+
+        # Set up asyncio exception handler and debug mode (AFTER loop is running)
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(handle_async_exception)
+        loop.set_debug(True)
 
         # Run Discord startup retry and Twitch bot concurrently
         await asyncio.gather(

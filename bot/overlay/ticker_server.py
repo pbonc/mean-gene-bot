@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import aiohttp
@@ -10,6 +11,14 @@ import time
 import datetime
 import pytz
 
+# --- ADD ARGPARSE FOR DEV MODE ---
+parser = argparse.ArgumentParser(description="Run the TickerServer overlay.")
+parser.add_argument('-d', '--dev', action='store_true', help='Enable dev mode (short ticker interval)')
+args = parser.parse_args()
+
+# Ticker interval is shorter in dev mode
+TICKER_INTERVAL = 2 if args.dev else 10  # seconds
+
 # Load environment variables from the project root .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
@@ -20,11 +29,9 @@ print("OPENWEATHER_API_KEY loaded as:", repr(OPENWEATHER_API_KEY))
 WRESTLERS_PATH = Path(__file__).parent.parent.parent / "dwf" / "wrestlers.json"
 LABELS_DIR = Path(__file__).parent.parent / "data" / "labels"
 WEATHER_CITIES_PATH = Path(__file__).parent.parent / "data" / "weather_cities.txt"
-TICKER_INTERVAL = 10  # seconds
 
 # SportsDB API
 THESPORTSDB_API_KEY = "3"  # Free user key
-NBA_LEAGUE_ID = "4387"
 
 # Weather cache globals
 weather_cache = []
@@ -80,48 +87,6 @@ async def get_weather_for_city(session, city):
         print(f"[WEATHER ERROR] {city}: {e}")
         return None
 
-async def get_today_nba_scores():
-    url = f"https://www.thesportsdb.com/api/v1/json/{THESPORTSDB_API_KEY}/eventspastleague.php?id={NBA_LEAGUE_ID}"
-    central = pytz.timezone("America/Chicago")
-    now_central = datetime.datetime.now(central)
-    today_str = now_central.strftime("%Y-%m-%d")
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                data = await response.json()
-                events = data.get("events", [])
-                messages = []
-                # Gather games for today in local (CST/CDT)
-                for event in events:
-                    date = event.get("dateEvent")
-                    if date == today_str:
-                        home = event["strHomeTeam"]
-                        away = event["strAwayTeam"]
-                        home_score = event.get("intHomeScore")
-                        away_score = event.get("intAwayScore")
-                        if home_score is not None and away_score is not None:
-                            msg = f"NBA: {home} {home_score}, {away} {away_score} ({date})"
-                            messages.append(msg)
-                # If no games for today yet, fallback to most recent day's games
-                if not messages:
-                    dates = [event.get("dateEvent") for event in events if event.get("dateEvent")]
-                    if dates:
-                        most_recent_date = max(dates)
-                        for event in events:
-                            date = event.get("dateEvent")
-                            if date == most_recent_date:
-                                home = event["strHomeTeam"]
-                                away = event["strAwayTeam"]
-                                home_score = event.get("intHomeScore")
-                                away_score = event.get("intAwayScore")
-                                if home_score is not None and away_score is not None:
-                                    msg = f"NBA: {home} {home_score}, {away} {away_score} ({date})"
-                                    messages.append(msg)
-                return messages
-    except Exception as e:
-        print(f"[NBA ERROR]: {e}")
-        return []
-
 async def build_ticker_messages():
     global weather_cache, weather_last_update
     messages = []
@@ -150,9 +115,21 @@ async def build_ticker_messages():
                     f"Current {title_name}: {wrestler} (Defenses: {defenses})"
                 )
 
-    # --- NBA (SportsDB) ---
-    nba_msgs = await get_today_nba_scores()
+    # --- Sports: MLB, NBA, NHL ---
+    from sports_fetchers.mlb import get_today_mlb_scores
+    from sports_fetchers.nba import get_today_nba_scores
+    from sports_fetchers.nhl import get_today_nhl_scores
+
+    api_key = os.environ.get("THESPORTSDB_API_KEY", "3")
+
+    mlb_msgs = await get_today_mlb_scores(api_key)
+    messages.extend(mlb_msgs)
+
+    nba_msgs = await get_today_nba_scores(api_key)
     messages.extend(nba_msgs)
+
+    nhl_msgs = await get_today_nhl_scores(api_key)
+    messages.extend(nhl_msgs)
 
     # --- Weather (cache, update every WEATHER_UPDATE_INTERVAL) ---
     now = time.time()
@@ -212,6 +189,7 @@ class TickerServer:
             await asyncio.sleep(TICKER_INTERVAL)
 
     async def main(self):
+        print(f"Starting TickerServer in {'DEV' if args.dev else 'PRODUCTION'} mode. Ticker interval: {TICKER_INTERVAL} seconds.")
         server = await websockets.serve(self.handler, "localhost", 6789)
         print("TickerServer WebSocket running on ws://localhost:6789")
         await self.ticker_loop()
