@@ -38,3 +38,5 @@ promos_pending.json
 sfx/*
 !sfx/.keep
 bot/__pycache__/command_loader.cpython-313.pyc
+
+data/labels/*.txt

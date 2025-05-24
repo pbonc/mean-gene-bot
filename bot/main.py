@@ -1,5 +1,6 @@
 # File: bot/main.py
-# Refactored for proper asyncio event loop (asyncio.run), watcher compatibility, and config structure
+# Supports CLI flags: -v (verbose), -s (sfx-debug), --dev, --ws
+# SFXWatcher tick logging only shown with -v/--verbose
 
 import os
 import sys
@@ -11,14 +12,14 @@ import argparse
 
 from flask import Flask, send_from_directory
 
-from bot import mgb_dwf
 from bot.core import MeanGeneBot
 from bot.config import TWITCH_TOKEN, BOT_NICK, CHANNEL
 from bot.loader import load_all
 from bot.tasks.sfx_watcher import SFXWatcher  # <-- Import the watcher!
+from bot.mgb_dwf import DISCORD_CLIENT, TOKEN as DISCORD_TOKEN  # <-- Import Discord bot!
 
 # --- Bot Version ---
-BOT_MAIN_VERSION = "v1.3.3"
+BOT_MAIN_VERSION = "v1.3.4"
 
 # --- Argparse for CLI flags ---
 def parse_args():
@@ -113,33 +114,11 @@ def list_files():
 def run_flask():
     app.run(host="0.0.0.0", port=5000, debug=config.dev_mode)
 
-# --- Retry Discord Start ---
-async def start_discord_with_retry():
-    max_retries = 5
-    delay = 300  # 5 minutes
-
-    for attempt in range(max_retries):
-        try:
-            print(f"🔌 Attempting Discord connection (try {attempt + 1}/{max_retries})...")
-            await mgb_dwf.start_discord()
-            print("✅ Discord bot started successfully.")
-            return
-        except Exception as e:
-            print(f"❌ Discord bot failed to start: {e}")
-            if "429" in str(e):
-                print(f"⏱️ Rate limited. Retrying in {delay // 60} minutes...")
-            else:
-                print("💥 Unexpected Discord startup error:")
-                traceback.print_exc()
-        await asyncio.sleep(delay)
-
-    print("🚫 Max Discord retries exceeded. Skipping Discord startup.")
-
 # --- Async Main Entry ---
 async def main():
     try:
         print("🛠 Constructing MeanGeneBot...")
-        bot = MeanGeneBot(sfx_debug=config.sfx_debug)  # dev_mode removed for now
+        bot = MeanGeneBot(sfx_debug=config.sfx_debug)
         load_all(bot)
 
         print("🛰️ Starting Flask, Discord and Twitch bots concurrently...")
@@ -147,8 +126,8 @@ async def main():
         # Start Flask server in background thread (non-blocking)
         threading.Thread(target=run_flask, daemon=True).start()
 
-        # --- SFX Watcher: Start it before running other async things!
-        sfx_watcher = SFXWatcher(bot, verbose=True)
+        # --- SFX Watcher: Only verbose if CLI -v flag is set!
+        sfx_watcher = SFXWatcher(bot, verbose=config.verbose)
         sfx_watcher.start()
 
         # Set up asyncio exception handler and debug mode (AFTER loop is running)
@@ -156,11 +135,12 @@ async def main():
         loop.set_exception_handler(handle_async_exception)
         loop.set_debug(True)
 
-        # Run Discord startup retry and Twitch bot concurrently
+        # --- Start both Twitch and Discord bots concurrently ---
         await asyncio.gather(
-            start_discord_with_retry(),
-            bot.start()
+            bot.start(),  # TwitchIO bot
+            DISCORD_CLIENT.start(DISCORD_TOKEN)  # Discord.py bot
         )
+
     except Exception as e:
         print("💥 Bot failed to start.")
         traceback.print_exc()

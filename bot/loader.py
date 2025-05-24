@@ -34,7 +34,8 @@ def log_skip(reason, user, command, created=None):
             f.write(msg + "\n")
 
 def load_sfx_commands(bot, verbose=False):
-    print("🔍 Scanning for SFX commands...")
+    if verbose:
+        print("🔍 Scanning for SFX commands...")
     if not os.path.exists(SFX_FOLDER):
         print(f"❌ SFX folder does not exist at path: {SFX_FOLDER}")
         return []
@@ -44,7 +45,8 @@ def load_sfx_commands(bot, verbose=False):
 
     def make_cmd(path):
         async def _cmd(ctx):
-            print(f"🎮 SFX command triggered for: {path}")
+            if verbose:
+                print(f"🎮 SFX command triggered for: {path}")
             await queue_sfx(path)
         return _cmd
 
@@ -84,7 +86,8 @@ def load_sfx_commands(bot, verbose=False):
                     async def _random_cmd(ctx):
                         choice = random.choice(options)
                         cmd = os.path.splitext(os.path.basename(choice))[0]
-                        print(f"🎲 {ctx.author.name} triggered random sfx: !{cmd} (folder randomizer)")
+                        if verbose:
+                            print(f"🎲 {ctx.author.name} triggered random sfx: !{cmd} (folder randomizer)")
                         await queue_sfx(choice)
                         await ctx.send(f"!{cmd}")
                     return _random_cmd
@@ -117,7 +120,8 @@ def load_sfx_commands(bot, verbose=False):
             return
         choice = random.choice(all_mp3s)
         cmd = os.path.splitext(os.path.basename(choice))[0]
-        print(f"🎲 {ctx.author.name} triggered global random sfx: !{cmd}")
+        if verbose:
+            print(f"🎲 {ctx.author.name} triggered global random sfx: !{cmd}")
         await queue_sfx(choice)
         await ctx.send(f"!{cmd}")
 
@@ -130,6 +134,9 @@ def load_sfx_commands(bot, verbose=False):
     return new_commands
 
 def load_all(bot, sfx_debug=False):
+    # Track loaded modules to avoid loading twice
+    loaded = set()
+
     # Dynamically load all twitch_commands/*.py modules that expose prepare(bot)
     for filename in os.listdir(TWITCH_COMMANDS_DIR):
         if not filename.endswith(".py") or filename.startswith("_"):
@@ -138,17 +145,23 @@ def load_all(bot, sfx_debug=False):
         mod_name = filename[:-3]  # Strip .py
         full_module = f"bot.twitch_commands.{mod_name}"
 
+        # Prevent loading the same cog twice
+        if full_module in loaded or full_module in getattr(bot, "extensions", {}):
+            print(f"⚠️ {full_module} already loaded, skipping.")
+            continue
+
         try:
             module = importlib.import_module(full_module)
             if hasattr(module, "prepare"):
                 module.prepare(bot)
                 print(f"✅ Loaded: {full_module}")
+                loaded.add(full_module)
             else:
                 print(f"⚠️ Skipped (no prepare()): {full_module}")
         except Exception as e:
             print(f"❌ Error loading {full_module}: {e}")
 
-    # Load dynamic SFX commands
+    # Load dynamic SFX commands, only once
     load_sfx_commands(bot, verbose=sfx_debug)
 
 def register_sfx_command(bot, command_name: str):

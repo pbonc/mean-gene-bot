@@ -2,11 +2,13 @@ import random
 import discord
 import json
 from discord.ext import commands
-from bot.mgb_dwf import load_wrestlers, save_wrestlers
+from bot.utils.wrestlers import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
 from bot.utils import safe_get_guild, safe_get_channel
 from datetime import datetime
 import asyncio  # For concurrent reaction adds
+
+REGISTER_COMMAND_VERSION = "v1.0.1"
 
 class RegisterCommand(commands.Cog):
     def __init__(self, bot):
@@ -51,6 +53,7 @@ class RegisterCommand(commands.Cog):
                 await ctx.send("You already have a registration pending approval.")
                 return
 
+        # Clean up any old pending registrations for the same wrestler name (shouldn't happen, but safe)
         existing_names = [w.get("wrestler") for w in wrestlers.values() if "wrestler" in w]
         if wrestler_name in existing_names:
             await ctx.send("That name is already taken.")
@@ -58,17 +61,26 @@ class RegisterCommand(commands.Cog):
 
         guild = ctx.guild
         comm_channel = await safe_get_channel(self.bot, guild, name="dwf-commissioner")
+        print(f"DEBUG: comm_channel={comm_channel}, guild={guild}, bot user={self.bot.user}")
+
         if not comm_channel:
             await ctx.send("❌ Could not locate the commissioner channel.")
+            print(f"ERROR: Commissioner channel not found for guild {guild.name}")
             return
 
-        msg = await comm_channel.send(
-            f"📝 `{ctx.author}` requests to register as **{wrestler_name}**. ✅ to approve, ❌ to reject."
-        )
+        try:
+            msg = await comm_channel.send(
+                f"📝 `{ctx.author}` requests to register as **{wrestler_name}**. ✅ to approve, ❌ to reject."
+            )
+        except Exception as e:
+            await ctx.send(f"❌ Could not send registration message to commissioner channel: {e}")
+            print(f"ERROR: Could not send message to commissioner channel: {e}")
+            return
 
         self.pending_messages[msg.id] = (user_id, wrestler_name)
         wrestlers[user_id] = {"pending": wrestler_name}
         save_wrestlers(wrestlers)
+        print(f"DEBUG: Saved wrestlers file after registration: {wrestlers}")
 
         # Reaction adds concurrently
         await asyncio.gather(
@@ -117,6 +129,7 @@ class RegisterCommand(commands.Cog):
         user_id = None
         wrestler_name = None
 
+        # Find the pending registration this message refers to, based on wrestler name in content
         for uid, data in wrestlers.items():
             if "pending" in data and f"**{data['pending']}**" in message.content:
                 user_id = uid
@@ -124,13 +137,14 @@ class RegisterCommand(commands.Cog):
                 break
 
         if not user_id:
+            print("DEBUG: No matching pending registration found for message content.")
             return
 
         if str(payload.emoji) == "✅":
             try:
                 registrant = await guild.fetch_member(int(user_id))
                 registrant_tag = f"{registrant.name}#{registrant.discriminator}"
-            except:
+            except Exception:
                 registrant_tag = "Unknown#0000"
 
             approver_tag = f"{member.name}#{member.discriminator}"
@@ -157,17 +171,19 @@ class RegisterCommand(commands.Cog):
             try:
                 user = await self.bot.fetch_user(int(user_id))
                 await user.send(f"🎉 Your persona **{wrestler_name}** has been approved and you're now part of the DWF!")
-            except:
-                pass
+            except Exception as e:
+                print(f"DEBUG: Could not DM user {user_id}: {e}")
 
         else:
             wrestlers.pop(user_id, None)
             await message.reply(f"❌ {wrestler_name} was rejected.")
 
         save_wrestlers(wrestlers)
+        print(f"DEBUG: Saved wrestlers file after approval/rejection: {wrestlers}")
 
 # ✅ Async cog setup
 async def setup(bot):
     RegisterCommand.clean_orphaned_registrations()
     cog = RegisterCommand(bot)
     await bot.add_cog(cog)
+    print(f"🧩 RegisterCommand loaded (version {REGISTER_COMMAND_VERSION})")

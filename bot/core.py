@@ -42,15 +42,14 @@ class MeanGeneBot(commands.Bot):
 
             if hasattr(mgb_dwf, "on_ready"):
                 print("📡 Triggering mgb_dwf.on_ready...")
-                asyncio.run_coroutine_threadsafe(mgb_dwf.on_ready(), mgb_dwf.DISCORD_CLIENT.loop)
+                # FIX: Use await instead of asyncio.run_coroutine_threadsafe and .loop!
+                await mgb_dwf.on_ready()
             else:
                 print("⚠️ mgb_dwf.on_ready not found")
         except Exception as e:
             print(f"❌ Error while calling mgb_dwf.on_ready: {e}")
 
-        # ✅ Start background SFX watcher
-        self.sfx_watcher.start()
-        print("👂 SFXWatcher started.")
+        # 👂 SFXWatcher is now started ONLY in main.py, not here
 
         print("🎉 event_ready() completed without errors")
 

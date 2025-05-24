@@ -51,18 +51,25 @@ class MeanGeneClient(commands.Bot):
 
 # --- Bot Instance ---
 DISCORD_CLIENT = MeanGeneClient(command_prefix="!", intents=intents)
+DISCORD_CLIENT._startup_announced = False  # Guard to prevent double startup messages
 
 # --- Events ---
 @DISCORD_CLIENT.event
 async def on_ready():
+    # Guard: only run startup actions once per process
+    if getattr(DISCORD_CLIENT, "_startup_announced", False):
+        return
+    DISCORD_CLIENT._startup_announced = True
+
     print(f"✅ Discord bot connected as: {DISCORD_CLIENT.user}")
 
     try:
+        DWF_CHANNELS = {"dwf-backstage", "dwf-commissioner", "dwf-promos"}
         for guild in DISCORD_CLIENT.guilds:
             print(f"🔎 Connected to guild: {guild.name} (ID: {guild.id})")
             for channel in guild.text_channels:
-                print(f"🔍 Found text channel: #{channel.name} (ID: {channel.id})")
-                if channel.name in ["dwf-backstage", "dwf-commissioner", "dwf-promos"]:
+                if channel.name in DWF_CHANNELS:
+                    print(f"✅ Found DWF channel: #{channel.name} (ID: {channel.id})")
                     try:
                         await channel.send("🤖 Bot is now online and ready!")
                         print(f"✅ Sent startup message to #{channel.name}")
@@ -97,7 +104,6 @@ def get_wrestler_path():
     path = Path(__file__).parent.parent / "dwf" / "wrestlers.json"
     print(f"📂 wrestler path: {path}")
     return path
-
 
 def load_wrestlers():
     path = get_wrestler_path()

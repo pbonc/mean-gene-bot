@@ -1,7 +1,7 @@
 {
   "raffle_active": false,
-  "daily_entry_amount": 1,
-  "raffle_id": "20250523_raffle",
+  "daily_entry_amount": 2,
+  "raffle_id": "20250524_raffle",
   "persistent_grants": {
     "tankahdelphia": {
       "total": 17,
@@ -29,7 +29,7 @@
     },
     "duluthfly_": {
       "total": 8,
-      "redeemed": 4
+      "redeemed": 6
     },
     "legendcrypt": {
       "total": 10,
@@ -299,7 +299,30 @@
     "138": "duluthfly_",
     "348": "duluthfly_",
     "151": "legendcrypt",
-    "406": "slummyzeru_"
+    "406": "slummyzeru_",
+    "982": "uppercumberlandgamers",
+    "981": "uppercumberlandgamers",
+    "513": "tankahdelphia",
+    "461": "tankahdelphia",
+    "851": "kobe5421",
+    "794": "fal_the_warlock",
+    "796": "fal_the_warlock",
+    "369": "legendcrypt",
+    "757": "livesuieng",
+    "014": "aelfhard",
+    "727": "livesuieng",
+    "797": "fal_the_warlock",
+    "779": "roningaidin",
+    "583": "duluthfly_",
+    "764": "duluthfly_",
+    "233": "duluthfly_",
+    "761": "duluthfly_",
+    "876": "karnave",
+    "012": "snipah2012",
+    "065": "deputydawg777",
+    "130": "deputydawg777",
+    "955": "snipah2012",
+    "724": "slummyzeru_"
   },
   "raffle_locked": true,
   "mommadar_awarded": false

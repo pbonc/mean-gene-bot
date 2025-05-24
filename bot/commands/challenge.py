@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from bot.mgb_dwf import load_wrestlers, save_wrestlers
+from bot.utils.wrestlers import load_wrestlers, save_wrestlers
 from bot.state import get_twitch_channel
 from bot.utils import safe_get_guild, safe_get_channel
 import random

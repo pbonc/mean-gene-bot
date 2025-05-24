@@ -5,6 +5,7 @@ Minneapolis
 Paris
 Seattle
 Madrid
+Nunavut
 Cairo
 New York City
 Las Vegas
@@ -14,3 +15,6 @@ Charlotte
 Rankin Inlet, CA
 Dunkirk, FR
 Prokhorovka, RU
+Iqaluit
+Sukhbaatar, MN 
+Philadelphia
