@@ -12,7 +12,9 @@ class SFXWatcher:
         self.known_commands = set()
         self.task = None
         self.verbose = verbose
-        self.initialized = False  # <-- Track if startup scan is complete
+        self.initialized = False  # Track if startup scan is complete
+        # Maps folder_name -> set of filenames (just filename, not full path)
+        self.folder_randomizer_files = dict()
 
     def start(self):
         print(f"👂 SFXWatcher START requested. Scanning folder: {SFX_FOLDER}")
@@ -27,7 +29,6 @@ class SFXWatcher:
                 print("🛑 SFXWatcher task cancelled via stop().")
 
     async def _send_twitch_msg(self, message: str):
-        # Send message to the first connected channel, adjust as needed!
         if self.bot.connected_channels:
             try:
                 await self.bot.connected_channels[0].send(message)
@@ -43,29 +44,39 @@ class SFXWatcher:
                 if self.verbose:
                     print("🔁 SFXWatcher tick — scanning for changes...")
 
-                current_sfx = self._get_sfx_commands()
+                current_sfx, folder_files = self._get_sfx_commands_and_folder_files()
                 added = current_sfx - self.known_commands
                 removed = self.known_commands - current_sfx
 
-                # Only announce after the initial scan
+                # --- File membership in randomizer folders ---
                 if self.initialized:
+                    # Detect file additions/removals inside randomizer folders
+                    for folder, files in folder_files.items():
+                        prev_files = self.folder_randomizer_files.get(folder, set())
+                        added_files = files - prev_files
+                        removed_files = prev_files - files
+                        for fname in added_files:
+                            cmd = f"!{os.path.splitext(fname)[0]}"
+                            await self._send_twitch_msg(f"!{folder} command updated: {cmd} added")
+                        for fname in removed_files:
+                            cmd = f"!{os.path.splitext(fname)[0]}"
+                            await self._send_twitch_msg(f"!{folder} command updated: {cmd} removed")
+                    self.folder_randomizer_files = folder_files  # update for next tick
+
+                    # Register/unregister SFX commands
                     for sfx in added:
                         register_sfx_command(self.bot, sfx)
-                        print(f"✅ Registered new SFX command: !{sfx}")
                         await self._send_twitch_msg(f"New SFX command added: !{sfx}")
-
                     for sfx in removed:
                         unregister_sfx_command(self.bot, sfx)
-                        print(f"❌ Unregistered SFX command: !{sfx}")
                         await self._send_twitch_msg(f"SFX command removed: !{sfx}")
                 else:
-                    # On first scan, just set the baseline, don't announce
+                    # On first run, set the folder membership baseline
+                    self.folder_randomizer_files = folder_files
                     if self.verbose:
-                        print(f"🌱 SFXWatcher baseline: {current_sfx}")
-
+                        print(f"🌱 SFXWatcher baseline count: {len(current_sfx)}")
                 self.known_commands = current_sfx
-                self.initialized = True  # After the first loop, start announcing
-
+                self.initialized = True
                 await asyncio.sleep(CHECK_INTERVAL)
 
             except asyncio.CancelledError:
@@ -76,23 +87,31 @@ class SFXWatcher:
                 print(f"⚠️ Error in SFXWatcher: {e}")
                 await asyncio.sleep(CHECK_INTERVAL)
 
-    def _get_sfx_commands(self):
+    def _get_sfx_commands_and_folder_files(self):
+        """
+        Returns:
+            - set of all sfx command names (files and folder-randomizers)
+            - dict: folder_name -> set of mp3 filenames (for randomizer folders)
+        """
         sfx_commands = set()
+        folder_files = dict()
         if not os.path.exists(SFX_FOLDER):
             if self.verbose:
                 print(f"DEBUG: SFX_FOLDER does not exist: {SFX_FOLDER}")
-            return sfx_commands
+            return sfx_commands, folder_files
         for root, dirs, files in os.walk(SFX_FOLDER):
             mp3s = [f for f in files if f.lower().endswith(".mp3")]
-            if root == SFX_FOLDER:
-                for file in mp3s:
-                    name = os.path.splitext(file)[0]
-                    sfx_commands.add(name.lower())
-            else:
+            # Add only file-based commands
+            for file in mp3s:
+                name = os.path.splitext(file)[0].lower()
+                sfx_commands.add(name)
+            # Folder randomizer logic (only if not the root sfx folder)
+            if root != SFX_FOLDER and mp3s:
                 folder_name = os.path.basename(root).lower()
-                if mp3s:
+                if folder_name not in sfx_commands:
                     sfx_commands.add(folder_name)
-                    for file in mp3s:
-                        name = os.path.splitext(file)[0]
-                        sfx_commands.add(name.lower())
-        return sfx_commands
+                # Track files in this folder for randomizer membership
+                folder_files.setdefault(folder_name, set())
+                for file in mp3s:
+                    folder_files[folder_name].add(file)
+        return sfx_commands, folder_files
