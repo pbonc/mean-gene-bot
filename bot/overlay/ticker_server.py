@@ -8,8 +8,6 @@ from websockets.protocol import State
 from dotenv import load_dotenv
 import os
 import time
-import datetime
-import pytz
 
 # --- ADD ARGPARSE FOR DEV MODE ---
 parser = argparse.ArgumentParser(description="Run the TickerServer overlay.")
@@ -116,20 +114,23 @@ async def build_ticker_messages():
                 )
 
     # --- Sports: MLB, NBA, NHL ---
-    from sports_fetchers.mlb import get_today_mlb_scores
-    from sports_fetchers.nba import get_today_nba_scores
-    from sports_fetchers.nhl import get_today_nhl_scores
+    try:
+        from sports_fetchers.mlb import get_today_mlb_scores
+        from sports_fetchers.nba import get_today_nba_scores
+        from sports_fetchers.nhl import get_today_nhl_scores
 
-    api_key = os.environ.get("THESPORTSDB_API_KEY", "3")
+        api_key = os.environ.get("THESPORTSDB_API_KEY", "3")
 
-    mlb_msgs = await get_today_mlb_scores(api_key)
-    messages.extend(mlb_msgs)
+        mlb_msgs = await get_today_mlb_scores(api_key)
+        messages.extend(mlb_msgs)
 
-    nba_msgs = await get_today_nba_scores(api_key)
-    messages.extend(nba_msgs)
+        nba_msgs = await get_today_nba_scores(api_key)
+        messages.extend(nba_msgs)
 
-    nhl_msgs = await get_today_nhl_scores(api_key)
-    messages.extend(nhl_msgs)
+        nhl_msgs = await get_today_nhl_scores(api_key)
+        messages.extend(nhl_msgs)
+    except ImportError as e:
+        print("[SPORTS] Could not load sports fetchers:", e)
 
     # --- Weather (cache, update every WEATHER_UPDATE_INTERVAL) ---
     now = time.time()
@@ -154,6 +155,11 @@ class TickerServer:
         self.clients = set()
         self.messages = []
         self.idx = 0
+        self.match_results = []  # Store all match results this stream
+        self.last_received_message = None
+        self.received_message_timer = 0
+        self.just_received_result = None  # Track which match result should display after "Received: ..."
+        self.recent_messages = []  # For debugging: last 10 received messages
 
     async def register(self, websocket):
         self.clients.add(websocket)
@@ -166,26 +172,71 @@ class TickerServer:
     async def handler(self, websocket):
         await self.register(websocket)
         try:
-            while True:
-                await asyncio.sleep(1)
+            async for message in websocket:
+                print(f"[DEBUG] Received message from websocket: {message}")
+                self.recent_messages.append(message)
+                if len(self.recent_messages) > 10:
+                    self.recent_messages.pop(0)
+                print("[DEBUG] Recent received messages:", self.recent_messages)
+                try:
+                    data = json.loads(message)
+                except Exception as e:
+                    print("Error parsing message from websocket:", e)
+                    continue
+                if data.get("type") == "match_result":
+                    result = data.get("result")
+                    await self.show_received_message(result)
+                    self.match_results.append(result)
+                    self.just_received_result = result
         finally:
             await self.unregister(websocket)
 
+    async def show_received_message(self, result):
+        # Immediately show "Received: ..." to overlays for 1 full ticker interval
+        self.last_received_message = f"Received: {result}"
+        self.received_message_timer = time.time()
+        msg = {"type": "ticker", "text": self.last_received_message}
+        print("Broadcasting:", msg["text"])
+        await asyncio.gather(*[
+            ws.send(json.dumps(msg))
+            for ws in self.clients
+            if ws.state == State.OPEN
+        ])
+
+    async def broadcast_message(self, text):
+        msg = {"type": "ticker", "text": text}
+        print("Broadcasting:", msg["text"])
+        await asyncio.gather(*[
+            ws.send(json.dumps(msg))
+            for ws in self.clients
+            if ws.state == State.OPEN
+        ])
+
     async def ticker_loop(self):
         while True:
-            self.messages = await build_ticker_messages()
-            if self.messages:
-                msg = {
-                    "type": "ticker",
-                    "text": self.messages[self.idx % len(self.messages)]
-                }
-                print("Broadcasting:", msg["text"])
-                await asyncio.gather(*[
-                    ws.send(json.dumps(msg))
-                    for ws in self.clients
-                    if ws.state == State.OPEN
-                ])
-                self.idx += 1
+            core_messages = await build_ticker_messages()
+            # Insert match results after all "Current ..." lines
+            insert_idx = 0
+            for i, m in enumerate(core_messages):
+                if m.startswith("Current "):
+                    insert_idx = i + 1
+            self.messages = (
+                core_messages[:insert_idx] +
+                self.match_results +
+                core_messages[insert_idx:]
+            )
+            # If a "Received: ..." message is active, show it for one ticker interval before resuming rotation
+            if self.last_received_message and (time.time() - self.received_message_timer) < TICKER_INTERVAL:
+                await self.broadcast_message(self.last_received_message)
+            elif self.just_received_result is not None:
+                # Immediately show the actual match result after "Received: ..."
+                await self.broadcast_message(self.just_received_result)
+                self.just_received_result = None
+                self.last_received_message = None
+            else:
+                if self.messages:
+                    await self.broadcast_message(self.messages[self.idx % len(self.messages)])
+                    self.idx += 1
             await asyncio.sleep(TICKER_INTERVAL)
 
     async def main(self):

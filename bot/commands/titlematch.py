@@ -4,6 +4,8 @@ from bot.utils.wrestlers import load_wrestlers, save_wrestlers, set_new_champion
 from bot.state import get_twitch_channel
 import random
 import asyncio
+import websockets
+import json
 
 EMOJI_NUMBERS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
 EMOJI_NEXT = "➡️"
@@ -15,13 +17,15 @@ TITLE_LIST = [
     "DWF Christeweight Title"
 ]
 
-TITLEMATCH_COMMAND_VERSION = "v1.1.0a"
+TICKER_SERVER_URI = "ws://localhost:6789"  # Change if your ticker server is elsewhere
+
+TITLEMATCH_COMMAND_VERSION = "v1.1.1"
 
 class TitleMatch(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_sessions = {}
-        self.titlematch_ticker = []  # Keeps session ticker messages
+        self.titlematch_ticker = []  # Keeps session ticker messages for the stream
 
     @commands.command(name="titlematch")
     async def titlematch(self, ctx):
@@ -145,12 +149,26 @@ class TitleMatch(commands.Cog):
 
                 # --- Ticker Integration ---
                 if data["champion_id"] and winner_id == data["champion_id"]:
-                    self.titlematch_ticker.append(f"{winner_name} successfully defended the {title}!")
+                    ticker_msg = f"{winner_name} successfully defended the {title}!"
                 else:
-                    self.titlematch_ticker.append(f"{winner_name} is the NEW {title} Champion!")
+                    ticker_msg = f"{winner_name} is the NEW {title} Champion!"
+                self.titlematch_ticker.append(ticker_msg)
                 print("Ticker now:", self.titlematch_ticker)
 
+                # Send ticker result to ticker server
+                await self.send_ticker_result(ticker_msg)
+
                 del self.active_sessions[payload.message_id]
+
+    async def send_ticker_result(self, ticker_msg):
+        # Sends ticker match result to ticker server for overlay
+        try:
+            async with websockets.connect(TICKER_SERVER_URI) as websocket:
+                msg = {"type": "match_result", "result": ticker_msg}
+                await websocket.send(json.dumps(msg))
+                print(f"[TickerServer] Sent match result: {ticker_msg}")
+        except Exception as e:
+            print(f"[TickerServer] Could not send match result: {e}")
 
     async def send_challenger_menu(self, channel, data, reset_picks=True, next_page=False):
         eligible = data["eligible"]
@@ -209,7 +227,19 @@ class TitleMatch(commands.Cog):
 
         self.active_sessions[msg.id] = data
 
-    # --- Ticker Export Method (optional) ---
+    def get_full_ticker(self):
+        # Returns a list: current champions first, then all match results this stream
+        wrestlers = load_wrestlers()
+        champions = []
+        for title in TITLE_LIST:
+            champ = next(
+                (d['wrestler'] for d in wrestlers.values()
+                 if d.get("current_title", "").strip().lower() == title.strip().lower()),
+                "Vacant"
+            )
+            champions.append(f"{title}: {champ}")
+        return champions + self.titlematch_ticker
+
     def get_titlematch_ticker(self):
         return self.titlematch_ticker
 
