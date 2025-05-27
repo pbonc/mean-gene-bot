@@ -1,48 +1,44 @@
 import os
-import threading
-import time
-from sfx_watcher import SFXWatcher
-from twitch_bot import run_twitch_bot
+import logging
+from twitchio.ext import commands
+import asyncio
 from dotenv import load_dotenv
 
-# --- Clean out log files at the start of each session ---
-log_files = [
-    "logs/sfx_creation.log",
-    "logs/bot_debug.log"
-]
-for log_path in log_files:
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    with open(log_path, "w", encoding="utf-8"):
-        pass
+from twitch_commands import load_all_cogs
 
-def main():
-    load_dotenv()  # Load environment variables from .env
+os.makedirs("logs", exist_ok=True)
 
-    # Start SFX watcher (in a thread so it can watch for file changes)
-    sfx_watcher = SFXWatcher()
-    sfx_thread = threading.Thread(target=sfx_watcher.start, name="SFXWatcher", daemon=True)
-    sfx_thread.start()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler("logs/bot_debug.log", encoding="utf-8"),
+    ]
+)
+logger = logging.getLogger(__name__)
 
-    # Give watcher a little time to populate registry before starting the bot
-    time.sleep(1)
+load_dotenv()
 
-    # Start Twitch bot (pass in SFX registry for dynamic SFX commands)
-    twitch_thread = threading.Thread(
-        target=run_twitch_bot,
-        kwargs={'sfx_registry': sfx_watcher.registry},
-        name="TwitchBotThread",
-        daemon=True
+TWITCH_TOKEN = os.getenv("TWITCH_TOKEN")
+TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
+TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
+TWITCH_CHANNELS_RAW = os.getenv("TWITCH_CHANNELS", "yourchannel,iamdar")
+
+if not TWITCH_TOKEN: raise RuntimeError("TWITCH_TOKEN is not set! Check your .env file.")
+if not TWITCH_CLIENT_ID: raise RuntimeError("TWITCH_CLIENT_ID is not set! Check your .env file.")
+if not TWITCH_CLIENT_SECRET: raise RuntimeError("TWITCH_CLIENT_SECRET is not set! Check your .env file.")
+if not TWITCH_CHANNELS_RAW: raise RuntimeError("TWITCH_CHANNELS is not set! Check your .env file.")
+
+TWITCH_CHANNELS = [ch.strip() for ch in TWITCH_CHANNELS_RAW.split(",") if ch.strip()]
+
+def run_twitch_bot(sfx_registry):
+    logger.info("Starting Twitch bot event loop.")
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    bot = commands.Bot(
+        token=TWITCH_TOKEN,
+        prefix="!",
+        initial_channels=TWITCH_CHANNELS
     )
-    twitch_thread.start()
-
-    # Optionally: Add Discord bot startup here if desired
-
-    # Keep main thread alive while watcher or bot is running
-    try:
-        while (sfx_thread and sfx_thread.is_alive()) or (twitch_thread and twitch_thread.is_alive()):
-            time.sleep(1)
-    except KeyboardInterrupt:
-        sfx_watcher.stop()
-
-if __name__ == "__main__":
-    main()
+    bot.sfx_registry = sfx_registry  # Make registry available to cogs
+    load_all_cogs(bot)
+    bot.run()
