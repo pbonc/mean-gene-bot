@@ -1,0 +1,6 @@
+twitchio
+discord.py
+fastapi
+uvicorn
+aiohttp
+python-dotenv

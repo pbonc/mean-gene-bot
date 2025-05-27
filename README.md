@@ -31,17 +31,19 @@ mean-gene-bot/
       source venv/bin/activate  # On Windows: venv\Scripts\activate
       ```
 
-3. **Install dependencies**
-    ```sh
-    pip install -r requirements.txt
-    ```
+3. **Install requirements**
+    - Before running the bot for the first time, you need to install the required dependencies:
+      ```sh
+      pip install -r requirements.txt
+      ```
+    - If you see errors about missing packages when running the bot, make sure to run the above command again.
 
 4. **Environment Variables**
     - Copy `.env.example` to `.env` and fill in necessary environment variables (if applicable).
 
 ## How to Run
 
-After activating your virtual environment, start the bot with:
+After installing requirements and activating your virtual environment, start the bot with:
 
 ```sh
 python src/main.py
@@ -52,6 +54,14 @@ When started, Mean Gene Bot will output:
 Welcome to the main event!
 ```
 and begin connecting to both Twitch and Discord (once configured).
+
+## Troubleshooting
+
+- If you encounter errors about missing packages, double-check that you have installed requirements with:
+  ```sh
+  pip install -r requirements.txt
+  ```
+- Ensure your `.env` file is present and filled out with valid credentials.
 
 ## Contributing
 
