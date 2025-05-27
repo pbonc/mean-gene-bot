@@ -1,2 +1,0 @@
-twitchio==2.7.0
-playsound==1.2.2

@@ -1,5 +1,2 @@
-flask
-websockets
-playsound
-twitchio
-discord.py
+twitchio==2.7.0
+playsound==1.2.2
