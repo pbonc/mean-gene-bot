@@ -75,5 +75,7 @@ class DerpismCog(commands.Cog):
         with open(self.file_path, "r", encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip()]
 
-def prepare(bot: commands.Bot):
-    bot.add_cog(DerpismCog(bot))
+def prepare(bot):
+    if not bot.get_cog("DerpismCog"):
+        bot.add_cog(DerpismCog(bot))
+        print("Loaded cog : DerpismCog")

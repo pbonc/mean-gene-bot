@@ -44,6 +44,6 @@ class SFXCog(commands.Cog):
 
 def prepare(bot):
     sfx_registry = getattr(bot, "sfx_registry", None)
-    # Prevent double-loading
     if not bot.get_cog("SFXCog"):
         bot.add_cog(SFXCog(bot, sfx_registry))
+        print("Loaded cog : SFXCog")
