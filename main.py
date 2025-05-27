@@ -13,10 +13,14 @@ import argparse
 from flask import Flask, send_from_directory
 
 from bot.core import MeanGeneBot
-from bot.config import TWITCH_TOKEN, BOT_NICK, CHANNEL
+from bot.config import BOT_NICK, CHANNEL
 from bot.loader import load_all
 from bot.tasks.sfx_watcher import SFXWatcher  # <-- Import the watcher!
 from bot.mgb_dwf import DISCORD_CLIENT, TOKEN as DISCORD_TOKEN  # <-- Import Discord bot!
+
+# --- OAuth bulletproof import ---
+from dotenv import load_dotenv
+from twitch_token_manager import ensure_valid_token
 
 # --- Bot Version ---
 BOT_MAIN_VERSION = "v1.3.4"
@@ -34,17 +38,30 @@ args = parse_args()
 
 # --- Config object ---
 class BotConfig:
-    def __init__(self, args):
+    def __init__(self, args, twitch_token):
         self.verbose = args.verbose
         self.sfx_debug = args.sfx_debug
         self.dev_mode = args.dev
         self.ws_enabled = args.ws
-        self.twitch_token = TWITCH_TOKEN
+        self.twitch_token = twitch_token
         self.bot_nick = BOT_NICK
         self.channel = CHANNEL
         self.version = BOT_MAIN_VERSION
 
-config = BotConfig(args)
+# --- Load .env ---
+load_dotenv()
+TOKEN_PATH = os.getenv("TOKEN_PATH", "tokens.json")
+CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
+CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
+
+# --- Bulletproof OAuth token logic ---
+try:
+    TWITCH_TOKEN = ensure_valid_token(TOKEN_PATH, CLIENT_ID, CLIENT_SECRET)
+except Exception as e:
+    print(f"Token authentication failed: {e}")
+    sys.exit(1)
+
+config = BotConfig(args, TWITCH_TOKEN)
 
 # --- Logging setup ---
 LOG_DIR = "logs"
@@ -89,69 +106,30 @@ def handle_async_exception(loop, context):
 
 # --- Fallback global exception hook ---
 def global_excepthook(exc_type, exc_value, exc_traceback):
-    print("💣 GLOBAL EXCEPTION HOOK TRIGGERED")
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-        return
+    print("💥 Unhandled exception:")
     traceback.print_exception(exc_type, exc_value, exc_traceback)
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.exit(1)
 
 sys.excepthook = global_excepthook
 
-# --- Flask app to serve overlay static files ---
-overlay_path = os.path.join(os.path.dirname(__file__), "overlay")
-app = Flask(__name__, static_folder=overlay_path)
-
-@app.route('/<path:path>')
-def serve_file(path):
-    return send_from_directory(app.static_folder, path)
-
-# Debug route to list files in static folder
-@app.route('/list-files')
-def list_files():
-    files = os.listdir(app.static_folder)
-    return "<br>".join(files)
-
-# ---- Register Battleship API blueprint ----
-try:
-    from bot.overlay.battleship_api import battleship_api
-    app.register_blueprint(battleship_api)
-except Exception as e:
-    print(f"⚠️ Could not register battleship_api blueprint: {e}")
-
-def run_flask():
-    app.run(host="0.0.0.0", port=5000, debug=config.dev_mode)
-
-# --- Async Main Entry ---
-async def main():
-    try:
-        print("🛠 Constructing MeanGeneBot...")
-        bot = MeanGeneBot(sfx_debug=config.sfx_debug)
-        app.bot_instance = bot  # <-- Make the bot available to Flask endpoints
-        load_all(bot)
-
-        print("🛰️ Starting Flask, Discord and Twitch bots concurrently...")
-
-        # Start Flask server in background thread (non-blocking)
-        threading.Thread(target=run_flask, daemon=True).start()
-
-        # --- SFX Watcher: Only verbose if CLI -v flag is set!
-        sfx_watcher = SFXWatcher(bot, verbose=config.verbose)
-        sfx_watcher.start()
-
-        # Set up asyncio exception handler and debug mode (AFTER loop is running)
-        loop = asyncio.get_running_loop()
-        loop.set_exception_handler(handle_async_exception)
-        loop.set_debug(True)
-
-        # --- Start both Twitch and Discord bots concurrently ---
-        await asyncio.gather(
-            bot.start(),  # TwitchIO bot
-            DISCORD_CLIENT.start(DISCORD_TOKEN)  # Discord.py bot
-        )
-
-    except Exception as e:
-        print("💥 Bot failed to start.")
-        traceback.print_exc()
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(handle_async_exception)
+
+    # Instantiate bot with bulletproof token
+    bot = MeanGeneBot(
+        sfx_debug=config.sfx_debug,
+        verbose=config.verbose,
+    )
+    # Start SFX Watcher in a thread (if needed)
+    sfx_thread = threading.Thread(target=lambda: SFXWatcher(bot, verbose=config.sfx_debug or config.verbose).run(), daemon=True)
+    sfx_thread.start()
+
+    # Start the bot
+    try:
+        loop.run_until_complete(bot.run())
+    except Exception as e:
+        print(f"❌ Fatal error in bot execution: {e}")
+        traceback.print_exc()
+        sys.exit(1)

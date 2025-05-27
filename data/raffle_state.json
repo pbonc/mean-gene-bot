@@ -4,8 +4,8 @@
   "raffle_id": "20250527_raffle",
   "persistent_grants": {
     "tankahdelphia": {
-      "total": 17,
-      "redeemed": 16
+      "total": 19,
+      "redeemed": 18
     },
     "caerdwyn": {
       "total": 10,
@@ -13,7 +13,7 @@
     },
     "uppercumberlandgamers": {
       "total": 12,
-      "redeemed": 7
+      "redeemed": 11
     },
     "thederpdawg": {
       "total": 1,
@@ -24,12 +24,12 @@
       "redeemed": 20
     },
     "karnave": {
-      "total": 14,
-      "redeemed": 8
+      "total": 16,
+      "redeemed": 15
     },
     "duluthfly_": {
       "total": 8,
-      "redeemed": 6
+      "redeemed": 7
     },
     "legendcrypt": {
       "total": 11,
@@ -64,8 +64,8 @@
       "redeemed": 0
     },
     "fal_the_warlock": {
-      "total": 11,
-      "redeemed": 11
+      "total": 12,
+      "redeemed": 12
     },
     "nate048": {
       "total": 10,
@@ -367,7 +367,33 @@
     "774": "deputydawg777",
     "979": "uppercumberlandgamers",
     "784": "fal_the_warlock",
-    "278": "tankahdelphia"
+    "278": "tankahdelphia",
+    "886": "karnave",
+    "978": "uppercumberlandgamers",
+    "976": "uppercumberlandgamers",
+    "975": "uppercumberlandgamers",
+    "974": "uppercumberlandgamers",
+    "973": "uppercumberlandgamers",
+    "427": "colonel_dinggus",
+    "299": "livesuieng",
+    "782": "fal_the_warlock",
+    "780": "fal_the_warlock",
+    "900": "deputydawg777",
+    "972": "uppercumberlandgamers",
+    "728": "tankahdelphia",
+    "007": "tankahdelphia",
+    "125": "tankahdelphia",
+    "893": "karnave",
+    "608": "karnave",
+    "517": "karnave",
+    "681": "karnave",
+    "606": "karnave",
+    "063": "karnave",
+    "581": "karnave",
+    "153": "karnave",
+    "617": "duluthfly_",
+    "850": "duluthfly_",
+    "778": "fal_the_warlock"
   },
   "raffle_locked": false,
   "mommadar_awarded": false
