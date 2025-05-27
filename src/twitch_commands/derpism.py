@@ -8,6 +8,7 @@ DERPISM_FILE = "data/derpisms.txt"
 class DerpismCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
+        print("DerpismCog __init__ called; id(self):", id(self), "id(bot):", id(bot))  # DEBUG
         self.bot = bot
         self.file_path = DERPISM_FILE
         os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
@@ -18,6 +19,8 @@ class DerpismCog(commands.Cog):
 
     @commands.command(name="derpism")
     async def derpism(self, ctx: commands.Context):
+        print("derpism command handler called; id(self):", id(self), "id(self.bot):", id(self.bot))  # DEBUG
+        print("ctx.author:", ctx.author.name, "| ctx.content:", ctx.message.content)
         """Show a random derpism, a specific one, or add a new one (mods only)."""
         parts = ctx.message.content.split(maxsplit=2)
 
@@ -76,6 +79,10 @@ class DerpismCog(commands.Cog):
             return [line.strip() for line in f if line.strip()]
 
 def prepare(bot):
+    print("prepare() called for DerpismCog; id(bot):", id(bot))  # DEBUG
+    print(f"Current loaded cogs: {list(bot.cogs)}")  # Shows loaded cog names
     if not bot.get_cog("DerpismCog"):
         bot.add_cog(DerpismCog(bot))
         print("Loaded cog : DerpismCog")
+    else:
+        print("DerpismCog already loaded")
