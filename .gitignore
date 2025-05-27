@@ -16,3 +16,18 @@ dist/
 # IDEs and editors
 .vscode/
 .idea/
+
+# Logs
+*.log
+
+# Ignore everything in sfx/
+sfx/*
+
+# But NOT subfolders
+!sfx/*/
+
+# And NOT the sfx folder itself
+!sfx/
+
+# (Optional) Keep a placeholder file so the folders show up in git
+sfx/.gitkeep
