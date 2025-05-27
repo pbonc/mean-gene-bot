@@ -1,41 +1,142 @@
 import os
+import threading
+import time
+import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import time
 
-SFX_DIR = "sfx"  # Adjust to your actual sfx directory path
+SFX_DIR = "sfx"
+SFX_LOG_PATH = "logs/sfx_creation.log"
+os.makedirs(os.path.dirname(SFX_LOG_PATH), exist_ok=True)
+sfx_logger = logging.getLogger("sfx_creation")
+sfx_logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler(SFX_LOG_PATH)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+if not any(isinstance(h, logging.FileHandler) and h.baseFilename == file_handler.baseFilename for h in sfx_logger.handlers):
+    sfx_logger.addHandler(file_handler)
+
+class SFXRegistry:
+    def __init__(self):
+        self.file_commands = {}    # '!zap': 'fe/zap.mp3'
+        self.folder_commands = {}  # '!fe': ['fe/zap.mp3', ...]
+        self.registered_commands = set()
+
+    def scan_and_register(self, notify_callback=None):
+        file_cmd_count = 0
+        folder_cmd_count = 0
+        for root, dirs, files in os.walk(SFX_DIR):
+            rel_folder = os.path.relpath(root, SFX_DIR)
+            for f in files:
+                if f.lower().endswith(".mp3"):
+                    cmd = f"!{os.path.splitext(f)[0]}"
+                    path = f if rel_folder == "." else os.path.join(rel_folder, f)
+                    if cmd not in self.registered_commands:
+                        self.file_commands[cmd] = path
+                        self.registered_commands.add(cmd)
+                        file_cmd_count += 1
+            if rel_folder != ".":
+                folder_cmd = f"!{os.path.basename(rel_folder)}"
+                mp3s = [f for f in files if f.lower().endswith(".mp3")]
+                if mp3s and folder_cmd not in self.registered_commands:
+                    self.folder_commands[folder_cmd] = [os.path.join(rel_folder, f) for f in mp3s]
+                    self.registered_commands.add(folder_cmd)
+                    folder_cmd_count += 1
+        total_cmds = file_cmd_count + folder_cmd_count
+        print(f"SFX: {file_cmd_count} file commands and {folder_cmd_count} folder commands registered ({total_cmds} total).")
+        sfx_logger.info(f"{file_cmd_count} SFX file commands and {folder_cmd_count} folder commands registered ({total_cmds} total).")
+        if notify_callback:
+            notify_callback(f"{file_cmd_count} file and {folder_cmd_count} folder SFX commands registered.")
+
+    def register_file_command(self, cmd, path, notify_callback=None):
+        if cmd not in self.registered_commands:
+            self.file_commands[cmd] = path
+            self.registered_commands.add(cmd)
+            msg = f"Registering command {cmd} for {path}"
+            sfx_logger.info(msg)
+            if notify_callback:
+                notify_callback(f"SFX command {cmd} added for {path}")
+
+    def unregister_file_command(self, cmd, notify_callback=None):
+        if cmd in self.registered_commands:
+            path = self.file_commands.get(cmd, "")
+            self.file_commands.pop(cmd, None)
+            self.registered_commands.remove(cmd)
+            msg = f"Unregistered command {cmd}"
+            sfx_logger.info(msg)
+            if notify_callback:
+                notify_callback(f"SFX command {cmd} removed (was for {path})")
+
+    def register_folder_command(self, cmd, files, notify_callback=None):
+        if cmd not in self.registered_commands:
+            self.folder_commands[cmd] = files
+            self.registered_commands.add(cmd)
+            msg = f"Registering folder command {cmd}"
+            sfx_logger.info(msg)
+            if notify_callback:
+                notify_callback(f"SFX folder command {cmd} added")
+
+    def unregister_folder_command(self, cmd, notify_callback=None):
+        if cmd in self.registered_commands:
+            self.folder_commands.pop(cmd, None)
+            self.registered_commands.remove(cmd)
+            msg = f"Unregistered folder command {cmd}"
+            sfx_logger.info(msg)
+            if notify_callback:
+                notify_callback(f"SFX folder command {cmd} removed")
 
 class SFXEventHandler(FileSystemEventHandler):
-    def on_any_event(self, event):
-        # Only care about .mp3 files
-        if event.is_directory:
+    def __init__(self, registry, notify_callback=None):
+        super().__init__()
+        self.registry = registry
+        self.notify_callback = notify_callback
+
+    def on_created(self, event):
+        if event.is_directory or not event.src_path.lower().endswith(".mp3"):
             return
-        if not event.src_path.endswith(".mp3"):
+        rel_path = os.path.relpath(event.src_path, SFX_DIR)
+        cmd = f"!{os.path.splitext(os.path.basename(event.src_path))[0]}"
+        self.registry.register_file_command(cmd, rel_path, self.notify_callback)
+
+    def on_deleted(self, event):
+        if event.is_directory or not event.src_path.lower().endswith(".mp3"):
             return
+        cmd = f"!{os.path.splitext(os.path.basename(event.src_path))[0]}"
+        self.registry.unregister_file_command(cmd, self.notify_callback)
 
-        # Figure out what happened and where
-        action = "modified"
-        if event.event_type == "created":
-            action = "added"
-        elif event.event_type == "deleted":
-            action = "removed"
-        elif event.event_type == "moved":
-            action = "moved"
+    def on_moved(self, event):
+        if event.is_directory or not event.dest_path.lower().endswith(".mp3"):
+            return
+        old_cmd = f"!{os.path.splitext(os.path.basename(event.src_path))[0]}"
+        new_cmd = f"!{os.path.splitext(os.path.basename(event.dest_path))[0]}"
+        self.registry.unregister_file_command(old_cmd, self.notify_callback)
+        rel_path = os.path.relpath(event.dest_path, SFX_DIR)
+        self.registry.register_file_command(new_cmd, rel_path, self.notify_callback)
 
-        print(f"SFX {action}: {event.src_path}")
+class SFXWatcher:
+    def __init__(self, notify_callback=None):
+        self.registry = SFXRegistry()
+        self.notify_callback = notify_callback
+        self.observer = None
 
-def start_sfx_watcher():
-    event_handler = SFXEventHandler()
-    observer = Observer()
-    observer.schedule(event_handler, SFX_DIR, recursive=True)
-    observer.start()
-    print(f"Started SFX watcher on {SFX_DIR}")
+    def start(self):
+        self.registry.scan_and_register(notify_callback=None)  # Only one summary line printed
+        event_handler = SFXEventHandler(self.registry, self.notify_callback)
+        self.observer = Observer()
+        self.observer.schedule(event_handler, SFX_DIR, recursive=True)
+        self.observer.start()
+
+    def stop(self):
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+
+# For standalone testing
+if __name__ == "__main__":
+    watcher = SFXWatcher()
+    watcher.start()
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-
-if __name__ == "__main__":
-    start_sfx_watcher()
+        watcher.stop()
