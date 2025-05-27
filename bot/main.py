@@ -111,6 +111,13 @@ def list_files():
     files = os.listdir(app.static_folder)
     return "<br>".join(files)
 
+# ---- Register Battleship API blueprint ----
+try:
+    from bot.overlay.battleship_api import battleship_api
+    app.register_blueprint(battleship_api)
+except Exception as e:
+    print(f"⚠️ Could not register battleship_api blueprint: {e}")
+
 def run_flask():
     app.run(host="0.0.0.0", port=5000, debug=config.dev_mode)
 
@@ -119,6 +126,7 @@ async def main():
     try:
         print("🛠 Constructing MeanGeneBot...")
         bot = MeanGeneBot(sfx_debug=config.sfx_debug)
+        app.bot_instance = bot  # <-- Make the bot available to Flask endpoints
         load_all(bot)
 
         print("🛰️ Starting Flask, Discord and Twitch bots concurrently...")

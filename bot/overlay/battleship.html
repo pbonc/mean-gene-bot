@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Battleship Overlay</title>
+  <style>
+    /* Simple grid styling */
+    .grid { display: grid; grid-template-columns: repeat(10, 2em); }
+    .cell { width: 2em; height: 2em; border: 1px solid #aaa; text-align: center; line-height: 2em; font-size: 1.3em; }
+    .hit { background: red; color: white; }
+    .miss { background: #ddd; }
+  </style>
+</head>
+<body>
+  <h2>Battleship Game</h2>
+  <div id="turn"></div>
+  <div class="grid" id="grid"></div>
+  <script>
+    async function fetchState() {
+      const res = await fetch('/battleship/state');
+      const state = await res.json();
+      document.getElementById('turn').textContent = 'Current turn: ' + (state.turn || '(none)');
+      // Build grid
+      let html = '';
+      const hits = new Set(state.hits);
+      const guesses = new Set(state.guesses);
+      for (let r of 'ABCDEFGHIJ')
+        for (let c=1; c<=10; ++c) {
+          let key = r + c;
+          let cls = hits.has(key) ? 'cell hit' : guesses.has(key) ? 'cell miss' : 'cell';
+          html += `<div class="${cls}">${key}</div>`;
+        }
+      document.getElementById('grid').innerHTML = html;
+    }
+    setInterval(fetchState, 1000);
+    fetchState();
+  </script>
+</body>
+</html>
