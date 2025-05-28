@@ -19,8 +19,7 @@ class DerpismCog(commands.Cog):
 
     @commands.command(name="derpism")
     async def derpism(self, ctx: commands.Context):
-        print("derpism command handler called; id(self):", id(self), "id(self.bot):", id(self.bot))  # DEBUG
-        print("ctx.author:", ctx.author.name, "| ctx.content:", ctx.message.content)
+        print(f"[DEBUG] DerpismCog.derpism handler triggered by: {ctx.author.name} ({ctx.message.content})")
         """Show a random derpism, a specific one, or add a new one (mods only)."""
         parts = ctx.message.content.split(maxsplit=2)
 

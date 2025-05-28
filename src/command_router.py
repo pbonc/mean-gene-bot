@@ -7,6 +7,7 @@ class CommandRouter(commands.Cog):
 
     @commands.Cog.event()
     async def event_message(self, message):
+        # Only process user messages, not echoes or bot responses
         if message.echo:
             return
         if message.author and message.author.name.lower() == self.bot.nick.lower():
@@ -16,6 +17,7 @@ class CommandRouter(commands.Cog):
         if not message.content.startswith("!"):
             return
 
+        print(f"[DEBUG] CommandRouter.handle_commands called for: {message.content} by {message.author.name}")
         await self.bot.handle_commands(message)
 
 def prepare(bot):
