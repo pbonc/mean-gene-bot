@@ -113,15 +113,15 @@ def run_twitch_bot():
         load_all_cogs(bot)
     print("All cogs loaded.")
 
-    # --- Load SFXCog explicitly after all other cogs ---
-    if 'prepare_sfx' in globals() and prepare_sfx:
-        prepare_sfx(bot)
-        print("SFXCog loaded.")
+    # --- DO NOT CALL prepare_sfx OR prepare_command_router if loaded by load_all_cogs ---
+    # If SFXCog and CommandRouter are loaded in load_all_cogs, comment out or remove these:
+    # if 'prepare_sfx' in globals() and prepare_sfx:
+    #     prepare_sfx(bot)
+    #     print("SFXCog loaded.")
 
-    # --- Load CommandRouter last so it can intercept messages and call handle_commands only for non-SFX commands ---
-    if 'prepare_command_router' in globals() and prepare_command_router:
-        prepare_command_router(bot)
-        print("CommandRouter cog loaded.")
+    # if 'prepare_command_router' in globals() and prepare_command_router:
+    #     prepare_command_router(bot)
+    #     print("CommandRouter cog loaded.")
 
     print("About to run bot...")
     bot.run()
