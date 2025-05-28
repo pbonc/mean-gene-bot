@@ -94,7 +94,7 @@ class DarsAgainstHumanity(commands.Cog):
 
         text = parts[1].strip()
         with open(DAH_SECOND_PATH, "a", encoding="utf-8") as f:
-            f.write(text + "\n")
+            f.write(text + "\n")                     
 
         await ctx.send(f"✅ Added punchline: '{text}'")
 
