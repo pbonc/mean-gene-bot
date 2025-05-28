@@ -1,12 +1,166 @@
-import logging
 import os
+import json
 import random
+import logging
 import asyncio
 from twitchio.ext import commands
 
-from raffle import RaffleState
-
 logger = logging.getLogger("raffle")
+
+BOT_USERNAME = "iamdar"  # Set to your bot's username (case-insensitive)
+
+# ---- RaffleState definition ----
+
+class RaffleState:
+    STATE_FILE = "raffle_state.json"
+
+    def __init__(self):
+        self.state = {
+            "is_open": False,
+            "entries": {},
+            "picks": {},
+            "entries_per_chat": 1,
+            "chat_awarded": [],
+            "nuclear": {},
+        }
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.STATE_FILE):
+            with open(self.STATE_FILE, "r", encoding="utf-8") as f:
+                try:
+                    self.state = json.load(f)
+                    # chat_awarded and nuclear need proper types
+                    self.state["chat_awarded"] = set(self.state.get("chat_awarded", []))
+                    self.state["nuclear"] = dict(self.state.get("nuclear", {}))
+                except Exception as e:
+                    logger.error(f"Failed to load raffle state: {e}")
+
+    def save(self):
+        try:
+            save_state = dict(self.state)
+            save_state["chat_awarded"] = list(save_state.get("chat_awarded", set()))
+            with open(self.STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(save_state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save raffle state: {e}")
+
+    def is_open(self):
+        return self.state.get("is_open", False)
+
+    def open_raffle(self, entries_per_chat):
+        self.state["is_open"] = True
+        self.state["entries_per_chat"] = entries_per_chat
+        # DO NOT reset picks, chat_awarded, or entries here!
+        self.save()
+
+    def close_raffle(self):
+        self.state["is_open"] = False
+        self.save()
+
+    def add_entries(self, user, count):
+        entries = self.state["entries"].setdefault(user, 0)
+        self.state["entries"][user] = entries + count
+        self.save()
+
+    def remove_entries(self, user, count):
+        entries = self.state["entries"].get(user, 0)
+        self.state["entries"][user] = max(0, entries - count)
+        self.save()
+
+    def get_entries(self, user):
+        return self.state["entries"].get(user, 0)
+
+    def pick_numbers(self, user, numbers):
+        if not self.is_open():
+            return False, "Raffle is not open."
+        entries = self.get_entries(user)
+        picks = self.state["picks"].setdefault(user, set())
+        if len(picks) + len(numbers) > entries:
+            return False, "Not enough entries left."
+        taken = set()
+        for n in numbers:
+            for p_user, p_picks in self.state["picks"].items():
+                if n in p_picks:
+                    taken.add(n)
+        if taken:
+            return False, f"Numbers already taken: {', '.join(taken)}"
+        picks.update(numbers)
+        self.save()
+        return True, numbers
+
+    def pick_series(self, user, start, count, direction):
+        if not self.is_open():
+            return False, []
+        series = []
+        if direction == "+":
+            series = [str(start + i).zfill(3) for i in range(count)]
+        else:
+            series = [str(start - i).zfill(3) for i in range(count)]
+        ok, msg = self.pick_numbers(user, series)
+        return ok, series if ok else []
+
+    def pick_random_numbers(self, user, count):
+        if not self.is_open():
+            return False, []
+        available = [str(i).zfill(3) for i in range(0, 1000)]
+        for picks in self.state["picks"].values():
+            for n in picks:
+                if n in available:
+                    available.remove(n)
+        entries = self.get_entries(user)
+        to_pick = min(count, entries - len(self.state["picks"].get(user, set())))
+        if to_pick <= 0 or len(available) < to_pick:
+            return False, []
+        result = random.sample(available, to_pick)
+        ok, msg = self.pick_numbers(user, result)
+        return ok, result if ok else []
+
+    def get_user_picks(self, user):
+        return list(self.state["picks"].get(user, set()))
+
+    def clear_picks(self):
+        self.state["picks"] = {}
+        self.save()
+
+    def has_chat_award(self, user):
+        return user in self.state["chat_awarded"]
+
+    def award_chat(self, user):
+        self.state["chat_awarded"].add(user)
+        self.save()
+
+    def draw(self):
+        all_picks = {}
+        for user, picks in self.state["picks"].items():
+            for n in picks:
+                all_picks[n] = user
+        if not all_picks:
+            return ("000", "000", None)
+        number = random.choice(list(all_picks.keys()))
+        digits = [number[0], number[1], number[2]]
+        winner = all_picks[number]
+        return digits, number, winner
+
+    def test_draw(self):
+        # Returns a random number and winner, or "no user"
+        digits, number, winner = self.draw()
+        return number, winner
+
+    def nuclear_attempt(self, op, user):
+        nuke = self.state["nuclear"].setdefault(op, set())
+        nuke.add(user)
+        if len(nuke) >= 2:
+            return True
+        self.save()
+        return False
+
+    def clear_nuclear(self, op):
+        if op in self.state["nuclear"]:
+            self.state["nuclear"].pop(op)
+            self.save()
+
+# ---- RaffleCog definition ----
 
 class RaffleCog(commands.Cog):
     def __init__(self, bot, raffle_state, sfx_registry=None):
@@ -29,23 +183,26 @@ class RaffleCog(commands.Cog):
 
     @commands.Cog.event()
     async def event_message(self, message):
+        # Only skip complimentary numbers for the bot user
         if message.echo:
             return
-
-        # RAFFLE: Award entries on chat if open and not already awarded
-        if self.raffle_state.is_open() and not self.raffle_state.has_chat_award(message.author.name):
+        if not hasattr(message.author, "name"):
+            return
+        # Award complimentary numbers to everyone except the bot user
+        if (
+            self.raffle_state.is_open() and
+            not self.raffle_state.has_chat_award(message.author.name) and
+            message.author.name.lower() != BOT_USERNAME.lower()
+        ):
             self.raffle_state.add_entries(message.author.name, self.raffle_state.state["entries_per_chat"])
             self.raffle_state.award_chat(message.author.name)
             count = self.raffle_state.state["entries_per_chat"]
             await message.channel.send(f"@{message.author.name} – Here are {count} complimentary number{'s' if count > 1 else ''}.")
 
-        # DO NOT add any SFX/file/folder command logic here!
-        # DO NOT call self.bot.handle_commands(message) here — let CommandRouter or TwitchIO handle commands!
-
     @commands.command(name="openraffle")
     async def openraffle(self, ctx):
         parts = ctx.message.content.split()
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can open the raffle.")
             return
@@ -62,7 +219,7 @@ class RaffleCog(commands.Cog):
     @commands.command(name="giveentries")
     async def giveentries(self, ctx):
         parts = ctx.message.content.split()
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can give entries.")
             return
@@ -111,10 +268,10 @@ class RaffleCog(commands.Cog):
             if len(parts) > 2 and parts[2].isdigit():
                 count = int(parts[2])
             ok, numbers = self.raffle_state.pick_random_numbers(user, count)
-            if not ok:
+            if not ok or not numbers:
                 await ctx.send(f"@{user} – Unable to register random numbers. You may not have enough numbers or enough picks left.")
             else:
-                left = self.raffle_state.get_entries(user)
+                left = self.raffle_state.get_entries(user) - len(self.raffle_state.get_user_picks(user))
                 await ctx.send(f"@{user} – Registered random numbers: {', '.join(numbers)}. You have {left} number{'s' if left != 1 else ''} left.")
             return
 
@@ -127,13 +284,12 @@ class RaffleCog(commands.Cog):
             except ValueError:
                 await ctx.send("Invalid number format.")
                 return
-            # If a number is present after, it's the count
             count = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else entries
             ok, nums = self.raffle_state.pick_series(user, start, count, direction)
-            if not ok:
+            if not ok or not nums:
                 await ctx.send(f"@{user} – Unable to register sequence. Numbers may be taken or you lack enough numbers.")
             else:
-                left = self.raffle_state.get_entries(user)
+                left = self.raffle_state.get_entries(user) - len(self.raffle_state.get_user_picks(user))
                 await ctx.send(f"@{user} – Registered numbers: {', '.join(nums)}. You have {left} number{'s' if left != 1 else ''} left.")
             return
 
@@ -143,10 +299,10 @@ class RaffleCog(commands.Cog):
             await ctx.send("No valid numbers found.")
             return
         ok, result = self.raffle_state.pick_numbers(user, picks)
-        if not ok:
+        if not ok or not result:
             await ctx.send(f"@{user} – {result}")
         else:
-            left = self.raffle_state.get_entries(user)
+            left = self.raffle_state.get_entries(user) - len(self.raffle_state.get_user_picks(user))
             await ctx.send(f"@{user} – Registered numbers: {', '.join(result)}. You have {left} number{'s' if left != 1 else ''} left.")
 
     @commands.command(name="myentries")
@@ -165,7 +321,7 @@ class RaffleCog(commands.Cog):
     @commands.command(name="closeraffle")
     async def closeraffle(self, ctx):
         user = ctx.author.name
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can close the raffle.")
             return
@@ -179,7 +335,7 @@ class RaffleCog(commands.Cog):
     @commands.command(name="drawraffle")
     async def drawraffle(self, ctx):
         user = ctx.author.name
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can draw the raffle.")
             return
@@ -205,7 +361,7 @@ class RaffleCog(commands.Cog):
     @commands.command(name="clearraffle")
     async def clearraffle(self, ctx):
         user = ctx.author.name
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can clear the raffle.")
             return
@@ -219,7 +375,7 @@ class RaffleCog(commands.Cog):
     @commands.command(name="testdraw")
     async def testdraw(self, ctx):
         user = ctx.author.name
-        is_mod = ctx.author.is_mod or ctx.author.is_broadcaster
+        is_mod = getattr(ctx.author, "is_mod", False) or getattr(ctx.author, "is_broadcaster", False)
         if not is_mod:
             await ctx.send("Only mods can use testdraw.")
             return
