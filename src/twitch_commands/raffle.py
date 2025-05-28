@@ -13,6 +13,13 @@ class RaffleCog(commands.Cog):
         self.bot = bot
         self.raffle_state = raffle_state
         self.sfx_registry = sfx_registry
+        print(f"[RaffleCog __init__] sfx_registry: {self.sfx_registry}")
+        if self.sfx_registry:
+            file_count = len(getattr(self.sfx_registry, "file_commands", {}))
+            folder_count = len(getattr(self.sfx_registry, "folder_commands", {}))
+            print(f"[RaffleCog __init__] Loaded {file_count} file commands, {folder_count} folder commands")
+        else:
+            print("[RaffleCog __init__] No sfx_registry provided!")
 
     @commands.Cog.event()
     async def event_ready(self):
@@ -32,38 +39,8 @@ class RaffleCog(commands.Cog):
             count = self.raffle_state.state["entries_per_chat"]
             await message.channel.send(f"@{message.author.name} – Here are {count} complimentary number{'s' if count > 1 else ''}.")
 
-        if not message.content.startswith("!"):
-            await self.bot.handle_commands(message)
-            return
-
-        cmd = message.content.split()[0]
-
-        # SFX file command (non-folder: play sound, do NOT send chat message)
-        if self.sfx_registry and cmd in getattr(self.sfx_registry, "file_commands", {}):
-            sfx_path = os.path.join("sfx", self.sfx_registry.file_commands[cmd])
-            try:
-                from playsound import playsound
-                playsound(sfx_path)
-            except Exception as e:
-                logger.error(f"Error playing sound: {e}")
-            return
-
-        # SFX folder command (random: play sound and send the file command in chat)
-        if self.sfx_registry and cmd in getattr(self.sfx_registry, "folder_commands", {}):
-            files = self.sfx_registry.folder_commands[cmd]
-            if files:
-                sfx_path = os.path.join("sfx", random.choice(files))
-                file_cmd = f"!{os.path.splitext(os.path.basename(sfx_path))[0]}"
-                try:
-                    from playsound import playsound
-                    playsound(sfx_path)
-                except Exception as e:
-                    logger.error(f"Error playing sound: {e}")
-                await message.channel.send(file_cmd)
-            return
-
-        # Let TwitchIO process any regular commands (below)
-        await self.bot.handle_commands(message)
+        # DO NOT add any SFX/file/folder command logic here!
+        # DO NOT call self.bot.handle_commands(message) here — let CommandRouter or TwitchIO handle commands!
 
     @commands.command(name="openraffle")
     async def openraffle(self, ctx):
@@ -257,4 +234,5 @@ def prepare(bot: commands.Bot):
     if not hasattr(bot, "_raffle_state"):
         bot._raffle_state = RaffleState()
     sfx_registry = getattr(bot, "sfx_registry", None)
+    print(f"[RaffleCog.prepare] sfx_registry: {sfx_registry}")
     bot.add_cog(RaffleCog(bot, bot._raffle_state, sfx_registry))

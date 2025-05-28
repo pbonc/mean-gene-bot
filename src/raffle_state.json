@@ -1,11 +1,28 @@
 {
-  "entries": {},
+  "entries": {
+    "iamdar": 15,
+    "slummyzeru_": 6,
+    "phantomskullsx": 3,
+    "aelfhard": 6,
+    "hoplon5": 3,
+    "botdar": 3,
+    "uppercumberlandgamers": 3,
+    "nate048": 3
+  },
   "picks": {},
-  "is_open": false,
-  "entries_per_chat": 1,
+  "is_open": true,
+  "entries_per_chat": 3,
   "nuclear_key": {
     "closeraffle": [],
     "drawraffle": [],
     "clearraffle": []
-  }
+  },
+  "chat_awarded": [
+    "hoplon5",
+    "iamdar",
+    "botdar",
+    "aelfhard",
+    "uppercumberlandgamers",
+    "nate048"
+  ]
 }

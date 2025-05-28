@@ -5,9 +5,17 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-SFX_DIR = "sfx"
-SFX_LOG_PATH = "logs/sfx_creation.log"
-os.makedirs(os.path.dirname(SFX_LOG_PATH), exist_ok=True)
+# Base directory is the project root (one level above this file)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+# SFX directory (always ../sfx relative to this script)
+SFX_DIR = os.path.join(BASE_DIR, "sfx")
+
+# Logs directory and log file
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
+SFX_LOG_PATH = os.path.join(LOGS_DIR, "sfx_creation.log")
+
 sfx_logger = logging.getLogger("sfx_creation")
 sfx_logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler(SFX_LOG_PATH)
@@ -21,12 +29,13 @@ class SFXRegistry:
         self.file_commands = {}    # '!zap': 'fe/zap.mp3'
         self.folder_commands = {}  # '!fe': ['fe/zap.mp3', ...]
         self.registered_commands = set()
+        self.sfx_dir = SFX_DIR     # Store absolute SFX dir for use by cogs
 
     def scan_and_register(self, notify_callback=None):
         file_cmd_count = 0
         folder_cmd_count = 0
-        for root, dirs, files in os.walk(SFX_DIR):
-            rel_folder = os.path.relpath(root, SFX_DIR)
+        for root, dirs, files in os.walk(self.sfx_dir):
+            rel_folder = os.path.relpath(root, self.sfx_dir)
             for f in files:
                 if f.lower().endswith(".mp3"):
                     cmd = f"!{os.path.splitext(f)[0]}"
@@ -120,7 +129,7 @@ class SFXWatcher:
         self.observer = None
 
     def start(self):
-        self.registry.scan_and_register(notify_callback=None)  # Only one summary line printed
+        self.registry.scan_and_register(notify_callback=None)
         event_handler = SFXEventHandler(self.registry, self.notify_callback)
         self.observer = Observer()
         self.observer.schedule(event_handler, SFX_DIR, recursive=True)
@@ -130,6 +139,12 @@ class SFXWatcher:
         if self.observer:
             self.observer.stop()
             self.observer.join()
+
+def build_sfx_registry():
+    """Builds and returns a ready-to-use SFXRegistry. For use in main.py."""
+    registry = SFXRegistry()
+    registry.scan_and_register(notify_callback=None)
+    return registry
 
 # For standalone testing
 if __name__ == "__main__":

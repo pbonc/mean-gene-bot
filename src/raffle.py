@@ -18,15 +18,18 @@ class RaffleState:
                 "closeraffle": [],
                 "drawraffle": [],
                 "clearraffle": []
-            }
+            },
+            "chat_awarded": []  # <-- Persisted as a list
         }
-        self.chat_awarded = set()
         self.load()
 
     def load(self):
         try:
             with open(self.path, "r") as f:
                 self.state = json.load(f)
+            # Upgrade: If chat_awarded not present, add it
+            if "chat_awarded" not in self.state:
+                self.state["chat_awarded"] = []
         except (FileNotFoundError, json.JSONDecodeError):
             self.save()
 
@@ -104,7 +107,7 @@ class RaffleState:
     def open_raffle(self, entries_per_chat: int):
         self.state["is_open"] = True
         self.state["entries_per_chat"] = entries_per_chat
-        self.chat_awarded = set()
+        self.state["chat_awarded"] = []  # <-- CLEAR and persist
         self.save()
 
     def close_raffle(self):
@@ -142,11 +145,16 @@ class RaffleState:
     def get_pick_owner(self, number: str):
         return self.state["picks"].get(number)
 
+    # --- Chat Awarded Persistence ---
     def reset_chat_awarded(self):
-        self.chat_awarded = set()
+        self.state["chat_awarded"] = []
+        self.save()
 
     def award_chat(self, username: str):
-        self.chat_awarded.add(username)
+        uname = username.lower()
+        if uname not in self.state["chat_awarded"]:
+            self.state["chat_awarded"].append(uname)
+            self.save()
 
     def has_chat_award(self, username: str):
-        return username in self.chat_awarded
+        return username.lower() in self.state.get("chat_awarded", [])
