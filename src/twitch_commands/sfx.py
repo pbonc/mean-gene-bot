@@ -17,15 +17,13 @@ class SFXCog(commands.Cog):
         else:
             print("[SFXCog __init__] No sfx_registry provided!")
 
-    @commands.Cog.event()
-    async def event_message(self, message):
+    async def try_handle_sfx(self, message):
         if message.echo:
-            return
-        # Prevent the bot from responding to its own announcements (avoids recursion and double-responses)
+            return False
         if message.author and message.author.name.lower() == self.bot.nick.lower():
-            return
+            return False
         if not message.content.startswith("!"):
-            return
+            return False
 
         cmd = message.content.split()[0]
 
@@ -37,8 +35,7 @@ class SFXCog(commands.Cog):
                 playsound(sfx_path)
             except Exception as e:
                 logger.error(f"Error playing SFX sound: {e}")
-            message.tags['handled_by_sfx'] = True  # Prevent further handling!
-            return
+            return True  # SFX handled
 
         # SFX folder command: play random sound, announce the trigger command in chat
         if self.sfx_registry and cmd in getattr(self.sfx_registry, "folder_commands", {}):
@@ -53,8 +50,9 @@ class SFXCog(commands.Cog):
                     logger.error(f"Error playing SFX sound: {e}")
                 # Announce the trigger for the sound that was played
                 await message.channel.send(file_cmd)
-            message.tags['handled_by_sfx'] = True  # Prevent further handling!
-            return
+            return True  # SFX handled
+
+        return False  # Not an SFX command
 
 def prepare(bot):
     sfx_registry = getattr(bot, "sfx_registry", None)

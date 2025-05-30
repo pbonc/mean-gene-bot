@@ -14,6 +14,8 @@ class CommandRouter(commands.Cog):
             return
         if message.tags.get('handled_by_sfx'):
             return
+        if message.tags.get('handled_by_overlay'):  # <- Prevent double handling for overlay!
+            return
         if not message.content.startswith("!"):
             return
 

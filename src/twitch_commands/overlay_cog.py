@@ -5,18 +5,13 @@ from backend.media_mapper import get_media_files
 from backend.ws_server import broadcast_overlay_message
 
 class OverlayCog(commands.Cog):
-
     def __init__(self, bot):
         self.bot = bot
-        # Path to overlay directory (adjust as needed)
         overlay_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../overlay"))
         self.media_map = get_media_files(overlay_dir)
+        print(f"[OverlayCog] Loaded overlay commands: {list(self.media_map.keys())}")
 
-    @commands.Cog.event()
-    async def event_message(self, message):
-        if message.echo:
-            return
-
+    async def try_handle_overlay(self, message):
         content = message.content.strip().lower()
         entry = self.media_map.get(content)
         if entry:
@@ -28,8 +23,9 @@ class OverlayCog(commands.Cog):
                 "duration": duration * 1000,
             }
             await broadcast_overlay_message(json.dumps(msg))
-            # Don't call handle_commands for overlay triggers.
-            return
+            return True  # Message was handled as overlay
+        return False  # Not an overlay message
 
-        # Only call for non-overlay messages
-        await self.bot.handle_commands(message)
+def prepare(bot):
+    if not bot.get_cog("OverlayCog"):
+        bot.add_cog(OverlayCog(bot))
