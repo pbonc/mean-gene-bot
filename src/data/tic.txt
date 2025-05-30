@@ -1,5 +1,5 @@
-“had a lot of chicken cock in college”
-“played with my diff lock a lot in college”
+“ had a lot of chicken cock in college ”
+“ played with my diff lock a lot in college ”
 “ jacked a lot of knife in college “
 “ had a lot of meat jobs in college “
 “ did a lot of CVP’s in college “
@@ -8,3 +8,5 @@
 “ spun the deck gun a lot in college “
 “ bottomed out a lot in college “
 “ chucked a lot of beef sticks in college “
+“ did a lot of debugging in college “
+“ west er back a lot in college “

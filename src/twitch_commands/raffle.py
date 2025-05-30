@@ -47,6 +47,7 @@ class RaffleState:
             raise ValueError("Entries per chat must be a positive integer.")
         self.state["is_open"] = True
         self.state["entries_per_chat"] = entries_per_chat
+        # DO NOT CLEAR picks or chat_awarded here!
         self.state["winning_number"] = None
         self.state["winner"] = None
         self.save()
@@ -56,10 +57,20 @@ class RaffleState:
         self.save()
 
     def reset_for_new_round(self):
+        # Only clear everything when explicitly called
         self.state["picks"] = {}
         self.state["chat_awarded"] = set()
         self.state["winning_number"] = None
         self.state["winner"] = None
+        self.state["entries"] = {}
+        self.save()
+
+    def clear_picks(self):
+        self.state["picks"] = {}
+        self.save()
+
+    def clear_chat_awarded(self):
+        self.state["chat_awarded"] = set()
         self.save()
 
     def award_chat_entry(self, user):
@@ -171,8 +182,9 @@ class RaffleState:
         self.state["winning_number"] = winning_number
         self.state["winner"] = winner_user
         self.save()
-        # PATCH: Only reset if a winner was actually found
-        self.reset_for_new_round()
+        # Only clear picks and chat_awarded after drawing a winner, NOT on open/close
+        self.clear_picks()
+        self.clear_chat_awarded()
         return winner_user, f"Winner: @{winner_user} with {int(winning_number):03}!"
 
     def my_entries_string(self, user):
@@ -244,6 +256,15 @@ class RaffleCog(commands.Cog):
             return
         self.state.close_raffle()
         await ctx.send("Raffle is now closed.")
+
+    @commands.command(name="clearraffle")
+    async def clearraffle_cmd(self, ctx):
+        if not ctx.author.is_mod:
+            await ctx.send("Only mods can clear the raffle.")
+            return
+        # This is the NUCLEAR OPTION: clears everything, for emergencies only!
+        self.state.reset_for_new_round()
+        await ctx.send("All raffle data has been cleared. This action is irreversible!")
 
     @commands.command(name="raffle")
     async def raffle_cmd(self, ctx, *args):
@@ -350,10 +371,11 @@ class RaffleCog(commands.Cog):
         ok, msg = self.state.trade_entries(user, recipient, count)
         await ctx.send(f"@{user} – {msg}")
 
-    # MIGRATION: REPLACE event_message with try_handle_raffle for MessageRouter pattern
-    async def try_handle_raffle(self, message):
-        if message.echo:
-            return False
+    @commands.Cog.event()
+    async def event_message(self, message):
+        # Only award entries for normal chat (not commands), and not from the bot itself
+        if message.echo or message.content.startswith("!"):
+            return
         user = message.author.name.lower()
         if self.state.state["is_open"] and user not in self.state.state["chat_awarded"]:
             count = self.state.award_chat_entry(user)
@@ -361,8 +383,6 @@ class RaffleCog(commands.Cog):
                 await message.channel.send(
                     f"@{user} – Here {'is' if count == 1 else 'are'} {count} complimentary entr{'y' if count == 1 else 'ies'}."
                 )
-                return True
-        return False
 
 def prepare(bot):
     if not bot.get_cog("RaffleCog"):

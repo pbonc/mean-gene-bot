@@ -3,15 +3,18 @@ import random
 import logging
 from twitchio.ext import commands
 
-TIC_FILE = "data/tic.txt"
+# Always use tic.txt in the src/data directory (relative to this file)
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(SRC_DIR, "..", "data")
+DATA_DIR = os.path.abspath(DATA_DIR)
+os.makedirs(DATA_DIR, exist_ok=True)
+TIC_FILE = os.path.join(DATA_DIR, "tic.txt")
 
 class TicCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
-        print("TicCog __init__ called; id(self):", id(self), "id(bot):", id(bot))  # DEBUG
         self.bot = bot
         self.file_path = TIC_FILE
-        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
         if not os.path.isfile(self.file_path):
             with open(self.file_path, "w", encoding="utf-8") as f:
                 f.write("")
@@ -19,7 +22,6 @@ class TicCog(commands.Cog):
 
     @commands.command(name="tic")
     async def tic(self, ctx: commands.Context):
-        print(f"[DEBUG] TicCog.tic handler triggered by: {ctx.author.name} ({ctx.message.content})")
         """Show a random tic, a specific one, or add a new one (mods only)."""
         parts = ctx.message.content.split(maxsplit=2)
 
@@ -78,10 +80,5 @@ class TicCog(commands.Cog):
             return [line.strip() for line in f if line.strip()]
 
 def prepare(bot):
-    print("prepare() called for TicCog; id(bot):", id(bot))  # DEBUG
-    print(f"Current loaded cogs: {list(bot.cogs)}")  # Shows loaded cog names
     if not bot.get_cog("TicCog"):
         bot.add_cog(TicCog(bot))
-        print("Loaded cog : TicCog")
-    else:
-        print("TicCog already loaded")
