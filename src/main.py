@@ -86,8 +86,8 @@ def start_overlay_http_server():
     overlay_dir = os.path.join(os.path.dirname(__file__), 'overlay')
     os.chdir(overlay_dir)
     Handler = http.server.SimpleHTTPRequestHandler
-    httpd = socketserver.TCPServer(("", 8080), Handler)
-    print("Overlay HTTP server serving at http://localhost:8080")
+    httpd = socketserver.TCPServer(("", 8081), Handler)
+    print("Overlay HTTP server serving at http://localhost:8081")
     http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     http_thread.start()
     return httpd

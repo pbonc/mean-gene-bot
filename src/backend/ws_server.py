@@ -16,8 +16,8 @@ print("Correct ws_server.py loaded!")  # Confirm file is loaded
 
 connected = set()
 
-async def handler(websocket, path):
-    logging.info("Handler called with: %s %s", websocket, path)
+async def handler(websocket):
+    logging.info("Handler called with: %s", websocket)
     connected.add(websocket)
     try:
         logging.info("Handler has entered try block, waiting for messages...")
@@ -47,4 +47,4 @@ async def broadcast_overlay_message(payload):
     if not isinstance(payload, str):
         payload = json.dumps(payload)
     if connected:
-        await asyncio.wait([ws.send(payload) for ws in connected])
+        await asyncio.gather(*(ws.send(payload) for ws in connected))

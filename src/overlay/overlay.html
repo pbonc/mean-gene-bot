@@ -16,11 +16,11 @@
     position: absolute;
     bottom: 0;
     width: 100%;
-    height: 60px; /* reverted to original height */
+    height: 60px;
     display: flex;
     align-items: stretch;
     font-family: sans-serif;
-    font-size: 32px;      /* slightly larger than original 28px, but still fits */
+    font-size: 32px;
     color: white;
   }
 
@@ -62,11 +62,16 @@
     max-height: 80%;
     display: none;
     z-index: 10;
+    background: rgba(0,0,0,0.0);
   }
 
   #center-display img {
     width: 100%;
     height: auto;
+    display: block;
+    margin: 0 auto;
+    max-width: 700px;
+    max-height: 700px;
   }
   </style>
 </head>
@@ -78,49 +83,125 @@
   <div id="center-display"><img src="" alt="overlay" /></div>
 
 <script>
-  window.onload = () => {
-    const tickerText = document.getElementById("ticker-text");
-    console.log("🧪 tickerText element:", tickerText);
+window.onload = () => {
+  const tickerText = document.getElementById("ticker-text");
+  const centerDisplay = document.getElementById("center-display");
+  const centerImg = centerDisplay.querySelector("img");
 
-    const ws = new WebSocket("ws://localhost:6789");
-
-    ws.onopen = () => {
-      console.log("✅ WebSocket connection established.");
-    };
-
-    ws.onclose = (event) => {
-      console.log("❌ WebSocket connection closed:", event);
-    };
-
-    ws.onerror = (err) => {
-      console.error("❌ WebSocket error:", err);
-    };
-
-    ws.onmessage = (event) => {
-      console.log("📨 WebSocket message received:", event.data);
-      try {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === "ticker" && typeof msg.text === "string") {
-          tickerText.innerHTML = "";                // Clear old text
-          tickerText.innerHTML = msg.text;          // Update with new message
-          console.log("🖊️ Ticker updated:", msg.text);
-        } else if (msg.type === "image" && typeof msg.url === "string") {
-          const display = document.getElementById("center-display");
-          const img = display.querySelector("img");
-          img.src = msg.url;
-          display.style.display = "block";
-          setTimeout(() => {
-            display.style.display = "none";
-          }, msg.duration || 5000);
-        } else {
-          console.warn("⚠️ Unknown message format:", msg);
-        }
-      } catch (err) {
-        console.error("❌ Failed to parse or handle message:", err);
-      }
-    };
+  // folders relative to overlay.html
+  const FOLDERS = {
+    heart: "gifs/heart/",
+    gif: "gifs/",
   };
+  const IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".webp"];
+
+  // How long to display overlays, ms
+  const OVERLAY_DISPLAY_TIME = 2500;
+
+  const ws = new WebSocket("ws://localhost:6789");
+
+  ws.onopen = () => {
+    console.log("✅ WebSocket connection established.");
+  };
+
+  ws.onclose = (event) => {
+    console.log("❌ WebSocket connection closed:", event);
+  };
+
+  ws.onerror = (err) => {
+    console.error("❌ WebSocket error:", err);
+  };
+
+  ws.onmessage = (event) => {
+    console.log("📨 WebSocket message received:", event.data);
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (err) {
+      console.error("❌ Failed to parse message as JSON:", err);
+      return;
+    }
+
+    // Ticker and image support as before
+    if (msg.type === "ticker" && typeof msg.text === "string") {
+      tickerText.innerHTML = msg.text;
+      return;
+    }
+    if (msg.type === "image" && typeof msg.url === "string") {
+      showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME);
+      return;
+    }
+
+    // Flexible action handler
+    if (msg.action && typeof msg.action === "string") {
+      const parsed = parseAction(msg.action);
+      if (parsed) {
+        const { folder, base } = parsed;
+        tryImageExtensions(folder, base, OVERLAY_DISPLAY_TIME);
+      } else {
+        console.warn("⚠️ Couldn't parse overlay action:", msg.action);
+      }
+      return;
+    }
+
+    console.warn("⚠️ Unknown message format:", msg);
+  };
+
+  // Try all supported extensions, show the first image that loads
+  function tryImageExtensions(folder, base, duration) {
+    let tried = 0;
+    let found = false;
+    for (const ext of IMAGE_EXTENSIONS) {
+      const imgPath = FOLDERS[folder] + base + ext;
+      testImage(imgPath, () => {
+        if (!found) {
+          found = true;
+          showCenterImage(imgPath, duration);
+        }
+      }, () => {
+        tried++;
+        if (tried === IMAGE_EXTENSIONS.length && !found) {
+          console.warn(`⚠️ No image found for ${base} in ${folder}`);
+        }
+      });
+      if (found) break;
+    }
+  }
+
+  // Preload image to check if it exists
+  function testImage(url, onLoad, onError) {
+    const img = new window.Image();
+    img.onload = onLoad;
+    img.onerror = onError;
+    img.src = url + '?cachebust=' + Math.random();
+  }
+
+  function showCenterImage(imgPath, duration) {
+    centerImg.src = imgPath;
+    centerDisplay.style.display = "block";
+    clearTimeout(centerDisplay._hideTimeout);
+    centerDisplay._hideTimeout = setTimeout(() => {
+      centerDisplay.style.display = "none";
+      centerImg.src = "";
+    }, duration);
+  }
+
+  // Returns {folder, base} for supported actions, or null
+  function parseAction(action) {
+    // 1. Heart folder logic: trigger_<base>_heart
+    let m = /^trigger_([a-z][a-z0-9]*)(\d*)_heart$/.exec(action);
+    if (m) {
+      // m[1] is the base (e.g. "dar", "hop"), m[2] is the number if any (e.g. "2", "7", "")
+      let base = m[1];
+      if (m[2]) base += m[2];
+      return { folder: "heart", base };
+    }
+    // 2. gifs/ folder for non-heart: trigger_<base>
+    m = /^trigger_([a-z0-9_]+)$/.exec(action);
+    if (m) return { folder: "gif", base: m[1] };
+    return null;
+  }
+};
 </script>
 
 </body>

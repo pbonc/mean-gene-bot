@@ -4,7 +4,8 @@ import logging
 import aiohttp
 from twitchio.ext import commands
 
-DERPISM_FILE = "data/derpisms.txt"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DERPISM_FILE = os.path.join(BASE_DIR, "..", "data", "derpisms.txt")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
 TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 
