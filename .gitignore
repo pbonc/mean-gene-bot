@@ -33,3 +33,5 @@ sfx/*
 sfx/.gitkeep
 
 *.mp3
+*.jpg
+*.gif

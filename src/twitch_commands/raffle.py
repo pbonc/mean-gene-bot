@@ -1,6 +1,3 @@
-# PATCH: Only reset picks and chat_awarded if a winner is actually found (not on failed/no-winner draw).
-# Also: Now picks and entries persist if no winner is found.
-
 import json
 import os
 import random
@@ -174,13 +171,9 @@ class RaffleState:
         self.state["winning_number"] = winning_number
         self.state["winner"] = winner_user
         self.save()
-        # PATCH: Only reset if a winner was actually found (i.e., not on empty)
+        # PATCH: Only reset if a winner was actually found
         self.reset_for_new_round()
         return winner_user, f"Winner: @{winner_user} with {int(winning_number):03}!"
-
-    # PATCH: Only call reset_for_new_round after a *winning* draw, not on "no numbers"
-    # (This is already correct. If you want entries and picks to persist even after a winner is drawn,
-    #  comment out or remove the self.reset_for_new_round() line above.)
 
     def my_entries_string(self, user):
         entries = self.user_entries(user)
@@ -225,6 +218,7 @@ class RaffleState:
         self.state["entries"][to_user] += count
         self.save()
         return True, f"Traded {count} entr{'y' if count == 1 else 'ies'} to @{to_user}."
+
 
 class RaffleCog(commands.Cog):
 
@@ -356,10 +350,10 @@ class RaffleCog(commands.Cog):
         ok, msg = self.state.trade_entries(user, recipient, count)
         await ctx.send(f"@{user} – {msg}")
 
-    @commands.Cog.event()
-    async def event_message(self, message):
+    # MIGRATION: REPLACE event_message with try_handle_raffle for MessageRouter pattern
+    async def try_handle_raffle(self, message):
         if message.echo:
-            return
+            return False
         user = message.author.name.lower()
         if self.state.state["is_open"] and user not in self.state.state["chat_awarded"]:
             count = self.state.award_chat_entry(user)
@@ -367,6 +361,8 @@ class RaffleCog(commands.Cog):
                 await message.channel.send(
                     f"@{user} – Here {'is' if count == 1 else 'are'} {count} complimentary entr{'y' if count == 1 else 'ies'}."
                 )
+                return True
+        return False
 
 def prepare(bot):
     if not bot.get_cog("RaffleCog"):

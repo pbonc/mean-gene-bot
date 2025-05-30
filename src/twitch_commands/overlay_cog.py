@@ -1,30 +1,43 @@
-import os
-import json
+import logging
 from twitchio.ext import commands
-from backend.media_mapper import get_media_files
-from backend.ws_server import broadcast_overlay_message
+
+logger = logging.getLogger("overlay")
 
 class OverlayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        overlay_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../overlay"))
-        self.media_map = get_media_files(overlay_dir)
-        print(f"[OverlayCog] Loaded overlay commands: {list(self.media_map.keys())}")
+        # Mapping of chat commands to overlay actions.
+        self.overlay_commands = {
+            "!meme3": "trigger_meme3",
+            "!dar<3": "trigger_dar_heart",
+            "!dar<32": "trigger_dar_double_heart",
+            "!hop<3": "trigger_hop_heart",
+            # Add more overlay commands and their actions here
+        }
+        logger.info(f"[OverlayCog] Loaded overlay commands: {list(self.overlay_commands.keys())}")
 
     async def try_handle_overlay(self, message):
-        content = message.content.strip().lower()
-        entry = self.media_map.get(content)
-        if entry:
-            rel_path, duration, is_gif = entry
-            url = f"http://localhost:8080/{rel_path}"
-            msg = {
-                "type": "image",
-                "url": url,
-                "duration": duration * 1000,
-            }
-            await broadcast_overlay_message(json.dumps(msg))
-            return True  # Message was handled as overlay
-        return False  # Not an overlay message
+        print(f"[OverlayCog] try_handle_overlay called with: {message.content}")
+        if message.echo:
+            return False
+        if message.author and message.author.name.lower() == self.bot.nick.lower():
+            return False
+        if not message.content.startswith("!"):
+            return False
+
+        command = message.content.split()[0]
+        if command in self.overlay_commands:
+            overlay_action = self.overlay_commands[command]
+            logger.info(f"[OverlayCog] Handling overlay command: {command} -> {overlay_action}")
+            # Here you would trigger your actual overlay event, e.g. via websocket or HTTP
+            # For demonstration, we'll just print/log:
+            print(f"[OverlayCog] Trigger overlay: {overlay_action} (from {command})")
+            # If you have a websocket server or HTTP endpoint, send the event here!
+            # Example:
+            # await self.bot.overlay_ws.send_json({"action": overlay_action, "user": message.author.name})
+            return True
+
+        return False
 
 def prepare(bot):
     if not bot.get_cog("OverlayCog"):

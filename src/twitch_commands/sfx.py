@@ -20,6 +20,7 @@ class SFXCog(commands.Cog):
     async def try_handle_sfx(self, message):
         if message.echo:
             return False
+        # Prevent the bot from responding to its own announcements (avoids recursion and double-responses)
         if message.author and message.author.name.lower() == self.bot.nick.lower():
             return False
         if not message.content.startswith("!"):
