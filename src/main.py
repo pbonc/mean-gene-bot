@@ -5,6 +5,7 @@ import logging
 from twitchio.ext import commands
 import asyncio
 from dotenv import load_dotenv
+import threading
 
 print("Loaded basic imports.")
 
@@ -70,6 +71,27 @@ if not TWITCH_CHANNELS_RAW: raise RuntimeError("TWITCH_CHANNELS is not set! Chec
 TWITCH_CHANNELS = [ch.strip() for ch in TWITCH_CHANNELS_RAW.split(",") if ch.strip()]
 print(f"TWITCH_CHANNELS parsed: {TWITCH_CHANNELS}")
 
+# === Overlay Server Integration ===
+def start_overlay_ws_server():
+    # Import here to avoid import errors if overlay backend is missing
+    from backend.ws_server import start_ws_server_threaded
+    ws_thread = threading.Thread(target=start_ws_server_threaded, daemon=True)
+    ws_thread.start()
+    print("Overlay WebSocket server thread started.")
+
+def start_overlay_http_server():
+    # Serve overlay.html and gifs via HTTP for OBS
+    import http.server
+    import socketserver
+    overlay_dir = os.path.join(os.path.dirname(__file__), 'overlay')
+    os.chdir(overlay_dir)
+    Handler = http.server.SimpleHTTPRequestHandler
+    httpd = socketserver.TCPServer(("", 8080), Handler)
+    print("Overlay HTTP server serving at http://localhost:8080")
+    http_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    http_thread.start()
+    return httpd
+
 def run_twitch_bot():
     print("Entering run_twitch_bot()")
     logger.info("Starting Twitch bot event loop.")
@@ -129,5 +151,8 @@ def run_twitch_bot():
 
 if __name__ == "__main__":
     print("Running as __main__!")
+    # === Start Overlay Servers before bot ===
+    start_overlay_ws_server()
+    start_overlay_http_server()  # Optional: comment out if you serve with nginx or another HTTP server
     run_twitch_bot()
     print("End of main.py reached (should never see this unless bot.run() exits).")

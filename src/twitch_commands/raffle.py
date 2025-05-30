@@ -1,3 +1,6 @@
+# PATCH: Only reset picks and chat_awarded if a winner is actually found (not on failed/no-winner draw).
+# Also: Now picks and entries persist if no winner is found.
+
 import json
 import os
 import random
@@ -171,8 +174,13 @@ class RaffleState:
         self.state["winning_number"] = winning_number
         self.state["winner"] = winner_user
         self.save()
+        # PATCH: Only reset if a winner was actually found (i.e., not on empty)
         self.reset_for_new_round()
         return winner_user, f"Winner: @{winner_user} with {int(winning_number):03}!"
+
+    # PATCH: Only call reset_for_new_round after a *winning* draw, not on "no numbers"
+    # (This is already correct. If you want entries and picks to persist even after a winner is drawn,
+    #  comment out or remove the self.reset_for_new_round() line above.)
 
     def my_entries_string(self, user):
         entries = self.user_entries(user)
