@@ -31,3 +31,5 @@ sfx/*
 
 # (Optional) Keep a placeholder file so the folders show up in git
 sfx/.gitkeep
+
+*.mp3
