@@ -3,7 +3,7 @@ import random
 import logging
 from twitchio.ext import commands
 
-DERPISM_FILE = "data/derpisms.txt"
+DERPISM_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "derpisms.txt")
 
 class DerpismCog(commands.Cog):
 
