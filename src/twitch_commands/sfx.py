@@ -1,11 +1,10 @@
 import os
-import asyncio
+import logging
 from twitchio.ext import commands
 from sfx_registry import SFXRegistry
-import sys
+from playsound import playsound
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from backend.ws_server import broadcast_overlay_message
+logger = logging.getLogger("SFXCog")
 
 class SFXCog(commands.Cog):
     def __init__(self, bot):
@@ -18,14 +17,13 @@ class SFXCog(commands.Cog):
         if message.echo:
             return False
         content = message.content.strip().split()[0].lower()
-        if content in self.registry.file_commands:
+        if content.startswith("!") and content in self.registry.file_commands:
             sfx_path = self.registry.file_commands[content]
-            payload = {
-                "type": "play_sfx",
-                "sfx_path": sfx_path
-            }
-            await broadcast_overlay_message(payload)
-            print(f"[SFXCog] Played SFX '{content}' ({sfx_path}) for user {message.author.name}")
+            try:
+                playsound(sfx_path)
+                logger.info(f"Played SFX '{content}' ({sfx_path}) for user {message.author.name}")
+            except Exception as e:
+                logger.error(f"ERROR playing SFX '{content}': {e}")
             return True
         return False
 

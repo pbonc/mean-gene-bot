@@ -87,18 +87,16 @@ class DarsAgainstHumanity(commands.Cog):
             await ctx.send("❌ Only mods can add DAH punchlines.")
             return
 
-        parts = ctx.message.content.split(" ", 1)
-        if len(parts) != 2:
+        punchline = ctx.message.content[len("!dahsecond"):].strip()
+        if not punchline:
             await ctx.send("⚠️ Usage: !dahsecond <punchline text>")
             return
 
-        text = parts[1].strip()
         with open(DAH_SECOND_PATH, "a", encoding="utf-8") as f:
-            f.write(text + "\n")
+            f.write(punchline + "\n")
 
-        await ctx.send(f"✅ Added punchline: '{text}'")
+        await ctx.send(f"✅ Added punchline: '{punchline}'")
 
-def prepare(bot: commands.Bot):
-    if bot.get_cog("DarsAgainstHumanity"):
-        return
+def prepare(bot):
+    print("Registering DarsAgainstHumanity cog with bot (prepare() called)")
     bot.add_cog(DarsAgainstHumanity(bot))

@@ -26,11 +26,7 @@ class SFXRegistry:
 
     def scan_and_register(self, notify_callback=None):
         base_path = os.path.join(os.path.dirname(__file__), self.sfx_root)
-        print(f"\n[SFXRegistry] scan_and_register: __file__={__file__}")
-        print(f"[SFXRegistry] scan_and_register: sfx_root={self.sfx_root}")
-        print(f"[SFXRegistry] scan_and_register: base_path={base_path}")
-        print(f"[SFXRegistry] scan_and_register: exists={os.path.isdir(base_path)}")
-        print(f"[SFXRegistry] scan_and_register: listdir={os.listdir(base_path) if os.path.isdir(base_path) else 'N/A'}\n")
+        logging.info(f"[SFXRegistry] scan_and_register: base_path={base_path}")
         file_commands = {}
         for dirpath, dirnames, filenames in os.walk(base_path):
             for file in filenames:
@@ -42,7 +38,7 @@ class SFXRegistry:
             self.file_commands = file_commands
         if notify_callback:
             notify_callback(sorted(self.file_commands.keys()))
-        print("Available SFX commands:", sorted(self.file_commands.keys()))
+        logging.info("Available SFX commands: %s", sorted(self.file_commands.keys()))
 
     def get_sfx_path(self, command):
         """Return the filepath for a given command, or None."""
@@ -75,7 +71,6 @@ class SFXDirEventHandler(FileSystemEventHandler):
         self.notify_callback = notify_callback
 
     def on_any_event(self, event):
-        # Any change in the directory should cause a rescan
         logging.info("SFX directory changed: %s", event)
         self.registry.scan_and_register(self.notify_callback)
 
