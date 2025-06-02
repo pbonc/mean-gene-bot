@@ -1,32 +1,56 @@
 print("=== STARTING Mean Gene Bot ===")
 
+# --- Purge .pyc files and __pycache__ folders FIRST ---
 import os
+import shutil
+
+def purge_pyc_and_pycache(start_dir):
+    removed = 0
+    for root, dirs, files in os.walk(start_dir):
+        for file in files:
+            if file.endswith('.pyc'):
+                try:
+                    os.remove(os.path.join(root, file))
+                    removed += 1
+                except Exception:
+                    pass
+        # Remove __pycache__ dirs after files
+        for dir in dirs:
+            if dir == '__pycache__':
+                full = os.path.join(root, dir)
+                try:
+                    shutil.rmtree(full)
+                except Exception:
+                    pass
+    print(f"Purged {removed} .pyc files and all __pycache__ dirs from {start_dir}")
+
+purge_pyc_and_pycache(os.path.dirname(__file__))
+
 import logging
 from twitchio.ext import commands
 import asyncio
 from dotenv import load_dotenv
 import threading
 
-print("Loaded basic imports.")
+# --- Import SFX registry and SFXCog loader (FIXED imports) ---
+try:
+    from sfx_registry import build_sfx_registry, SFXRegistry
+    print("Imported build_sfx_registry from sfx_registry.")
+except Exception as e:
+    print("FAILED to import build_sfx_registry:", e)
 
-# --- Import cog loaders and SFX registry builder ---
+try:
+    from twitch_commands.sfx import prepare as prepare_sfx
+    print("Imported prepare_sfx from twitch_commands.sfx.")
+except Exception as e:
+    print("FAILED to import prepare_sfx:", e)
+
+# --- Import cog loaders ---
 try:
     from twitch_commands import load_all_cogs
     print("Imported load_all_cogs from twitch_commands.")
 except Exception as e:
     print("FAILED to import load_all_cogs:", e)
-
-try:
-    from sfx_watcher import build_sfx_registry, SFXRegistry
-    print("Imported build_sfx_registry from sfx_watcher.")
-except Exception as e:
-    print("FAILED to import build_sfx_registry:", e)
-
-try:
-    from sfx import prepare as prepare_sfx
-    print("Imported prepare_sfx from sfx.")
-except Exception as e:
-    print("FAILED to import prepare_sfx:", e)
 
 try:
     from command_router import prepare as prepare_command_router
@@ -100,20 +124,18 @@ def run_twitch_bot():
 
     # --- Build SFX registry BEFORE loading cogs ---
     sfx_registry = None
-    if 'build_sfx_registry' in globals() and build_sfx_registry:
-        try:
-            sfx_registry = build_sfx_registry()
-            if hasattr(sfx_registry, 'sfx_dir'):
-                print(f"SFX base directory: {sfx_registry.sfx_dir}")
-            print(f"SFX registry built: {sfx_registry}")
-            if hasattr(sfx_registry, 'file_commands'):
-                print(f"SFX file commands: {len(sfx_registry.file_commands)}")
-            if hasattr(sfx_registry, 'folder_commands'):
-                print(f"SFX folder commands: {len(sfx_registry.folder_commands)}")
-        except Exception as e:
-            print(f"Failed to build SFX registry: {e}")
-    else:
-        print("No build_sfx_registry available, skipping SFX registry.")
+    try:
+        sfx_registry = build_sfx_registry()
+        if hasattr(sfx_registry, 'sfx_root'):
+            print(f"SFX base directory: {sfx_registry.sfx_root}")
+        print(f"SFX registry built: {sfx_registry}")
+        if hasattr(sfx_registry, 'file_commands'):
+            print(f"SFX file commands: {len(sfx_registry.file_commands)}")
+            print(f"SFX file command map: {sfx_registry.file_commands}")
+        if hasattr(sfx_registry, 'folder_commands'):
+            print(f"SFX folder commands: {len(sfx_registry.folder_commands)}")
+    except Exception as e:
+        print(f"Failed to build SFX registry: {e}")
 
     # --- Instantiate bot ---
     bot = commands.Bot(
@@ -123,8 +145,8 @@ def run_twitch_bot():
     )
     print("Bot instantiated.")
     bot.sfx_registry = sfx_registry  # Make registry available to cogs
-    if sfx_registry and hasattr(sfx_registry, 'sfx_dir'):
-        bot.sfx_dir = sfx_registry.sfx_dir
+    if sfx_registry and hasattr(sfx_registry, 'sfx_root'):
+        bot.sfx_dir = sfx_registry.sfx_root
     print(f"Assigned sfx_registry to bot: {bot.sfx_registry}")
     if hasattr(bot, "sfx_dir"):
         print(f"Assigned sfx_dir to bot: {bot.sfx_dir}")
@@ -135,15 +157,15 @@ def run_twitch_bot():
         load_all_cogs(bot)
     print("All cogs loaded.")
 
-    # --- DO NOT CALL prepare_sfx OR prepare_command_router if loaded by load_all_cogs ---
-    # If SFXCog and CommandRouter are loaded in load_all_cogs, comment out or remove these:
-    # if 'prepare_sfx' in globals() and prepare_sfx:
-    #     prepare_sfx(bot)
-    #     print("SFXCog loaded.")
+    # --- SFXCog: Ensure it is loaded! ---
+    if 'prepare_sfx' in globals() and prepare_sfx:
+        prepare_sfx(bot)
+        print("SFXCog loaded.")
 
-    # if 'prepare_command_router' in globals() and prepare_command_router:
-    #     prepare_command_router(bot)
-    #     print("CommandRouter cog loaded.")
+    # --- CommandRouter: Only if not loaded by load_all_cogs ---
+    if 'prepare_command_router' in globals() and prepare_command_router:
+        prepare_command_router(bot)
+        print("CommandRouter cog loaded.")
 
     print("About to run bot...")
     bot.run()

@@ -13,36 +13,30 @@ class MessageRouter(commands.Cog):
         handled = False
 
         overlay_cog = self.bot.get_cog("OverlayCog")
-        if overlay_cog:
+        if overlay_cog and hasattr(overlay_cog, "try_handle_overlay"):
             if await overlay_cog.try_handle_overlay(message):
                 print(f"[MessageRouter] try_handle_overlay({message.content}) -> True")
                 handled = True
             else:
                 print(f"[MessageRouter] try_handle_overlay({message.content}) -> False")
 
-        sfx_cog = self.bot.get_cog("SFXCog")
-        if sfx_cog and not handled:
-            if hasattr(sfx_cog, "try_handle_sfx"):
+        if not handled:
+            sfx_cog = self.bot.get_cog("SFXCog")
+            if sfx_cog and hasattr(sfx_cog, "try_handle_sfx"):
                 if await sfx_cog.try_handle_sfx(message):
                     print(f"[MessageRouter] try_handle_sfx({message.content}) -> True")
                     handled = True
                 else:
                     print(f"[MessageRouter] try_handle_sfx({message.content}) -> False")
-            else:
-                print("[MessageRouter] SFXCog missing try_handle_sfx!")
 
-        raffle_cog = self.bot.get_cog("RaffleCog")
-        if raffle_cog and not handled:
-            print(">> [DEBUG] raffle_cog:", raffle_cog)
-            print(">> [DEBUG] has try_handle_raffle:", hasattr(raffle_cog, 'try_handle_raffle'))
-            if hasattr(raffle_cog, "try_handle_raffle"):
+        if not handled:
+            raffle_cog = self.bot.get_cog("RaffleCog")
+            if raffle_cog and hasattr(raffle_cog, "try_handle_raffle"):
                 if await raffle_cog.try_handle_raffle(message):
                     print(f"[MessageRouter] try_handle_raffle({message.content}) -> True")
                     handled = True
                 else:
                     print(f"[MessageRouter] try_handle_raffle({message.content}) -> False")
-            else:
-                print("[MessageRouter] RaffleCog missing try_handle_raffle!")
 
         if not handled:
             print(f"[MessageRouter] Passing to handle_commands: {message.content}")
@@ -53,9 +47,8 @@ class MessageRouter(commands.Cog):
         from twitchio.ext.commands.errors import CommandNotFound
         if isinstance(error, CommandNotFound):
             print(f"[MessageRouter] Suppressed CommandNotFound: {ctx.message.content}")
-            return  # Suppress this error!
-        # (You may want to handle/log other errors, or re-raise)
-        raise error  # Or log, or pass
+            return
+        raise error
 
 def prepare(bot):
     if not bot.get_cog("MessageRouter"):
