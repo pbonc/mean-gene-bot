@@ -22,25 +22,32 @@ class MessageRouter(commands.Cog):
 
         sfx_cog = self.bot.get_cog("SFXCog")
         if sfx_cog and not handled:
-            if await sfx_cog.try_handle_sfx(message):
-                print(f"[MessageRouter] try_handle_sfx({message.content}) -> True")
-                handled = True
+            if hasattr(sfx_cog, "try_handle_sfx"):
+                if await sfx_cog.try_handle_sfx(message):
+                    print(f"[MessageRouter] try_handle_sfx({message.content}) -> True")
+                    handled = True
+                else:
+                    print(f"[MessageRouter] try_handle_sfx({message.content}) -> False")
             else:
-                print(f"[MessageRouter] try_handle_sfx({message.content}) -> False")
+                print("[MessageRouter] SFXCog missing try_handle_sfx!")
 
         raffle_cog = self.bot.get_cog("RaffleCog")
         if raffle_cog and not handled:
-            if await raffle_cog.try_handle_raffle(message):
-                print(f"[MessageRouter] try_handle_raffle({message.content}) -> True")
-                handled = True
+            print(">> [DEBUG] raffle_cog:", raffle_cog)
+            print(">> [DEBUG] has try_handle_raffle:", hasattr(raffle_cog, 'try_handle_raffle'))
+            if hasattr(raffle_cog, "try_handle_raffle"):
+                if await raffle_cog.try_handle_raffle(message):
+                    print(f"[MessageRouter] try_handle_raffle({message.content}) -> True")
+                    handled = True
+                else:
+                    print(f"[MessageRouter] try_handle_raffle({message.content}) -> False")
             else:
-                print(f"[MessageRouter] try_handle_raffle({message.content}) -> False")
+                print("[MessageRouter] RaffleCog missing try_handle_raffle!")
 
         if not handled:
             print(f"[MessageRouter] Passing to handle_commands: {message.content}")
             await self.bot.handle_commands(message)
 
-    # ADD THIS METHOD:
     @commands.Cog.event()
     async def event_command_error(self, ctx, error):
         from twitchio.ext.commands.errors import CommandNotFound
@@ -52,4 +59,5 @@ class MessageRouter(commands.Cog):
 
 def prepare(bot):
     if not bot.get_cog("MessageRouter"):
+        print(">> [DEBUG] Adding MessageRouter to bot")
         bot.add_cog(MessageRouter(bot))
