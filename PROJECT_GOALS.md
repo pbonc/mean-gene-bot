@@ -97,7 +97,7 @@ This document outlines the high-level goals and features for the next generation
 - **Version control:**  
   Use branches for new features/experiments; only merge to main when stable.
 - **Testing & staging:**  
-  (Pending your input) Option to provide means to test features/overlays locally before production deployment.
+  Include a `/tests` folder and basic test harness for unit/integration tests. Provide a means to test features/overlays locally before production deployment.
 - **Security:**  
   Review and minimize permissions for all integrations and API keys.
 
