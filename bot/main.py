@@ -24,9 +24,11 @@ class Bot(commands.Bot):
         print(f"Logged in as | {self.nick}")
 
     async def event_message(self, message):
-        print(f"Message from {message.author.name}: {message.content}")
-        await self.handle_commands(message)
-
+        author_name = message.author.name if message.author else "Unknown"
+        print(f"Message from {author_name}: {message.content}")
+        if message.author:
+            await self.handle_commands(message)
+            
     @commands.command(name='hello')
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
