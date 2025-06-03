@@ -1,9 +1,0 @@
-git+https://github.com/TwitchIO/TwitchIO.git@master#egg=twitchio
-discord.py
-fastapi
-uvicorn
-aiohttp
-python-dotenv
-playsound==1.2.2
-watchdog
-websockets
