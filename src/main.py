@@ -144,9 +144,24 @@ def run_twitch_bot():
     bot = commands.Bot(
         token=TWITCH_TOKEN,
         prefix="!",
-        initial_channels=TWITCH_CHANNELS
+        initial_channels=TWITCH_CHANNELS,
+        handle_messages=False  # <-- CRITICAL FIX: disables default event_message handler
     )
-    print("Bot instantiated.")
+    print(f"Bot instantiated. id(bot): {id(bot)}")
+    print("Bot real type:", type(bot))
+    print("Bot module:", bot.__class__.__module__)
+    # Defensive: Check if this is the actual TwitchIO Bot class
+    if not (
+        type(bot).__name__ == "Bot"
+        and bot.__class__.__module__ == "twitchio.ext.commands.bot"
+    ):
+        print("WARNING: The instantiated bot is NOT the official twitchio.ext.commands.Bot! Check your imports.")
+    # Defensive: Check correct attribute
+    print("[BOT INIT] handle_messages set to:", getattr(bot, '_handle_messages', '!! attribute missing !!'))
+    assert getattr(bot, "_handle_messages", None) is False, (
+        "handle_messages MUST be False to avoid double command execution. "
+        "You may be using a wrong Bot class, or old TwitchIO, or have a subclassing bug."
+    )
     bot.sfx_registry = sfx_registry  # Make registry available to cogs
     if sfx_registry and hasattr(sfx_registry, 'sfx_root'):
         bot.sfx_dir = sfx_registry.sfx_root
@@ -159,15 +174,24 @@ def run_twitch_bot():
     if 'load_all_cogs' in globals() and load_all_cogs:
         load_all_cogs(bot)
 
-    # === PRINT ALL REGISTERED COMMANDS (for diagnostics) ===
+    # === PRINT ALL LOADED COGS (for diagnostics) ===
+    print("=== LOADED COGS ===")
+    for name, cog in bot.cogs.items():
+        print(f"{name}: {cog} id={id(cog)}")
+    print("===================")
+
+    # === PRINT ALL REGISTERED COMMANDS (robust diagnostics) ===
     print("=== REGISTERED COMMANDS ===")
     for name, cmd in bot.commands.items():
-        print(f"{name}: {cmd} (id={id(cmd)})")
+        cb = getattr(cmd, "callback", None)
+        print(f"{name}: {cmd} func_id={id(cb) if cb else 'N/A'} command_id={id(cmd)} type={type(cmd)}")
+    print("===========================")
 
     print("All cogs loaded.")
 
     # --- CommandRouter: Only if not loaded by load_all_cogs ---
     if 'prepare_command_router' in globals() and prepare_command_router:
+        print("About to load CommandRouter cog...")
         prepare_command_router(bot)
         print("CommandRouter cog loaded.")
 

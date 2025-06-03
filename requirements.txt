@@ -1,8 +1,9 @@
-twitchio
+git+https://github.com/TwitchIO/TwitchIO.git@master
 discord.py
 fastapi
 uvicorn
 aiohttp
 python-dotenv
-playsound
+playsound==1.2.2
 watchdog
+websockets

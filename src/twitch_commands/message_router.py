@@ -3,6 +3,7 @@ from twitchio.ext import commands
 class MessageRouter(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print(f"[MessageRouter] __init__ called. id(self)={id(self)}, id(bot)={id(bot)}")
 
     @commands.Cog.event()
     async def event_message(self, message):
@@ -51,6 +52,13 @@ class MessageRouter(commands.Cog):
         raise error
 
 def prepare(bot):
+    # Add diagnostics for registration
+    if getattr(bot, "_messagerouter_loaded", False):
+        print(">> [DEBUG] MessageRouter already loaded on this bot (id(bot)={}). Skipping.".format(id(bot)))
+        return
     if not bot.get_cog("MessageRouter"):
-        print(">> [DEBUG] Adding MessageRouter to bot")
+        print(">> [DEBUG] Adding MessageRouter to bot (id(bot)={})".format(id(bot)))
         bot.add_cog(MessageRouter(bot))
+    else:
+        print(">> [DEBUG] MessageRouter already present in bot.get_cog() (id(bot)={})".format(id(bot)))
+    bot._messagerouter_loaded = True

@@ -8,12 +8,10 @@ print(f"DAH MODULE LOADED AS: {__name__}, id={id(sys.modules[__name__])}")
 DAH_FIRST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dah_first.txt")
 DAH_SECOND_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dah_second.txt")
 
-# Guard to prevent double-registration
-_dah_cog_registered = False
-
 class DarsAgainstHumanity(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print(f"[DAH] DarsAgainstHumanity __init__ called (id(self)={id(self)}, id(bot)={id(bot)})")
 
     @commands.command(name="dah")
     async def dah(self, ctx):
@@ -105,10 +103,10 @@ class DarsAgainstHumanity(commands.Cog):
         await ctx.send(f"✅ Added punchline: '{punchline}'")
 
 def prepare(bot):
-    global _dah_cog_registered
-    if _dah_cog_registered:
-        print("[GUARD] DarsAgainstHumanity cog already registered, skipping!")
+    # Use per-bot attribute guard, as recommended in BOT_NOTES.md
+    if getattr(bot, "_dah_cog_loaded", False):
+        print("[GUARD] DarsAgainstHumanity cog already registered on this bot, skipping!")
         return
     print("Registering DarsAgainstHumanity cog with bot (prepare() called)")
     bot.add_cog(DarsAgainstHumanity(bot))
-    _dah_cog_registered = True
+    bot._dah_cog_loaded = True

@@ -13,25 +13,31 @@ def load_all_cogs(bot):
 
     package = __package__
     print(f"[COG LOADER] Loading all cogs for package: {package}")
+
+    loaded = set()
     # Load all cogs except message_router
     for _, module_name, is_pkg in pkgutil.iter_modules(__path__):
         print(f"[COG LOADER] Found module: {module_name} (is_pkg={is_pkg})")
         if is_pkg or module_name.startswith("_") or module_name == "message_router":
             print(f"[COG LOADER] Skipping module: {module_name}")
             continue
+        if module_name in loaded:
+            print(f"[COG LOADER] Already loaded {module_name}, skipping...")
+            continue
         module = importlib.import_module(f"{package}.{module_name}")
         print(f"[COG LOADER] Imported module: {package}.{module_name}")
         if hasattr(module, "prepare"):
-            print(f"[COG LOADER] Calling prepare() in: {package}.{module_name}")
+            print(f"[COG LOADER] Calling prepare() in: {package}.{module_name} (id(bot)={id(bot)})")
             module.prepare(bot)
         else:
             print(f"[COG LOADER] No prepare() in: {package}.{module_name}")
+        loaded.add(module_name)
 
     # Now load message_router last
     print(f"[COG LOADER] Importing message_router last")
     module = importlib.import_module(f"{package}.message_router")
     if hasattr(module, "prepare"):
-        print(f"[COG LOADER] Calling prepare() in: {package}.message_router")
+        print(f"[COG LOADER] Calling prepare() in: {package}.message_router (id(bot)={id(bot)})")
         module.prepare(bot)
     else:
         print(f"[COG LOADER] No prepare() in: {package}.message_router")
