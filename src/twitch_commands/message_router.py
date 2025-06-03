@@ -1,6 +1,7 @@
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
-class MessageRouter(commands.Cog):
+class MessageRouter(Cog):
     def __init__(self, bot):
         self.bot = bot
         print(f"[MessageRouter] __init__ called. id(self)={id(self)}, id(bot)={id(bot)}")

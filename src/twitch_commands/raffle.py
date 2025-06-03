@@ -2,6 +2,7 @@ import json
 import os
 import random
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
 # Always use raffle_state.json in the /data directory at project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

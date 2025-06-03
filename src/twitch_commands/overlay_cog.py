@@ -3,6 +3,7 @@ from twitchio.ext import commands
 import asyncio
 import os
 import re
+from twitchio.ext.cog import Cog
 
 # Import your broadcast function from the websocket server module
 from backend.ws_server import broadcast_overlay_message
@@ -44,7 +45,7 @@ def list_gif_bases():
             bases.add(name)
     return bases
 
-class OverlayCog(commands.Cog):
+class OverlayCog(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.refresh_bases()

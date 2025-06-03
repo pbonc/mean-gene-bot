@@ -2,11 +2,12 @@ import os
 import random
 import asyncio
 from twitchio.ext import commands
+from twitchio.ext import Cog
 from playsound import playsound  # Or your preferred sound playback method
 
 SFX_ROOT = os.path.join(os.path.dirname(__file__), "..", "sfx")
 
-class SFXCog(commands.Cog):
+class SFXCog(Cog):
     def __init__(self, bot):
         self.bot = bot
 

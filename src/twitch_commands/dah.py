@@ -2,13 +2,14 @@ import os
 import random
 import sys
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
 print(f"DAH MODULE LOADED AS: {__name__}, id={id(sys.modules[__name__])}")
 
 DAH_FIRST_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dah_first.txt")
 DAH_SECOND_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dah_second.txt")
 
-class DarsAgainstHumanity(commands.Cog):
+class DarsAgainstHumanity(Cog):
     def __init__(self, bot):
         self.bot = bot
         print(f"[DAH] DarsAgainstHumanity __init__ called (id(self)={id(self)}, id(bot)={id(bot)})")
@@ -16,12 +17,10 @@ class DarsAgainstHumanity(commands.Cog):
     @commands.command(name="dah")
     async def dah(self, ctx):
         print(f"[DEBUG] dah() called! id(self)={id(self)} ctx={ctx}")
-        # Check if files exist
         if not os.path.exists(DAH_FIRST_PATH) or not os.path.exists(DAH_SECOND_PATH):
             await ctx.send("❌ DAH setup or punchline data files are missing.")
             return
 
-        # Load setups and punchlines
         with open(DAH_FIRST_PATH, "r", encoding="utf-8") as f:
             first_lines = [line.strip() for line in f if "::" in line]
 
@@ -32,7 +31,6 @@ class DarsAgainstHumanity(commands.Cog):
             await ctx.send("⚠️ No DAH lines available.")
             return
 
-        # Pick a random setup
         setup_entry = random.choice(first_lines)
         try:
             count_str, setup_text = setup_entry.split("::", 1)
@@ -41,7 +39,6 @@ class DarsAgainstHumanity(commands.Cog):
             await ctx.send("⚠️ Malformed setup entry.")
             return
 
-        # Enforce that the setup text has the right count of blanks
         blank_count = setup_text.count("______")
         if punch_count != blank_count:
             await ctx.send("⚠️ Malformed setup: blank count mismatch. Skipping.")

@@ -3,10 +3,11 @@ import json
 import random
 from datetime import datetime
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
 QUOTES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "quotes.json")
 
-class QuoteCommand(commands.Cog):
+class QuoteCommand(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.quotes = {}

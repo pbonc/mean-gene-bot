@@ -3,6 +3,7 @@ import random
 import logging
 import aiohttp
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DERPISM_FILE = os.path.join(BASE_DIR, "..", "data", "derpisms.txt")
@@ -46,7 +47,7 @@ def load_derpisms():
     with open(DERPISM_FILE, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()]
 
-class ShoutoutCog(commands.Cog):
+class ShoutoutCog(Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
