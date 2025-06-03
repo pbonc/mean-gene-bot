@@ -16,5 +16,4 @@ __pycache__/
 *.mp3
 
 # Ignore environment variable files
-*.env
 .env
