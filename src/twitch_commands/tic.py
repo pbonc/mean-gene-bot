@@ -2,6 +2,7 @@ import os
 import random
 import logging
 from twitchio.ext import commands
+from twitchio.ext.cog import Cog
 
 # Always use tic.txt in the src/data directory (relative to this file)
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -10,7 +11,7 @@ DATA_DIR = os.path.abspath(DATA_DIR)
 os.makedirs(DATA_DIR, exist_ok=True)
 TIC_FILE = os.path.join(DATA_DIR, "tic.txt")
 
-class TicCog(commands.Cog):
+class TicCog(Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot

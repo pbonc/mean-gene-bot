@@ -6,7 +6,7 @@ from twitchio.ext.cog import Cog
 
 DERPISM_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "derpisms.txt")
 
-class DerpismCog(commands.Cog):
+class DerpismCog(Cog):
 
     def __init__(self, bot: commands.Bot):
         print("DerpismCog __init__ called; id(self):", id(self), "id(bot):", id(bot))  # DEBUG
