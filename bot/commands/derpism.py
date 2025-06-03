@@ -4,7 +4,10 @@ import logging
 from twitchio.ext import commands
 from .base_command import mod_only
 
-DERPISM_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "derpisms.txt")
+# Set the derpism file location to assets/txt/derpisms.txt at the project root
+DERPISM_FILE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "assets", "txt", "derpisms.txt")
+)
 
 class DerpismCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
