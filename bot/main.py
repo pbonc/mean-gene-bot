@@ -1,4 +1,5 @@
 import os
+import importlib
 from twitchio.ext import commands
 from dotenv import load_dotenv
 
@@ -28,11 +29,22 @@ class Bot(commands.Bot):
         print(f"Message from {author_name}: {message.content}")
         if message.author:
             await self.handle_commands(message)
-            
+
     @commands.command(name='hello')
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
 
 if __name__ == "__main__":
     bot = Bot()
+
+    # Automatically load all cogs in bot/commands/
+    commands_dir = os.path.join(os.path.dirname(__file__), "commands")
+    if os.path.isdir(commands_dir):
+        for filename in os.listdir(commands_dir):
+            if filename.endswith(".py") and filename not in ("__init__.py", "base_command.py"):
+                modulename = f"bot.commands.{filename[:-3]}"
+                module = importlib.import_module(modulename)
+                if hasattr(module, "prepare"):
+                    module.prepare(bot)
+
     bot.run()
