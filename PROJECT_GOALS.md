@@ -103,7 +103,14 @@ This document outlines the high-level goals and features for the next generation
 
 ---
 
-## 10. Custom/Stretch Goals
+## 10. OAuth Token Management
+
+- **Automatic/Scripted Twitch OAuth Refresh:**  
+  Provide a script (or simple CLI utility) to refresh Twitch OAuth tokens as needed, ensuring uninterrupted bot operation and easy token management.
+
+---
+
+## 11. Custom/Stretch Goals
 
 - [ ] _____________________________
 - [ ] _____________________________
