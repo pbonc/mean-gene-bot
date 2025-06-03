@@ -1,4 +1,4 @@
-git+https://github.com/TwitchIO/TwitchIO.git@master
+git+https://github.com/TwitchIO/TwitchIO.git@master#egg=twitchio
 discord.py
 fastapi
 uvicorn
