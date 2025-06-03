@@ -11,6 +11,7 @@ class DarsAgainstHumanity(commands.Cog):
 
     @commands.command(name="dah")
     async def dah(self, ctx):
+        print(f"DAH COMMAND INVOKED: file={__file__}")
         # Check if files exist
         if not os.path.exists(DAH_FIRST_PATH) or not os.path.exists(DAH_SECOND_PATH):
             await ctx.send("❌ DAH setup or punchline data files are missing.")

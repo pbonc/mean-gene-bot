@@ -131,7 +131,6 @@ def run_twitch_bot():
         print(f"SFX registry built: {sfx_registry}")
         if hasattr(sfx_registry, 'file_commands'):
             print(f"SFX file commands: {len(sfx_registry.file_commands)}")
-            print(f"SFX file command map: {sfx_registry.file_commands}")
         if hasattr(sfx_registry, 'folder_commands'):
             print(f"SFX folder commands: {len(sfx_registry.folder_commands)}")
     except Exception as e:
@@ -151,16 +150,11 @@ def run_twitch_bot():
     if hasattr(bot, "sfx_dir"):
         print(f"Assigned sfx_dir to bot: {bot.sfx_dir}")
 
-    # --- Load all regular cogs ---
+    # --- Load all regular cogs (includes SFXCog) ---
     print("About to load all cogs...")
     if 'load_all_cogs' in globals() and load_all_cogs:
         load_all_cogs(bot)
     print("All cogs loaded.")
-
-    # --- SFXCog: Ensure it is loaded! ---
-    if 'prepare_sfx' in globals() and prepare_sfx:
-        prepare_sfx(bot)
-        print("SFXCog loaded.")
 
     # --- CommandRouter: Only if not loaded by load_all_cogs ---
     if 'prepare_command_router' in globals() and prepare_command_router:
