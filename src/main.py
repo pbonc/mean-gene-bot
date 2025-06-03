@@ -1,8 +1,12 @@
+import sys
+sys.dont_write_bytecode = True
+
 print("=== STARTING Mean Gene Bot ===")
 
 # --- Purge .pyc files and __pycache__ folders FIRST ---
 import os
 import shutil
+print("sys.path:", sys.path)
 
 def purge_pyc_and_pycache(start_dir):
     removed = 0
@@ -154,6 +158,12 @@ def run_twitch_bot():
     print("About to load all cogs...")
     if 'load_all_cogs' in globals() and load_all_cogs:
         load_all_cogs(bot)
+
+    # === PRINT ALL REGISTERED COMMANDS (for diagnostics) ===
+    print("=== REGISTERED COMMANDS ===")
+    for name, cmd in bot.commands.items():
+        print(f"{name}: {cmd} (id={id(cmd)})")
+
     print("All cogs loaded.")
 
     # --- CommandRouter: Only if not loaded by load_all_cogs ---
