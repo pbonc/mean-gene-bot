@@ -53,6 +53,7 @@ class SimpleRaffleState:
     def open_raffle(self, entries_per_chat):
         self.is_open = True
         self.entries_per_chat = entries_per_chat
+        self.chat_awarded = set()
         self.save()
 
     def close_raffle(self):
