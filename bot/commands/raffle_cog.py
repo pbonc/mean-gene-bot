@@ -320,7 +320,7 @@ class RaffleCog(commands.Cog):
 
     @commands.Cog.event()
     async def event_message(self, message):
-        if message.echo or message.content.startswith("!"):
+        if message.echo: #removed if message.echo or message.content.startswith("!"): on 6/8
             return
         user = message.author.name.lower()
         if self.state.is_open and user not in self.state.chat_awarded:
