@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import asyncio
 from twitchio.ext import commands
 
 # Data files for this bot are stored in the project root's 'data' folder.
@@ -160,6 +161,7 @@ class RaffleCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.state = SimpleRaffleState()
+        self._raffle_closing_task = None
 
     @commands.command(name="openraffle")
     async def open_raffle_cmd(self, ctx, entries_per_chat: int = 1):
@@ -173,10 +175,54 @@ class RaffleCog(commands.Cog):
         await ctx.send(f"Raffle is now open! Anyone who chats gets {entries_per_chat} free entr{'y' if entries_per_chat == 1 else 'ies'}!")
 
     @commands.command(name="closeraffle")
-    async def close_raffle_cmd(self, ctx):
+    async def close_raffle_cmd(self, ctx, minutes: int = None):
         if not ctx.author.is_mod:
             await ctx.send("Only mods can close the raffle.")
             return
+
+        # If a countdown is already running, prevent starting another
+        if self._raffle_closing_task and not self._raffle_closing_task.done():
+            await ctx.send("A raffle closing countdown is already in progress!")
+            return
+
+        # If minutes is provided and valid, start countdown
+        if minutes is not None:
+            try:
+                mins = int(minutes)
+                if mins not in (1, 2, 3, 4, 5):
+                    raise ValueError
+            except Exception:
+                await ctx.send("Usage: !closeraffle <minutes> (1-5)")
+                return
+
+            await ctx.send(f"Raffle will close in {mins} minute{'s' if mins > 1 else ''}!")
+            self._raffle_closing_task = asyncio.create_task(self._countdown_to_closure(ctx, mins))
+            return
+
+        # Default: close immediately
+        self.state.close_raffle()
+        await ctx.send("Raffle is now closed.")
+
+    async def _countdown_to_closure(self, ctx, mins):
+        total_seconds = mins * 60
+        checkpoints = [
+            (120, "2 minutes left to enter the raffle!"),
+            (60, "1 minute left to enter the raffle!"),
+            (30, "30 seconds left to enter the raffle!"),
+        ]
+        now = asyncio.get_event_loop().time()
+        closes_at = now + total_seconds
+
+        for sec, msg in checkpoints:
+            if total_seconds > sec:
+                sleep_amt = closes_at - asyncio.get_event_loop().time() - sec
+                if sleep_amt > 0:
+                    await asyncio.sleep(sleep_amt)
+                await ctx.send(msg)
+        # Wait until closure
+        sleep_amt = closes_at - asyncio.get_event_loop().time()
+        if sleep_amt > 0:
+            await asyncio.sleep(sleep_amt)
         self.state.close_raffle()
         await ctx.send("Raffle is now closed.")
 
@@ -242,8 +288,19 @@ class RaffleCog(commands.Cog):
         if not ctx.author.is_mod:
             await ctx.send("Only mods can draw a winner.")
             return
-        winner, msg = self.state.draw_winner()
-        await ctx.send(msg)
+        winner, _ = self.state.draw_winner()
+        num = self.state.winning_number or "???"
+        # Dramatic reveal
+        await ctx.send(f"The first number is: {num[0]}")
+        await asyncio.sleep(1.5)
+        await ctx.send(f"The second number is: {num[1]}")
+        await asyncio.sleep(1.5)
+        await ctx.send(f"The third number is: {num[2]}")
+        await asyncio.sleep(1.5)
+        if winner:
+            await ctx.send(f"The winning number is {num}! Congratulations @{winner}!")
+        else:
+            await ctx.send(f"The winning number is {num}! No winner! The prize rolls over!")
 
     @commands.command(name="rafflecreate")
     async def rafflecreate_cmd(self, ctx, count: str = None, recipient: str = None):
@@ -270,7 +327,6 @@ class RaffleCog(commands.Cog):
         if not ctx.author.is_mod:
             await ctx.send("Only mods can use !testdraw.")
             return
-        # Use same logic as draw_winner but do not update state or announce winners
         number = f"{random.randint(0, 999):03}"
         user = self.state.picks.get(number)
         if user:
