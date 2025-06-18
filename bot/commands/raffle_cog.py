@@ -349,7 +349,7 @@ class RaffleCog(commands.Cog):
         ok, msg = self.state.trade_entries(user, recipient, n)
         await ctx.send(f"@{user} – {msg}")
 
-    @commands.command(name="raffletestdata")
+    @commands.command(name="raffletestdata") 
     async def raffletestdata_cmd(self, ctx):
         if not ctx.author.is_mod:
             await ctx.send("Only mods can use !raffletestdata.")
