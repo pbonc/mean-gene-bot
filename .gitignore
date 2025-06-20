@@ -19,6 +19,5 @@ __pycache__/
 .env
 
 #bot data files
-bot/data/quotes.json
-bot/data/raflfe_state.json
-assets/txt/tic.txt
+bot/data/*.json
+assets/txt/*.txt
