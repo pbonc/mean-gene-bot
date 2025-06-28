@@ -62,7 +62,6 @@ class SimpleRaffleState:
         self.save()
 
     def reset(self):
-        self.entries = {}
         self.picks = {}
         self.winner = None
         self.winning_number = None
