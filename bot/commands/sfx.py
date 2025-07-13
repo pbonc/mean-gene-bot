@@ -15,13 +15,17 @@ except ImportError:
     def playsound(path):
         print(f"Would play sound: {path}")
 
-class SFXCog(commands.Cog):
+class SFXComponent(commands.Component):
     def __init__(self, bot):
         self.bot = bot
         self.sfx_commands = {}  # command_name: (file_path, sfx_type, extra)
-        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.executor = ThreadPoolExecutor(max_workers=1)  # Single worker for sequential playback
         self.logger = logging.getLogger("sfx")
         self._registered = set()  # set of command names we've registered as Twitch commands
+        
+        # Playback queue for sequential SFX playback
+        self.playback_queue = asyncio.Queue()
+        self._playback_task = None
 
         # Immediate initial scan (no print)
         scan = self._scan_sfx_files()
@@ -29,18 +33,58 @@ class SFXCog(commands.Cog):
             self._register_sfx_command(cmd, info)
         self.sfx_commands = scan
 
-        # Start the async watcher
+    async def component_load(self):
+        """Called when the component is loaded - start background tasks here"""
+        # Start the async watcher and playback processor
         async def delayed_start():
             await asyncio.sleep(2)
             await self._watch_sfx_folder()
         try:
-            self.bot.loop.create_task(delayed_start())
+            # Use asyncio.create_task for the background tasks
+            asyncio.create_task(delayed_start())
+            # Start the playback queue processor
+            self._playback_task = asyncio.create_task(self._process_playback_queue())
         except Exception as e:
             print(f"[SFX] Failed to start background task: {e}")
 
+    async def component_teardown(self):
+        """Called when the component is being unloaded"""
+        if self._playback_task and not self._playback_task.done():
+            self._playback_task.cancel()
+
+    async def _process_playback_queue(self):
+        """Process the playback queue, playing one sound at a time"""
+        while True:
+            try:
+                # Wait for the next sound to play
+                sound_path = await self.playback_queue.get()
+                
+                # Play the sound and wait for it to complete
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(self.executor, playsound, sound_path)
+                
+                # Mark this task as done
+                self.playback_queue.task_done()
+                
+            except asyncio.CancelledError:
+                # Component is being torn down
+                break
+            except Exception as e:
+                self.logger.error(f"Error playing sound: {e}")
+                # Continue processing the queue even if one sound fails
+                try:
+                    self.playback_queue.task_done()
+                except ValueError:
+                    pass
+
     async def _watch_sfx_folder(self):
         prev_snapshot = dict(self.sfx_commands)
-        await self.bot.wait_for_ready()
+        # Check if bot has the method, use it if available
+        if hasattr(self.bot, 'wait_until_ready'):
+            await self.bot.wait_until_ready()
+        elif hasattr(self.bot, 'wait_for_ready'):
+            await self.bot.wait_for_ready()
+        
         while True:
             snapshot = self._scan_sfx_files()
             # Find new commands (added)
@@ -88,14 +132,19 @@ class SFXCog(commands.Cog):
     def _register_sfx_command(self, cmd, info):
         if cmd in self._registered:
             return  # Already registered
+        
+        # Create a dynamic command function that handles case-insensitive matching
         async def sfx_player(ctx):
-            await self._handle_sfx_command(ctx, cmd)
+            # Check if the command was triggered with different casing
+            command_used = ctx.message.content.split()[0][1:].lower()  # Remove ! and lowercase
+            await self._handle_sfx_command(ctx, command_used)
+        
         sfx_player.__name__ = f"sfx_cmd_{cmd}"
         try:
             self.bot.remove_command(cmd)
         except Exception:
             pass
-        self.bot.add_command(commands.Command(name=cmd, func=sfx_player))
+        self.bot.add_command(commands.Command(sfx_player, name=cmd))
         self._registered.add(cmd)
         self.logger.info(f"Registered sfx command: !{cmd}")
 
@@ -130,8 +179,8 @@ class SFXCog(commands.Cog):
             await ctx.send("❌ Unknown SFX type.")
 
     async def _play_sound(self, path):
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(self.executor, playsound, path)
+        """Add a sound to the playback queue for sequential playback"""
+        await self.playback_queue.put(path)
 
     async def _announce_new_command(self, cmd, info):
         sfx_type = info[1]
@@ -152,4 +201,4 @@ class SFXCog(commands.Cog):
                 self.logger.warning(f"Failed to announce SFX in channel {channel}: {e}")
 
 def prepare(bot):
-    bot.add_cog(SFXCog(bot))
+    bot.load_component(SFXComponent(bot))

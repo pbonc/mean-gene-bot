@@ -8,6 +8,7 @@ load_dotenv()
 
 TWITCH_TOKEN = os.getenv("TWITCH_TOKEN")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
+TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 TWITCH_BOT_ID = os.getenv("TWITCH_BOT_ID")
 TWITCH_CHANNELS = os.getenv("TWITCH_CHANNELS", "").split(",")
 
@@ -15,8 +16,9 @@ class Bot(commands.Bot):
 
     def __init__(self):
         super().__init__(
-            token=TWITCH_TOKEN,
             client_id=TWITCH_CLIENT_ID,
+            client_secret=TWITCH_CLIENT_SECRET or "dummy_secret",  # Fallback for testing
+            bot_id=TWITCH_BOT_ID or "dummy_id",  # Fallback for testing
             prefix="!",
             initial_channels=TWITCH_CHANNELS
         )
