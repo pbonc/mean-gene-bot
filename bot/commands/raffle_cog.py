@@ -241,7 +241,7 @@ class RaffleCog(commands.Cog):
         user = ctx.author.name.lower()
         args = list(args)
         if not args or (args[0].lower() == "help"):
-            await ctx.send("placeholder link")
+            await ctx.send("https://docs.google.com/document/d/1hEguHGkhTYTDIcfFOSrbT34_xKUqw0t5nP3-cXWICKk")
             return
 
         cmd = args[0].lower()
