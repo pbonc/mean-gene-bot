@@ -4,31 +4,22 @@ import random
 import asyncio
 from twitchio.ext import commands
 
-# Data files for this bot are stored in the project root's 'data' folder.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 RAFFLE_STATE_FILE = os.path.join(DATA_DIR, "raffle_state.json")
 
-HELP_TEXT = """
-🎟️ Raffle Commands:
-!raffle help                - Show this help message.
-!raffle open [per_chat]     - (Mod) Open the raffle. Optionally set entries per chat.
-!raffle close [minutes]     - (Mod) Close the raffle (immediately or in [minutes]).
-!raffle clear               - (Mod) Clear all raffle data.
-!raffle draw                - (Mod) Draw the winning number.
-!raffle addentries <user> <count> - (Mod) Add entries for a user.
-!raffle testdata            - (Mod) Populate with test data.
-!raffle testdraw            - (Mod) Simulate a random draw.
-!raffle ignore <user>       - (Mod) Ignore a user from the raffle.
-!raffle unignore <user>     - (Mod) Remove a user from the ignore list.
-!raffle ignored             - (Mod) List all ignored users.
-!raffle pick <numbers>      - Pick one or more numbers (comma or space separated).
-!raffle random [amount]     - Pick [amount] random numbers (default 1).
-!raffle entries             - Show your current entry count.
-!raffle picks               - Show your current picks.
-!raffle trade <user> <count> - Trade entries to another user.
-"""
+def chunk_message(text, limit=480):
+    lines = text.strip().splitlines()
+    chunk = ""
+    for line in lines:
+        if len(chunk) + len(line) + 1 > limit:
+            if chunk.strip():
+                yield chunk.strip()
+            chunk = ""
+        chunk += line + "\n"
+    if chunk.strip():
+        yield chunk.strip()
 
 class SimpleRaffleState:
     def __init__(self, state_file=RAFFLE_STATE_FILE):
@@ -188,11 +179,11 @@ class SimpleRaffleState:
         if user:
             self.winner = user
             self.save()
-            return user, f"Winner: @{user} with {number}!"
+            return user, number
         else:
             self.winner = None
             self.save()
-            return None, f"No winner! The drawn number was {number}. Prize rolls over!"
+            return None, number
 
     def award_chat_entry(self, user):
         user = user.lower()
@@ -241,12 +232,16 @@ class RaffleCog(commands.Cog):
         self.state = SimpleRaffleState()
         self._raffle_closing_task = None
 
+    async def send_long_message(self, ctx, text):
+        for chunk in chunk_message(text):
+            await ctx.send(chunk)
+
     @commands.command(name="raffle")
     async def raffle_command(self, ctx, *args):
         user = ctx.author.name.lower()
         args = list(args)
         if not args or (args[0].lower() == "help"):
-            await ctx.send(HELP_TEXT)
+            await ctx.send("placeholder link")
             return
 
         cmd = args[0].lower()
@@ -303,8 +298,7 @@ class RaffleCog(commands.Cog):
             if not ctx.author.is_mod:
                 await ctx.send("Only mods can draw a winner.")
                 return
-            winner, _ = self.state.draw_winner()
-            num = self.state.winning_number or "???"
+            winner, num = self.state.draw_winner()
             # Dramatic reveal
             await ctx.send(f"The first number is: {num[0]}")
             await asyncio.sleep(1.5)
@@ -312,18 +306,82 @@ class RaffleCog(commands.Cog):
             await asyncio.sleep(1.5)
             await ctx.send(f"The third number is: {num[2]}")
             await asyncio.sleep(1.5)
+            picks = self.state.picks
+            winning_int = int(num)
+            closest_distance = 1000
+            closest_picks = []
+            closest_users = []
+            bad_beat_users = []
+            bad_beat_numbers = []
+
+            # Check all picked numbers
+            for pick, pick_user in picks.items():
+                pick_int = int(pick)
+                dist = abs(pick_int - winning_int)
+                if dist == 1:
+                    if pick_user != winner:
+                        bad_beat_users.append(pick_user)
+                        bad_beat_numbers.append(pick)
+                if winner is None:
+                    # Closest pick logic for no winner
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        closest_picks = [pick]
+                        closest_users = [pick_user]
+                    elif dist == closest_distance:
+                        closest_picks.append(pick)
+                        closest_users.append(pick_user)
             if winner:
                 await ctx.send(f"The winning number is {num}! Congratulations @{winner}!")
+                if bad_beat_users:
+                    user_number_pairs = [f"@{u} ({n})" for u, n in zip(bad_beat_users, bad_beat_numbers)]
+                    await ctx.send(f"Bad beat! {' and '.join(user_number_pairs)} {'was' if len(bad_beat_users) == 1 else 'were'} off by one and receive 5 bonus entries.")
+                    for bbuser in set(bad_beat_users):
+                        self.state.add_entries(bbuser, 5)
+                else:
+                    await ctx.send("There were no bad beats this draw.")
             else:
                 await ctx.send(f"The winning number is {num}! No winner! The prize rolls over!")
+                # Closest picks
+                if closest_picks:
+                    # Find all unique (user, pick) pairs for the closest picks
+                    pairs = list(set((u, p) for u, p in zip(closest_users, closest_picks)))
+                    pair_strs = [f"@{u} ({p})" for (u, p) in pairs]
+                    await ctx.send(f"Closest pick(s): {' , '.join(pair_strs)} (distance {closest_distance})")
             return
 
-        if cmd == "addentries":
+        if cmd == "simdraw":
             if not ctx.author.is_mod:
-                await ctx.send("Only mods can add entries for users.")
+                await ctx.send("Only mods can use !raffle simdraw.")
+                return
+            if len(args) < 2:
+                await ctx.send("Usage: !raffle simdraw <count>")
+                return
+            try:
+                simcount = int(args[1])
+                if simcount < 1 or simcount > 10000:
+                    raise ValueError
+            except Exception:
+                await ctx.send("Please enter a positive integer between 1 and 10000.")
+                return
+            winner_count = 0
+            loser_count = 0
+            current_picks = dict(self.state.picks)
+            for _ in range(simcount):
+                number = f"{random.randint(0, 999):03}"
+                if number in current_picks:
+                    winner_count += 1
+                else:
+                    loser_count += 1
+            await ctx.send(f"Simulated {simcount} draws: {winner_count} winner(s), {loser_count} loser(s) (would roll over).")
+            return
+
+        if cmd == "create":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can create entries for users.")
                 return
             if len(args) < 3:
-                await ctx.send("Usage: !raffle addentries <user> <count>")
+                await ctx.send("Usage: !raffle create <user> <count>")
                 return
             recipient = args[1].lstrip("@").lower()
             try:
@@ -345,7 +403,6 @@ class RaffleCog(commands.Cog):
             if not ctx.author.is_mod:
                 await ctx.send("Only mods can use !raffle testdata.")
                 return
-            # Create 30 fake users with random entries (1-20)
             users = [f"user{i}" for i in range(1, 31)]
             self.state.entries = {}
             self.state.picks = {}
@@ -364,18 +421,6 @@ class RaffleCog(commands.Cog):
                     break
             self.state.save()
             await ctx.send(f"Populated test data: {len(users)} users, {len(self.state.picks)} picked numbers, entries assigned 1–20 each.")
-            return
-
-        if cmd == "testdraw":
-            if not ctx.author.is_mod:
-                await ctx.send("Only mods can use !raffle testdraw.")
-                return
-            number = f"{random.randint(0, 999):03}"
-            userx = self.state.picks.get(number)
-            if userx:
-                await ctx.send(f"Test draw: {number} - {userx}")
-            else:
-                await ctx.send(f"Test draw: {number} - empty (prize would roll over)")
             return
 
         if cmd == "ignore":
@@ -410,7 +455,6 @@ class RaffleCog(commands.Cog):
             await ctx.send(f"Ignored users: {', '.join('@'+u for u in ignored) if ignored else '(none)'}")
             return
 
-        # User commands
         if cmd == "pick":
             if not self.state.is_open:
                 await ctx.send("Raffle is not open.")
@@ -418,7 +462,6 @@ class RaffleCog(commands.Cog):
             if len(args) < 2:
                 await ctx.send("Usage: !raffle pick <numbers>")
                 return
-            # Accept comma or space separated numbers
             numbers = []
             for arg in args[1:]:
                 if ',' in arg:
@@ -457,6 +500,11 @@ class RaffleCog(commands.Cog):
                 await ctx.send(f"@{user} – Your picks: {', '.join(picks)}")
             return
 
+        if cmd == "odds":
+            odds = len(self.state.picks)
+            await ctx.send(f"Current odds: {odds}/1000 numbers have been picked.")
+            return
+
         if cmd == "trade":
             if len(args) < 3:
                 await ctx.send("Usage: !raffle trade <user> <count>")
@@ -471,8 +519,7 @@ class RaffleCog(commands.Cog):
             await ctx.send(f"@{user} – {msg}")
             return
 
-        # Unknown subcommand: fallback to help
-        await ctx.send(HELP_TEXT)
+        await ctx.send("placeholder link")
 
     async def _countdown_to_closure(self, ctx, mins):
         total_seconds = mins * 60
@@ -490,7 +537,6 @@ class RaffleCog(commands.Cog):
                 if sleep_amt > 0:
                     await asyncio.sleep(sleep_amt)
                 await ctx.send(msg)
-        # Wait until closure
         sleep_amt = closes_at - asyncio.get_event_loop().time()
         if sleep_amt > 0:
             await asyncio.sleep(sleep_amt)
@@ -502,9 +548,7 @@ class RaffleCog(commands.Cog):
         if message.echo:
             return
         user = message.author.name.lower()
-        # Only award if raffle is open and user hasn't received any chat entry this round
         if self.state.is_open and user not in self.state.chat_awarded and not self.state.is_ignored(user):
-            # First chatter logic
             if not self.state.first_chatter_awarded:
                 bonus = self.state.award_first_chatter(user)
                 if bonus > 0:
@@ -512,7 +556,6 @@ class RaffleCog(commands.Cog):
                         f"🎉 Congratulations @{user} for being FIRST in chat after the raffle opened! You receive {bonus} raffle entr{'y' if bonus == 1 else 'ies'}! 🎟️"
                     )
                     return
-            # All other chatters
             count = self.state.award_chat_entry(user)
             if count > 0:
                 await message.channel.send(
