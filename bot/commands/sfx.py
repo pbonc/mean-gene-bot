@@ -201,4 +201,15 @@ class SFXComponent(commands.Component):
                 self.logger.warning(f"Failed to announce SFX in channel {channel}: {e}")
 
 def prepare(bot):
-    bot.load_component(SFXComponent(bot))
+    # Create the component and store it for later async loading
+    component = SFXComponent(bot)
+    
+    # Add the component loading to the bot's setup hook
+    original_setup_hook = getattr(bot, 'setup_hook', None)
+    
+    async def new_setup_hook():
+        if original_setup_hook:
+            await original_setup_hook()
+        await bot.add_component(component)
+    
+    bot.setup_hook = new_setup_hook
