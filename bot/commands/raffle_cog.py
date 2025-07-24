@@ -89,8 +89,6 @@ class SimpleRaffleState:
         self.chat_awarded = set()
         self.first_chatter_awarded = False
         self.first_chatter_user = None
-        self.entries = {}
-        self.ignored_users = set()
         self.save()
 
     def add_entries(self, user, count):
@@ -397,30 +395,6 @@ class RaffleCog(commands.Cog):
                 await ctx.send(f"Created {n} entr{'y' if n == 1 else 'ies'} for @{recipient}.")
             else:
                 await ctx.send(f"User @{recipient} is not eligible for the raffle.")
-            return
-
-        if cmd == "testdata":
-            if not ctx.author.is_mod:
-                await ctx.send("Only mods can use !raffle testdata.")
-                return
-            users = [f"user{i}" for i in range(1, 31)]
-            self.state.entries = {}
-            self.state.picks = {}
-            all_numbers = [f"{n:03}" for n in range(1000)]
-            random.shuffle(all_numbers)
-            assigned = 0
-            for userx in users:
-                entry_count = random.randint(1, 20)
-                self.state.entries[userx] = entry_count
-                pick_count = min(random.randint(1, max(1, entry_count // 2 + 1)), len(all_numbers) - assigned)
-                picks = all_numbers[assigned:assigned+pick_count]
-                assigned += pick_count
-                for num in picks:
-                    self.state.picks[num] = userx
-                if assigned >= len(all_numbers):
-                    break
-            self.state.save()
-            await ctx.send(f"Populated test data: {len(users)} users, {len(self.state.picks)} picked numbers, entries assigned 1–20 each.")
             return
 
         if cmd == "ignore":
