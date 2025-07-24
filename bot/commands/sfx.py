@@ -139,7 +139,7 @@ class SFXCog(commands.Cog):
         if sfx_type == "flat":
             msg = f"SFX command !{cmd} is now available!"
         elif sfx_type == "folderfile":
-            msg = f"SFX command !{cmd} (from {extra}) is now available!"
+            msg = f"SFX command !{cmd} is now available!"
         elif sfx_type == "folder":
             msg = f"SFX randomizer !{cmd} is now available!"
         else:
