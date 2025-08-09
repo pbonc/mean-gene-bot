@@ -1,7 +1,9 @@
 import os
 import importlib
+import asyncio
 from twitchio.ext import commands
 from dotenv import load_dotenv
+from bot.overlay_server import start_overlay_server, broadcast_overlay_message
 
 # Load .env file
 load_dotenv()
@@ -34,7 +36,17 @@ class Bot(commands.Bot):
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
 
-if __name__ == "__main__":
+    # Example overlay command for you to adjust
+    @commands.command(name='overlaytest')
+    async def overlaytest(self, ctx):
+        # This will display the test image on the overlay
+        await broadcast_overlay_message({"image": "/gifs/darheart2.jpg"})
+        await ctx.send("Overlay image triggered!")
+
+async def main():
+    # Start the overlay server in the background
+    overlay_task = asyncio.create_task(start_overlay_server())
+    # Create and start the bot
     bot = Bot()
 
     # Automatically load all cogs in bot/commands/
@@ -47,4 +59,10 @@ if __name__ == "__main__":
                 if hasattr(module, "prepare"):
                     module.prepare(bot)
 
-    bot.run()
+    # Run the bot (this blocks until shutdown)
+    await bot.start()
+    # Optionally, wait for overlay task to finish (if bot exits first)
+    await overlay_task
+
+if __name__ == "__main__":
+    asyncio.run(main())
