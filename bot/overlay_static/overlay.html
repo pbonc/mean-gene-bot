@@ -112,7 +112,7 @@ window.onload = () => {
 
   setLogo(categoryText);
 
-  const ws = new WebSocket("ws://localhost:6789");
+  const ws = new WebSocket("ws://localhost:8080/ws");
 
   ws.onopen = () => {
     console.log("✅ WebSocket connection established.");
