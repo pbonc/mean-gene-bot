@@ -54,6 +54,7 @@ class MediaOverlayCog(commands.Cog):
         bot.loop.create_task(self._sfx_queue_worker()) #cheese note 
         bot.loop.create_task(self._watch_media_folders()) 
 
+
     async def _sfx_queue_worker(self):
         while True:
             play_item = await self.sfx_queue.get()  # (path, ctx, message)
