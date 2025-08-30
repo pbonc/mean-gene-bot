@@ -51,8 +51,9 @@ class MediaOverlayCog(commands.Cog):
         self.media_commands = {}  # cmd: {"image": (path, fname), "sfx": (path, ...)}
         self.executor = ThreadPoolExecutor(max_workers=2)
         self.sfx_queue = asyncio.Queue()
-        bot.loop.create_task(self._sfx_queue_worker())
-        bot.loop.create_task(self._watch_media_folders())
+        bot.loop.create_task(self._sfx_queue_worker()) #cheese note 
+        bot.loop.create_task(self._watch_media_folders()) 
+
 
     async def _sfx_queue_worker(self):
         while True:
