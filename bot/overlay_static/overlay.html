@@ -53,7 +53,10 @@
     align-items: center;
     height: 100%;
     box-sizing: border-box;
+    position: relative;
   }
+
+  /* Removed scrolling ticker animation, reverted to static text */
 
   #center-display {
     position: absolute;
@@ -138,7 +141,7 @@ window.onload = () => {
 
     // Ticker and image support as before
     if (msg.type === "ticker" && typeof msg.text === "string") {
-      tickerText.innerHTML = msg.text;
+      tickerText.textContent = msg.text;
       return;
     }
     if (msg.type === "image" && typeof msg.url === "string") {
