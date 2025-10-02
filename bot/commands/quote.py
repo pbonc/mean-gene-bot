@@ -24,8 +24,10 @@ class QuoteCommand(Cog):
 
     def save_quotes(self):
         os.makedirs(os.path.dirname(QUOTES_FILE), exist_ok=True)
+        # Save quotes sorted by key (as int)
+        sorted_quotes = {str(k): self.quotes[str(k)] for k in sorted(map(int, self.quotes.keys()))}
         with open(QUOTES_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.quotes, f, indent=2)
+            json.dump(sorted_quotes, f, indent=2)
 
     @commands.command(name="quote")
     async def quote(self, ctx: commands.Context):
@@ -76,12 +78,17 @@ class QuoteCommand(Cog):
                 await ctx.send(f"❌ Quote #{quote_id} not found.")
                 return
         else:
-            # !quote (random)
+            # !quote (random existing quote)
             if not self.quotes:
                 await ctx.send("📭 No quotes available.")
                 return
-            quote_id = random.choice(list(self.quotes.keys()))
-            quote = self.quotes[quote_id]
+            # Only select quotes that are not missing
+            valid_quotes = {qid: q for qid, q in self.quotes.items() if q["text"] != "MISSING QUOTE"}
+            if not valid_quotes:
+                await ctx.send("📭 No valid quotes available.")
+                return
+            quote_id = random.choice(list(valid_quotes.keys()))
+            quote = valid_quotes[quote_id]
 
         try:
             dt = datetime.strptime(quote["date"], "%m/%d/%Y")
@@ -90,7 +97,7 @@ class QuoteCommand(Cog):
             formatted_date = quote["date"]
 
         await ctx.send(
-            f'Quote #{quote_id}: "{quote["text"]}" {quote["user"]} [{quote.get("context", "Unknown")}] [{formatted_date}]'
+            f'Quote #{quote_id}: "{quote["text"]}" — {quote["user"]} ({formatted_date})'
         )
 
     @commands.command(name="myquotes")

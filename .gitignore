@@ -21,3 +21,15 @@ __pycache__/
 #bot data files
 bot/data/*.json
 assets/txt/*.txt
+assets/txt/dah_first.txt
+assets/txt/dah_second.txt
+
+# Ignore Stream Labels files
+bot/data/labels/
+
+# Ignore log files and logs directory
+logs/
+*.log
+
+data/quotes.json
+data/raffle_state.json
