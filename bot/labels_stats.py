@@ -1,3 +1,39 @@
+async def get_raffle_encouragement():
+    """Encouragement message for raffle, including current prize as $XX."""
+    prize = get_raffle_prize()
+    if prize and prize.isdigit():
+        return f"Type !raffle random to enter for a chance to win a ${int(prize):d} gift card!"
+    else:
+        return "Type !raffle random to enter the raffle!"
+def get_raffle_prize():
+    try:
+        from bot.raffle_state import SimpleRaffleState
+        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raffle_state.json')
+        if not os.path.isfile(state_file):
+            return None
+        state = SimpleRaffleState(state_file)
+        return state.prize
+    except Exception:
+        return None
+def get_raffle_odds():
+    """Return a string describing current raffle odds, or 'No raffle running'."""
+    try:
+        from bot.raffle_state import SimpleRaffleState
+        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raffle_state.json')
+        if not os.path.isfile(state_file):
+            return "Raffle Odds: No raffle running."
+        state = SimpleRaffleState(state_file)
+        total_entries = sum(state.entries.values())
+        total_picks = len(state.picks)
+        if total_entries > 0 and total_picks > 0:
+            odds = f"Raffle Odds: 1 in {total_picks}"
+        elif total_entries > 0:
+            odds = f"Raffle Odds: 1 in {total_entries}"
+        else:
+            odds = "Raffle Odds: No entries."
+        return odds
+    except Exception:
+        return "Raffle Odds: (unavailable)"
 import os
 import asyncio
 from bot.twitch_stats import get_stream_info
@@ -53,61 +89,32 @@ async def get_follower_count():
 async def get_ticker_messages():
     messages = []
     try:
-        info = await get_stream_info()
-        messages.append(f"Title: {info.get('title', 'N/A') if info else 'N/A'}")
-        messages.append(f"Viewers: {info.get('viewers', 'N/A') if info else 'N/A'}")
-        raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
-        if raw_uptime and raw_uptime != 'N/A':
-            import re
-            match = re.match(r"(?:(\d+) days?, )?(\d+):(\d+):", raw_uptime)
-            if match:
-                days = int(match.group(1)) if match.group(1) else 0
-                hours = int(match.group(2)) if match.group(2) else 0
-                minutes = int(match.group(3)) if match.group(3) else 0
-                messages.append(f"Uptime: {hours + days * 24}h {minutes}m")
-            else:
-                messages.append(f"Uptime: {raw_uptime}")
-        else:
-            messages.append("Uptime: N/A")
-        # Add latest subscriber and follower before follower count
-        workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
-        latest_sub = "N/A"
-        latest_follower = "N/A"
-        try:
-            sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
-            if os.path.isfile(sub_path):
-                with open(sub_path, "r", encoding="utf-8") as f:
-                    latest_sub = f.read().strip() or "N/A"
-        except Exception:
-            pass
-        try:
-            follower_path = os.path.join(labels_dir, "most_recent_follower.txt")
-            if os.path.isfile(follower_path):
-                with open(follower_path, "r", encoding="utf-8") as f:
-                    latest_follower = f.read().strip() or "N/A"
-        except Exception:
-            pass
-        messages.append(f"Latest Subscriber: {latest_sub}")
-        messages.append(f"Latest Follower: {latest_follower}")
-        follower_count = await get_follower_count()
-        messages.append(f"Followers: {follower_count}")
-        for label, filename in LABEL_FILES.items():
-            value = read_label(label)
-            messages.append(f"{label}: {value}")
-        from bot.weather_utils import load_weather_messages, fetch_weather
-        locations = load_weather_messages()
-        import random
-        if locations:
-            chosen = random.sample(locations, min(5, len(locations)))
-            for loc in chosen:
-                weather = await fetch_weather(loc)
-                # Strip 'Weather: ' if present
-                if weather.startswith("Weather: "):
-                    messages.append(weather[len("Weather: "):])
-                else:
-                    messages.append(weather)
-        # Add modnews
+        # Always add encouragement first
+        encouragement = await get_raffle_encouragement() if callable(get_raffle_encouragement) else get_raffle_encouragement
+        if encouragement:
+            messages.append(encouragement)
+
+        # Always add bad beat jackpot message second
+        from bot.raffle_state import SimpleRaffleState
+        state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raffle_state.json')
+        jackpot = 25
+        if os.path.isfile(state_file):
+            state = SimpleRaffleState(state_file)
+            jackpot = state.bad_beat_jackpot if hasattr(state, 'bad_beat_jackpot') else 25
+        jackpot_msg = f"The current bad beat jackpot is {jackpot} entries!"
+        messages.append(jackpot_msg)
+
+        # Always add odds third
+        odds = get_raffle_odds()
+        if odds:
+            messages.append(odds)
+
+        # Add follower count (deduplicated, only once)
+        follower_count = read_follower_count()
+        if follower_count and follower_count != "N/A":
+            messages.append(f"Followers: {follower_count}")
+
+        # Add modnews (limit to 5 random items)
         workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
         modnews_path = os.path.join(assets_txt_dir, "modnews.txt")
@@ -119,10 +126,10 @@ async def get_ticker_messages():
                     msg = line.strip()
                     if msg:
                         modnews_msgs.append(f"ModNews: {msg}")
-        if not modnews_msgs:
-            messages.append("There is no mod news.")
-        else:
-            messages.extend(modnews_msgs)
+        import random
+        if modnews_msgs:
+            messages.extend(random.sample(modnews_msgs, min(5, len(modnews_msgs))))
+
         # Add a random quote
         try:
             import json
@@ -142,8 +149,9 @@ async def get_ticker_messages():
                     except Exception:
                         formatted_date = quote["date"]
                     messages.append(f'Quote #{qid}: "{quote["text"]}" — {quote["user"]} ({formatted_date})')
-        except Exception as e:
+        except Exception:
             pass
+
         # Add a random derpism and tic
         try:
             derpisms_path = os.path.join(workspace_root, "assets", "txt", "derpisms.txt")
@@ -160,11 +168,20 @@ async def get_ticker_messages():
                         if tics:
                             tic = random.choice(tics)
                             messages.append(f'Tic: {tic}')
-        except Exception as e:
+        except Exception:
             pass
+
+        # Add weather messages (5 random)
+        from bot.weather_utils import get_random_weather_messages
+        weather_msgs = await get_random_weather_messages(5)
+        if weather_msgs:
+            messages.extend(weather_msgs)
     except Exception as e:
         messages.append(f"[ERROR] Ticker data unavailable: {e}")
     return messages if messages else ["Ticker: No data available."]
+async def get_raffle_odds_message():
+    """Async wrapper for raffle odds for AFK/anime overlays."""
+    return get_raffle_odds()
 
 async def get_afk_weather_message():
         try:

@@ -31,5 +31,8 @@ bot/data/labels/
 logs/
 *.log
 
+# Ignore backup folder
+data/backups/
+
 data/quotes.json
 data/raffle_state.json

@@ -6,6 +6,7 @@ class SimpleRaffleState:
         self.state_file = state_file
         self.entries = {}  # user -> available entries (int)
         self.picks = {}    # 'NNN' -> user
+        self.prize = None
         self.load()
 
     def load(self):
@@ -14,14 +15,22 @@ class SimpleRaffleState:
                 data = json.load(f)
             self.entries = data.get("entries", {})
             self.picks = data.get("picks", {})
+            self.prize = data.get("prize", None)
         else:
             self.save()
 
     def save(self):
         # Save picks sorted by number for readability
         sorted_picks = {k: self.picks[k] for k in sorted(self.picks, key=lambda x: int(x))}
+        data = {"entries": self.entries, "picks": sorted_picks}
+        if self.prize is not None:
+            data["prize"] = self.prize
         with open(self.state_file, "w") as f:
-            json.dump({"entries": self.entries, "picks": sorted_picks}, f, indent=2)
+            json.dump(data, f, indent=2)
+
+    def set_prize(self, prize):
+        self.prize = prize
+        self.save()
 
     def add_entries(self, user, count):
         self.entries[user] = self.entries.get(user, 0) + count

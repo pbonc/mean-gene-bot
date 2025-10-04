@@ -35,6 +35,8 @@ class SimpleRaffleState:
         self.first_chatter_user = None
         self.ignored_users = set()
         self.load()
+        if not hasattr(self, 'bad_beat_jackpot'):
+            self.bad_beat_jackpot = 25
 
     def load(self):
         if os.path.exists(self.state_file):
@@ -50,6 +52,7 @@ class SimpleRaffleState:
             self.first_chatter_awarded = data.get("first_chatter_awarded", False)
             self.first_chatter_user = data.get("first_chatter_user", None)
             self.ignored_users = set([u.lower() for u in data.get("ignored_users", [])])
+            self.bad_beat_jackpot = data.get("bad_beat_jackpot", 25)
         else:
             self.save()
 
@@ -66,6 +69,7 @@ class SimpleRaffleState:
             "first_chatter_awarded": self.first_chatter_awarded,
             "first_chatter_user": self.first_chatter_user,
             "ignored_users": list(self.ignored_users),
+            "bad_beat_jackpot": self.bad_beat_jackpot,
         }
         with open(self.state_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -89,6 +93,7 @@ class SimpleRaffleState:
         self.chat_awarded = set()
         self.first_chatter_awarded = False
         self.first_chatter_user = None
+        # Do NOT reset bad_beat_jackpot here (leave as-is)
         self.save()
 
     def add_entries(self, user, count):
@@ -225,6 +230,11 @@ class SimpleRaffleState:
         return sorted(list(self.ignored_users))
 
 class RaffleCog(commands.Cog):
+    @commands.command(name="badbeat")
+    async def badbeat_command(self, ctx):
+        """Show the current bad beat jackpot in chat."""
+        jackpot = self.state.bad_beat_jackpot if hasattr(self.state, 'bad_beat_jackpot') else 25
+        await ctx.send(f"The current bad beat jackpot is {jackpot} entries!")
     def __init__(self, bot):
         self.bot = bot
         self.state = SimpleRaffleState()
@@ -333,11 +343,17 @@ class RaffleCog(commands.Cog):
                 await ctx.send(f"The winning number is {num}! Congratulations @{winner}!")
                 if bad_beat_users:
                     user_number_pairs = [f"@{u} ({n})" for u, n in zip(bad_beat_users, bad_beat_numbers)]
-                    await ctx.send(f"Bad beat! {' and '.join(user_number_pairs)} {'was' if len(bad_beat_users) == 1 else 'were'} off by one and receive 5 bonus entries.")
+                    jackpot = self.state.bad_beat_jackpot if hasattr(self.state, 'bad_beat_jackpot') else 25
+                    split = (jackpot + len(set(bad_beat_users)) - 1) // len(set(bad_beat_users))
+                    await ctx.send(f"Bad beat! {' and '.join(user_number_pairs)} {'was' if len(bad_beat_users) == 1 else 'were'} off by one and receive {split} bonus entr{'y' if split == 1 else 'ies'} each from the jackpot!")
                     for bbuser in set(bad_beat_users):
-                        self.state.add_entries(bbuser, 5)
+                        self.state.add_entries(bbuser, split)
+                    self.state.bad_beat_jackpot = 25
+                    self.state.save()
                 else:
                     await ctx.send("There were no bad beats this draw.")
+                    self.state.bad_beat_jackpot = 25
+                    self.state.save()
             else:
                 await ctx.send(f"The winning number is {num}! No winner! The prize rolls over!")
                 # Closest picks
@@ -346,6 +362,9 @@ class RaffleCog(commands.Cog):
                     pairs = list(set((u, p) for u, p in zip(closest_users, closest_picks)))
                     pair_strs = [f"@{u} ({p})" for (u, p) in pairs]
                     await ctx.send(f"Closest pick(s): {' , '.join(pair_strs)} (distance {closest_distance})")
+                # No winner: increment jackpot by 5
+                self.state.bad_beat_jackpot += 5
+                self.state.save()
             return
 
         if cmd == "simdraw":

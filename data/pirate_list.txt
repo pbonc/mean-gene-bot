@@ -1,0 +1,2 @@
+# This file stores the list of users who get pirate responses from MeanGeneBot.
+# One username per line, all lowercase.
