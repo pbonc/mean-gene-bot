@@ -17,11 +17,16 @@ import importlib
 import asyncio
 from twitchio.ext import commands
 from dotenv import load_dotenv
+import discord
+from discord.ext import commands as discord_commands
 from bot.overlay_server import start_overlay_server, broadcast_overlay_message
 from bot.weather_utils import fetch_weather, save_weather_message, get_random_weather_messages, get_any_weather_message
 
 # Load .env file
 load_dotenv()
+
+# Import Discord config after loading .env
+from bot.config import DISCORD_TOKEN, DISCORD_CHANNEL_ID
 
 TWITCH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -42,6 +47,10 @@ class Bot(commands.Bot):
 
     # Track last AI usage per user (username: datetime)
     _ai_cooldowns = {}
+
+    def __init__(self):
+        super().__init__(token=TWITCH_TOKEN, client_id=TWITCH_CLIENT_ID, nick=TWITCH_BOT_ID, prefix='!', initial_channels=TWITCH_CHANNELS)
+        self.discord_client = None
 
 
     @commands.command(name='afk')
@@ -289,14 +298,43 @@ class Bot(commands.Bot):
         await broadcast_overlay_message({"image": "/gifs/darheart2.jpg"})
         await ctx.send("Overlay image triggered!")
 
+class DiscordBot(discord_commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(command_prefix='!', intents=intents)
+        
+    async def on_ready(self):
+        print(f'[DISCORD] Bot logged in as {self.user}')
+        
+    async def send_to_channel(self, message):
+        if DISCORD_CHANNEL_ID:
+            channel = self.get_channel(DISCORD_CHANNEL_ID)
+            if channel:
+                await channel.send(message)
+            else:
+                print(f'[DISCORD ERROR] Channel {DISCORD_CHANNEL_ID} not found')
+        else:
+            print('[DISCORD ERROR] No channel ID configured')
+
 async def main():
     # Backup raffle state at startup
     backup_raffle_state()
 
     # Start the overlay server in the background
     overlay_task = asyncio.create_task(start_overlay_server())
-    # Create and start the bot
+    
+    # Create and start the bots
     bot = Bot()
+    
+    # Initialize Discord bot if token is provided
+    discord_bot = None
+    if DISCORD_TOKEN:
+        discord_bot = DiscordBot()
+        bot.discord_client = discord_bot
+        print('[DISCORD] Discord integration enabled')
+    else:
+        print('[DISCORD] Discord token not found, Discord integration disabled')
 
     # Start ticker cycle tasks
     ticker_task = asyncio.create_task(bot.ticker_cycle_task())
@@ -323,11 +361,14 @@ async def main():
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    # Run the bot (this blocks until shutdown)
-    await bot.start()
-    # Optionally, wait for overlay and ticker tasks to finish (if bot exits first)
-    await overlay_task
-    await ticker_task
+    # Start both bots concurrently
+    tasks = [bot.start()]
+    
+    if discord_bot:
+        tasks.append(discord_bot.start(DISCORD_TOKEN))
+    
+    # Run all tasks concurrently
+    await asyncio.gather(*tasks, overlay_task, ticker_task)
 
 if __name__ == "__main__":
     try:
