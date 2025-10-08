@@ -1,3 +1,15 @@
+import shutil
+import signal
+def backup_raffle_state():
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raffle_state.json")
+    if os.path.isfile(src):
+        from datetime import datetime
+        backup_dir = os.path.join(os.path.dirname(src), "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = os.path.join(backup_dir, f"raffle_state_backup_{timestamp}.json")
+        shutil.copy2(src, dst)
+        print(f"[RAFFLE BACKUP] Backed up raffle_state.json to {dst}")
 import os
 import logging
 from datetime import datetime
@@ -5,11 +17,16 @@ import importlib
 import asyncio
 from twitchio.ext import commands
 from dotenv import load_dotenv
+import discord
+from discord.ext import commands as discord_commands
 from bot.overlay_server import start_overlay_server, broadcast_overlay_message
 from bot.weather_utils import fetch_weather, save_weather_message, get_random_weather_messages, get_any_weather_message
 
 # Load .env file
 load_dotenv()
+
+# Import Discord config after loading .env
+from bot.config import DISCORD_TOKEN, DISCORD_CHANNEL_ID
 
 TWITCH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -27,6 +44,15 @@ logging.basicConfig(
 )
 
 class Bot(commands.Bot):
+
+    # Track last AI usage per user (username: datetime)
+    _ai_cooldowns = {}
+
+    def __init__(self):
+        super().__init__(token=TWITCH_TOKEN, client_id=TWITCH_CLIENT_ID, nick=TWITCH_BOT_ID, prefix='!', initial_channels=TWITCH_CHANNELS)
+        self.discord_client = None
+
+
     @commands.command(name='afk')
     async def afk(self, ctx):
         if not ctx.author.is_mod:
@@ -41,13 +67,13 @@ class Bot(commands.Bot):
     async def afk_ticker_cycle_task(self):
         import random
         from bot.twitch_stats import get_stream_info, get_sub_points
-        from bot.labels_stats import get_ticker_messages
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
         while True:
             try:
                 info = await get_stream_info()
                 sub_points = await get_sub_points()
-                label_messages = await get_ticker_messages()
-                weather_msg = await get_any_weather_message()
+                raffle_odds = await get_raffle_odds_message()
+                raffle_enc = await get_raffle_encouragement()
                 # Truncate uptime to minutes
                 raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
                 if raw_uptime and raw_uptime != 'N/A':
@@ -81,22 +107,29 @@ class Bot(commands.Bot):
                             latest_follower = f.read().strip() or "N/A"
                 except Exception:
                     pass
-                elements = [
+                # Build core info (ordered, no duplicates)
+                core_messages = [
                     f"Title: {info.get('title', 'N/A') if info else 'N/A'}",
+                    raffle_enc,
+                    raffle_odds,
                     f"Viewers: {info.get('viewers', 'N/A') if info else 'N/A'}",
                     uptime_str,
                     f"Latest Subscriber: {latest_sub}",
                     f"Latest Follower: {latest_follower}",
                     f"Followers: {info.get('followers', 'N/A') if info else 'N/A'}",
                     f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
-                ] + label_messages
-                if weather_msg:
-                    if weather_msg.startswith("Weather: "):
-                        elements.append(weather_msg[len("Weather: "):])
-                    else:
-                        elements.append(weather_msg)
-                if elements:
-                    msg = random.choice(elements)
+                ]
+                # Get extra messages (modnews, quotes, derpism, tics, weather)
+                extra_messages = await get_ticker_messages()
+                # Deduplicate (preserve order, core first)
+                seen = set()
+                unified = []
+                for m in core_messages + extra_messages:
+                    if m and m not in seen and m != "N/A" and not m.startswith("[ERROR]"):
+                        unified.append(m)
+                        seen.add(m)
+                if unified:
+                    msg = random.choice(unified)
                     await broadcast_overlay_message({"type": "afk_ticker", "message": msg})
                 else:
                     await broadcast_overlay_message({"type": "afk_ticker", "message": "AFK: No data available."})
@@ -104,34 +137,99 @@ class Bot(commands.Bot):
             except Exception as e:
                 logging.error(f"[AFK TICKER ERROR] {e}", exc_info=True)
     async def ticker_cycle_task(self):
-        from bot.twitch_stats import get_stream_info, get_recent_subscriber, get_sub_points
-        from bot.labels_stats import get_ticker_messages
+        from bot.twitch_stats import get_stream_info, get_sub_points
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
         while True:
             try:
                 info = await get_stream_info()
-                subscriber = await get_recent_subscriber()
                 sub_points = await get_sub_points()
-                label_messages = await get_ticker_messages()
-                weather_msgs = await get_random_weather_messages(5)
-                messages = [
-                    f"Title: {info.get('title', 'N/A') if info else 'N/A'}",
+                raffle_odds = await get_raffle_odds_message()
+                raffle_enc = await get_raffle_encouragement()
+                raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
+                if raw_uptime and raw_uptime != 'N/A':
+                    import re
+                    match = re.match(r"(?:(\d+) days?, )?(\d+):(\d+):", raw_uptime)
+                    if match:
+                        days = int(match.group(1)) if match.group(1) else 0
+                        hours = int(match.group(2)) if match.group(2) else 0
+                        minutes = int(match.group(3)) if match.group(3) else 0
+                        uptime_str = f"Uptime: {hours + days * 24}h {minutes}m"
+                    else:
+                        uptime_str = f"Uptime: {raw_uptime}"
+                else:
+                    uptime_str = "Uptime: N/A"
+                workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
+                latest_sub = "N/A"
+                latest_follower = "N/A"
+                try:
+                    sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
+                    if os.path.isfile(sub_path):
+                        with open(sub_path, "r", encoding="utf-8") as f:
+                            latest_sub = f.read().strip() or "N/A"
+                except Exception:
+                    pass
+                try:
+                    follower_path = os.path.join(labels_dir, "most_recent_follower.txt")
+                    if os.path.isfile(follower_path):
+                        with open(follower_path, "r", encoding="utf-8") as f:
+                            latest_follower = f.read().strip() or "N/A"
+                except Exception:
+                    pass
+                # Get extra messages (first three are always: encouragement, jackpot, odds, then follower count)
+                extra_messages = await get_ticker_messages()
+                # Guarantee the first three are always present and never deduplicated out
+                # Title always first
+                title_msg = f"Title: {info.get('title', 'N/A') if info else 'N/A'}"
+                always_present = [title_msg]
+                if len(extra_messages) > 0:
+                    always_present.append(extra_messages[0])  # encouragement
+                if len(extra_messages) > 1:
+                    always_present.append(extra_messages[1])  # jackpot
+                if len(extra_messages) > 2:
+                    always_present.append(extra_messages[2])  # odds
+                # Follower count (look for a message starting with 'Followers:')
+                follower_msg = next((m for m in extra_messages if m.startswith('Followers:')), None)
+                if follower_msg:
+                    always_present.append(follower_msg)
+
+                # Core info: always present, never deduplicated out (but skip title)
+                core_messages = [
+                    f"Latest Subscriber: {latest_sub}",
+                    f"Latest Follower: {latest_follower}",
                     f"Viewers: {info.get('viewers', 'N/A') if info else 'N/A'}",
-                    f"Uptime: {info.get('uptime', 'N/A') if info else 'N/A'}",
-                    f"Recent Subscriber: {subscriber if subscriber else 'N/A'}",
+                    uptime_str,
                     f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
-                ] + label_messages
-                if weather_msgs:
-                    for msg in weather_msgs:
-                        if msg.startswith("Weather: "):
-                            messages.append(msg[len("Weather: "):])
-                        else:
-                            messages.append(msg)
-                for msg in messages:
-                    await broadcast_overlay_message({"type": "ticker", "text": msg})
-                    await asyncio.sleep(5)
+                ]
+                # Add label stats (top b/g/d, top 3 g, etc.)
+                from bot.labels_stats import read_label
+                try:
+                    core_messages.extend([
+                        f"Top B: {read_label('Top B')}",
+                        f"Top G: {read_label('Top G')}",
+                        f"Top D: {read_label('Top D')}",
+                        f"Top 3 G: {read_label('Top 3 G')}",
+                        f"Top 3 D: {read_label('Top 3 D')}",
+                        f"Top 3 B: {read_label('Top 3 B')}"
+                    ])
+                except Exception:
+                    pass
+
+                unified = always_present + core_messages
+                seen = set(unified)
+                # Add the rest of extra_messages, deduplicated
+                for m in extra_messages:
+                    if m and m not in seen and m != "N/A" and not m.startswith("[ERROR]"):
+                        unified.append(m)
+                        seen.add(m)
+                if unified:
+                    full_ticker = ' | '.join(unified)
+                    await broadcast_overlay_message({"type": "ticker", "text": full_ticker})
+                else:
+                    await broadcast_overlay_message({"type": "ticker", "text": "No ticker data available."})
             except Exception as e:
                 logging.error(f"[TICKER ERROR] {e}", exc_info=True)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
     @commands.command(name='ticker')
     async def ticker(self, ctx):
         if not ctx.author.is_mod:
@@ -175,6 +273,17 @@ class Bot(commands.Bot):
     async def event_message(self, message):
         author_name = message.author.name if message.author else "Unknown"
         print(f"Message from {author_name}: {message.content}")
+        # AI chat and pirate list logic
+        if message.author and message.content:
+            import logging
+            import os
+            from datetime import datetime, timedelta
+            content_lower = message.content.lower()
+            bot_names = ["@meangenebot", "@mean_gene_bot", "@mean gene bot"]
+            if any(name in content_lower for name in bot_names):
+                # AI functionality temporarily disabled. Code is preserved for future reactivation.
+                return
+        # Default: pass to cogs/commands
         if message.author:
             await self.handle_commands(message)
 
@@ -189,11 +298,43 @@ class Bot(commands.Bot):
         await broadcast_overlay_message({"image": "/gifs/darheart2.jpg"})
         await ctx.send("Overlay image triggered!")
 
+class DiscordBot(discord_commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        super().__init__(command_prefix='!', intents=intents)
+        
+    async def on_ready(self):
+        print(f'[DISCORD] Bot logged in as {self.user}')
+        
+    async def send_to_channel(self, message):
+        if DISCORD_CHANNEL_ID:
+            channel = self.get_channel(DISCORD_CHANNEL_ID)
+            if channel:
+                await channel.send(message)
+            else:
+                print(f'[DISCORD ERROR] Channel {DISCORD_CHANNEL_ID} not found')
+        else:
+            print('[DISCORD ERROR] No channel ID configured')
+
 async def main():
+    # Backup raffle state at startup
+    backup_raffle_state()
+
     # Start the overlay server in the background
     overlay_task = asyncio.create_task(start_overlay_server())
-    # Create and start the bot
+    
+    # Create and start the bots
     bot = Bot()
+    
+    # Initialize Discord bot if token is provided
+    discord_bot = None
+    if DISCORD_TOKEN:
+        discord_bot = DiscordBot()
+        bot.discord_client = discord_bot
+        print('[DISCORD] Discord integration enabled')
+    else:
+        print('[DISCORD] Discord token not found, Discord integration disabled')
 
     # Start ticker cycle tasks
     ticker_task = asyncio.create_task(bot.ticker_cycle_task())
@@ -212,11 +353,22 @@ async def main():
     from bot.commands.modnews import prepare as modnews_prepare
     modnews_prepare(bot)
 
-    # Run the bot (this blocks until shutdown)
-    await bot.start()
-    # Optionally, wait for overlay and ticker tasks to finish (if bot exits first)
-    await overlay_task
-    await ticker_task
+    # Register signal handler for graceful shutdown (Ctrl-C)
+    def shutdown_handler(signum, frame):
+        print("[BOT] Caught shutdown signal, backing up raffle state...")
+        backup_raffle_state()
+        exit(0)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
+    # Start both bots concurrently
+    tasks = [bot.start()]
+    
+    if discord_bot:
+        tasks.append(discord_bot.start(DISCORD_TOKEN))
+    
+    # Run all tasks concurrently
+    await asyncio.gather(*tasks, overlay_task, ticker_task)
 
 if __name__ == "__main__":
     try:

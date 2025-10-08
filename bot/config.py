@@ -1,0 +1,19 @@
+import os
+
+# Twitch Configuration
+TWITCH_TOKEN = os.getenv('TWITCH_TOKEN')
+TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
+TWITCH_CHANNEL = os.getenv('TWITCH_CHANNEL', 'meangeneokc')
+TWITCH_BOT_NAME = os.getenv('TWITCH_BOT_NAME', 'mean_gene_bot')
+
+# Discord Configuration
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+DISCORD_CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID', '0')) if os.getenv('DISCORD_CHANNEL_ID') else None
+
+# Other Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
+STREAMLABS_ACCESS_TOKEN = os.getenv('STREAMLABS_ACCESS_TOKEN')
+STREAMLABS_REFRESH_TOKEN = os.getenv('STREAMLABS_REFRESH_TOKEN')
+STREAMLABS_CLIENT_ID = os.getenv('STREAMLABS_CLIENT_ID')
+STREAMLABS_CLIENT_SECRET = os.getenv('STREAMLABS_CLIENT_SECRET')

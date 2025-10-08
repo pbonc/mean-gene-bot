@@ -2,9 +2,14 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Orbitron:wght@500&family=Fira+Code:wght@400;700&family=Share+Tech+Mono&family=Press+Start+2P&family=Permanent+Marker&family=Russo+One&family=Comic+Neue:wght@700&display=swap" rel="stylesheet">
+  <!-- Google Fonts + Symbol Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Orbitron:wght@500&family=Fira+Code:wght@400;700&family=Share+Tech+Mono&family=Press+Start+2P&family=Permanent+Marker&family=Russo+One&family=Comic+Neue:wght@700&family=Noto+Sans+Symbols&display=swap" rel="stylesheet">
   <style>
+    @font-face {
+      font-family: 'Segoe UI Symbol';
+      src: local('Segoe UI Symbol');
+      unicode-range: U+2600-26FF, U+2700-27BF, U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF;
+    }
     html, body {
       width: 1920px;
       height: 1080px;
@@ -103,6 +108,8 @@ window.onload = () => {
       'Permanent Marker',      // Handwritten
       'Russo One',             // Urban/modern
       'Comic Neue',            // Silly/comic
+      'Noto Sans Symbols',     // Symbols
+      'Segoe UI Symbol',       // Windows symbols
       'Consolas',
       'Courier New',
       'monospace'

@@ -35,6 +35,8 @@ class SimpleRaffleState:
         self.first_chatter_user = None
         self.ignored_users = set()
         self.load()
+        if not hasattr(self, 'bad_beat_jackpot'):
+            self.bad_beat_jackpot = 25
 
     def load(self):
         if os.path.exists(self.state_file):
@@ -50,6 +52,7 @@ class SimpleRaffleState:
             self.first_chatter_awarded = data.get("first_chatter_awarded", False)
             self.first_chatter_user = data.get("first_chatter_user", None)
             self.ignored_users = set([u.lower() for u in data.get("ignored_users", [])])
+            self.bad_beat_jackpot = data.get("bad_beat_jackpot", 25)
         else:
             self.save()
 
@@ -66,6 +69,7 @@ class SimpleRaffleState:
             "first_chatter_awarded": self.first_chatter_awarded,
             "first_chatter_user": self.first_chatter_user,
             "ignored_users": list(self.ignored_users),
+            "bad_beat_jackpot": self.bad_beat_jackpot,
         }
         with open(self.state_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -89,6 +93,7 @@ class SimpleRaffleState:
         self.chat_awarded = set()
         self.first_chatter_awarded = False
         self.first_chatter_user = None
+        # Do NOT reset bad_beat_jackpot here (leave as-is)
         self.save()
 
     def add_entries(self, user, count):
@@ -225,14 +230,40 @@ class SimpleRaffleState:
         return sorted(list(self.ignored_users))
 
 class RaffleCog(commands.Cog):
+    @commands.command(name="badbeat")
+    async def badbeat_command(self, ctx):
+        """Show the current bad beat jackpot in chat."""
+        jackpot = self.state.bad_beat_jackpot if hasattr(self.state, 'bad_beat_jackpot') else 25
+        await ctx.send(f"The current bad beat jackpot is {jackpot} entries!")
+        
     def __init__(self, bot):
         self.bot = bot
         self.state = SimpleRaffleState()
         self._raffle_closing_task = None
 
+    async def send_to_discord(self, message):
+        """Send message to Discord if Discord client is available."""
+        if hasattr(self.bot, 'discord_client') and self.bot.discord_client:
+            try:
+                await self.bot.discord_client.send_to_channel(message)
+            except Exception as e:
+                print(f'[DISCORD ERROR] Failed to send message: {e}')
+
     async def send_long_message(self, ctx, text):
         for chunk in chunk_message(text):
             await ctx.send(chunk)
+
+    @commands.command(name="testdrawmessage")
+    async def test_draw_message(self, ctx):
+        """Test Discord integration by sending a fake draw message."""
+        if not ctx.author.is_mod:
+            await ctx.send("Only mods can use this command.")
+            return
+        
+        # Send a fake winner message to Discord
+        test_message = "🎉 TEST: The winning number is 007! Congratulations @testuser! (123 out of 1000 numbers were picked)"
+        await self.send_to_discord(test_message)
+        await ctx.send("Test draw message sent to Discord!")
 
     @commands.command(name="raffle")
     async def raffle_command(self, ctx, *args):
@@ -259,7 +290,8 @@ class RaffleCog(commands.Cog):
                     await ctx.send("Usage: !raffle open [entries_per_chat]")
                     return
             self.state.open_raffle(entries_per_chat)
-            await ctx.send(f"Raffle is now open! Anyone who chats gets {entries_per_chat} free entr{'y' if entries_per_chat == 1 else 'ies'}! First chatter gets a special bonus.")
+            message = f"Raffle is now open! Anyone who chats gets {entries_per_chat} free entr{'y' if entries_per_chat == 1 else 'ies'}! First chatter gets a special bonus."
+            await ctx.send(message)
             return
 
         if cmd == "close":
@@ -281,7 +313,8 @@ class RaffleCog(commands.Cog):
                 self._raffle_closing_task = asyncio.create_task(self._countdown_to_closure(ctx, mins))
                 return
             self.state.close_raffle()
-            await ctx.send("Raffle is now closed.")
+            message = "Raffle is now closed."
+            await ctx.send(message)
             return
 
         if cmd == "clear":
@@ -330,22 +363,47 @@ class RaffleCog(commands.Cog):
                         closest_picks.append(pick)
                         closest_users.append(pick_user)
             if winner:
-                await ctx.send(f"The winning number is {num}! Congratulations @{winner}!")
+                total_picks = len(self.state.picks)
+                winner_message = f"The winning number is {num}! Congratulations @{winner}!"
+                discord_winner_message = f"🎉 {winner_message} ({total_picks} out of 1000 numbers were picked)"
+                await ctx.send(winner_message)
+                await self.send_to_discord(discord_winner_message)
                 if bad_beat_users:
                     user_number_pairs = [f"@{u} ({n})" for u, n in zip(bad_beat_users, bad_beat_numbers)]
-                    await ctx.send(f"Bad beat! {' and '.join(user_number_pairs)} {'was' if len(bad_beat_users) == 1 else 'were'} off by one and receive 5 bonus entries.")
+                    jackpot = self.state.bad_beat_jackpot if hasattr(self.state, 'bad_beat_jackpot') else 25
+                    split = (jackpot + len(set(bad_beat_users)) - 1) // len(set(bad_beat_users))
+                    bad_beat_message = f"Bad beat! {' and '.join(user_number_pairs)} {'was' if len(bad_beat_users) == 1 else 'were'} off by one and receive {split} bonus entr{'y' if split == 1 else 'ies'} each from the jackpot!"
+                    await ctx.send(bad_beat_message)
+                    await self.send_to_discord(f"💔 {bad_beat_message}")
                     for bbuser in set(bad_beat_users):
-                        self.state.add_entries(bbuser, 5)
+                        self.state.add_entries(bbuser, split)
+                    self.state.bad_beat_jackpot = 25
+                    self.state.save()
                 else:
-                    await ctx.send("There were no bad beats this draw.")
+                    no_bad_beat_message = "There were no bad beats this draw."
+                    await ctx.send(no_bad_beat_message)
+                    await self.send_to_discord(f"ℹ️ {no_bad_beat_message}")
+                    self.state.bad_beat_jackpot = 25
+                    self.state.save()
             else:
-                await ctx.send(f"The winning number is {num}! No winner! The prize rolls over!")
+                total_picks = len(self.state.picks)
+                no_winner_message = f"The winning number is {num}! No winner! The prize rolls over!"
+                discord_no_winner_message = f"😔 {no_winner_message} ({total_picks} out of 1000 numbers were picked)"
+                await ctx.send(no_winner_message)
+                await self.send_to_discord(discord_no_winner_message)
                 # Closest picks
                 if closest_picks:
                     # Find all unique (user, pick) pairs for the closest picks
                     pairs = list(set((u, p) for u, p in zip(closest_users, closest_picks)))
                     pair_strs = [f"@{u} ({p})" for (u, p) in pairs]
-                    await ctx.send(f"Closest pick(s): {' , '.join(pair_strs)} (distance {closest_distance})")
+                    closest_message = f"Closest pick(s): {' , '.join(pair_strs)} (distance {closest_distance})"
+                    await ctx.send(closest_message)
+                    await self.send_to_discord(f"🎯 {closest_message}")
+                # No winner: increment jackpot by 5
+                self.state.bad_beat_jackpot += 5
+                jackpot_message = f"Bad beat jackpot increased to {self.state.bad_beat_jackpot} entries!"
+                await self.send_to_discord(f"💰 {jackpot_message}")
+                self.state.save()
             return
 
         if cmd == "simdraw":
