@@ -96,11 +96,30 @@ class MediaOverlayCog(commands.Cog):
         # --- GIFs ---
         images = {}
         try:
-            for entry in os.scandir(GIF_ROOT):
-                if entry.is_file() and any(entry.name.lower().endswith(ext) for ext in IMAGE_EXTS):
-                    name, ext = os.path.splitext(entry.name)
+            # Walk the gifs directory recursively so files in subfolders (e.g., gifs/heart/) are discovered
+            for dirpath, dirnames, filenames in os.walk(GIF_ROOT):
+                # relative directory under GIF_ROOT (use forward slashes for web paths)
+                rel_dir = os.path.relpath(dirpath, GIF_ROOT)
+                if rel_dir == ".":
+                    rel_dir = ""
+                else:
+                    rel_dir = rel_dir.replace('\\', '/')
+                for fname in filenames:
+                    if not any(fname.lower().endswith(ext) for ext in IMAGE_EXTS):
+                        continue
+                    name, ext = os.path.splitext(fname)
+                    # Start with filename-based mapping (handles names containing 'heart')
                     cmd = map_filename_to_command(name)
-                    images[cmd] = (entry.path, entry.name)
+                    # If the filename didn't contain 'heart' but the file is inside a folder named 'heart',
+                    # map the command to <3 suffix (e.g., 'dar' in gifs/heart -> 'dar<3')
+                    if '<3' not in cmd and rel_dir:
+                        # check each segment of rel_dir
+                        segments = [s.lower() for s in rel_dir.split('/') if s]
+                        if any('heart' in s for s in segments):
+                            cmd = f"{name}<3"
+                    # Store full filesystem path and the relative web path for the file (subfolder/name)
+                    rel_fname = f"{rel_dir}/{fname}".lstrip('/') if rel_dir else fname
+                    images[cmd] = (os.path.join(dirpath, fname), rel_fname)
         except Exception as e:
             self.logger.warning(f"GIF overlay dir not found: {e}")
 
@@ -172,9 +191,9 @@ class MediaOverlayCog(commands.Cog):
                     await self.sfx_queue.put((path_or_paths, ctx, None))
             # Overlay image
             if "image" in entry:
-                path, fname = entry["image"]
-                ext = os.path.splitext(fname)[1].lower()
-                url = f"/gifs/{fname}"
+                path, rel_fname = entry["image"]
+                ext = os.path.splitext(rel_fname)[1].lower()
+                url = f"/gifs/{rel_fname}"
                 duration = get_gif_duration_ms(path) if ext == ".gif" else 5000
                 await broadcast_overlay_message({
                     "type": "image",
