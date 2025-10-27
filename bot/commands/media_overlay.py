@@ -7,6 +7,13 @@ from twitchio.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
 from PIL import Image
+from typing import List, Dict
+
+# Optional Google Sheets sync helper (if requirements installed)
+try:
+    from bot.google_sheets_sync import write_full_sheet
+except Exception:
+    write_full_sheet = None
 
 GIF_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "overlay_static", "gifs"))
 SFX_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sfx"))
@@ -85,9 +92,19 @@ class MediaOverlayCog(commands.Cog):
                 if cmd not in prev_snapshot:
                     self._register_media_command(cmd, entry)
                     await self._announce_new_command(cmd, entry)
+                    # Sync sheet after adding a new command
+                    try:
+                        await self._maybe_sync_sheet()
+                    except Exception:
+                        self.logger.exception("Error syncing sheet after add")
             for cmd in list(prev_snapshot.keys()):
                 if cmd not in snapshot:
                     self._unregister_media_command(cmd)
+                    # Sync sheet after removal
+                    try:
+                        await self._maybe_sync_sheet()
+                    except Exception:
+                        self.logger.exception("Error syncing sheet after remove")
             prev_snapshot = snapshot
             self.media_commands = snapshot
             await asyncio.sleep(SCAN_INTERVAL)
@@ -209,6 +226,56 @@ class MediaOverlayCog(commands.Cog):
         self._registered.add(cmd)
         self.logger.info(f"Registered media overlay command: !{cmd}")
 
+    def get_registered_media_command_rows(self) -> List[Dict]:
+        """Return a list of dicts representing the current media commands for syncing.
+
+        Fields: command_name, has_image, image_rel, duration_ms, has_sfx, sfx_type, sfx_paths
+        """
+        rows: List[Dict] = []
+        for cmd, entry in self.media_commands.items():
+            row = {
+                "command_name": cmd,
+                "has_image": "image" in entry,
+                "image_rel": entry.get("image", (None, None))[1] if entry.get("image") else "",
+                "duration_ms": (get_gif_duration_ms(entry.get("image")[0]) if (entry.get("image") and entry.get("image")[1].lower().endswith('.gif')) else (entry.get("image") and 5000)) if entry.get("image") else "",
+                "has_sfx": "sfx" in entry,
+                "sfx_type": entry.get("sfx", (None, None, None))[1] if entry.get("sfx") else "",
+                "sfx_paths": ",".join(entry.get("sfx")[0]) if (entry.get("sfx") and isinstance(entry.get("sfx")[0], list)) else (entry.get("sfx")[0] if entry.get("sfx") else ""),
+            }
+            rows.append(row)
+        return rows
+
+    async def _maybe_sync_sheet(self, ctx=None):
+        """Attempt to sync the current media command list to Google Sheets if configured.
+
+        This runs the blocking `write_full_sheet` in an executor to avoid blocking the event loop.
+        If ctx is provided, send status messages to the channel.
+        """
+        json_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+        spreadsheet_id = os.environ.get("SFX_SPREADSHEET_ID")
+        sheet_name = os.environ.get("SFX_SHEET_NAME", "sfx")
+        if not write_full_sheet:
+            self.logger.warning("Google Sheets sync attempted but gspread is unavailable")
+            if ctx:
+                await ctx.send("⚠️ Google Sheets sync is not configured (missing requirements).")
+            return
+        if not json_path or not spreadsheet_id:
+            self.logger.warning("Google Sheets sync attempted but env vars missing")
+            if ctx:
+                await ctx.send("⚠️ Google Sheets sync not configured (set GOOGLE_SERVICE_ACCOUNT_JSON and SFX_SPREADSHEET_ID).")
+            return
+
+        rows = self.get_registered_media_command_rows()
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, write_full_sheet, json_path, spreadsheet_id, sheet_name, rows)
+            if ctx:
+                await ctx.send(f"✅ SFX sheet synced ({len(rows)} rows).")
+        except Exception as e:
+            self.logger.exception("Failed to sync SFX sheet: %s", e)
+            if ctx:
+                await ctx.send("❌ Failed to sync SFX sheet; check logs.")
+
     def _unregister_media_command(self, cmd):
         if cmd in self._registered:
             try:
@@ -273,6 +340,14 @@ class MediaOverlayCog(commands.Cog):
             if "sfx" in entry and entry["sfx"][1] in ("flat", "folderfile", "folder")
         ])
         await ctx.send(f"{count} unique sound effect commands.")
+
+    @commands.command(name="syncsfx")
+    async def syncsfx(self, ctx):
+        """Force a sync of the SFX/GIF command list to the configured Google Sheet. Mod-only."""
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send("Only mods can force SFX sync.")
+            return
+        await self._maybe_sync_sheet(ctx)
 
 def prepare(bot):
     bot.add_cog(MediaOverlayCog(bot))
