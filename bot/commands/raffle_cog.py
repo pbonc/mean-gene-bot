@@ -34,6 +34,8 @@ class SimpleRaffleState:
         self.first_chatter_awarded = False
         self.first_chatter_user = None
         self.ignored_users = set()
+        # Ensure jackpot default exists before loading (load may call save)
+        self.bad_beat_jackpot = 25
         self.load()
         if not hasattr(self, 'bad_beat_jackpot'):
             self.bad_beat_jackpot = 25

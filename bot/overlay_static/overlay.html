@@ -83,25 +83,30 @@
     to { transform: translateX(-100%); }
   }
 
+  /* Center display: reserve space at the bottom so it cannot overlap
+     the ticker bar (ticker height is 60px). We leave an extra 20px gap. */
   #center-display {
     position: absolute;
-    top: 50%;
     left: 50%;
+    top: 50%;
     transform: translate(-50%, -50%);
     max-width: 80%;
-    max-height: 80%;
+    /* Prevent the displayed image from extending into the bottom ticker area. */
+    max-height: calc(100vh - 80px); /* 60px ticker + 20px gap */
     display: none;
     z-index: 10;
     background: rgba(0,0,0,0.0);
+    pointer-events: none;
   }
-
   #center-display img {
-    width: 100%;
-    height: auto;
     display: block;
     margin: 0 auto;
-    max-width: 700px;
-    max-height: 700px;
+    /* Constrain image to the available viewport while keeping the bottom gap. */
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
   }
   </style>
 </head>
@@ -121,44 +126,23 @@ window.onload = () => {
   const logo = document.getElementById("logo");
   const centerDisplay = document.getElementById("center-display");
   const centerImg = centerDisplay.querySelector("img");
-
-  // folders relative to overlay.html
-  const FOLDERS = {
-    heart: "gifs/heart/",
-    gif: "gifs/",
-  };
+  const FOLDERS = { heart: "gifs/heart/", gif: "gifs/" };
   const IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".webp"];
-
-  // How long to display overlays, ms
   const OVERLAY_DISPLAY_TIME = 2500;
-
-  // Default logo/category
   let categoryText = "DNN";
-
   function setLogo(text) {
     categoryText = (typeof text === "string" && text.length > 0) ? text : "DNN";
     logo.textContent = categoryText;
-    // Optionally: add per-category color or style logic here in the future
   }
-
   setLogo(categoryText);
-
   const ws = new WebSocket("ws://localhost:8080/ws");
-
-  ws.onopen = () => {
-    console.log("✅ WebSocket connection established.");
-  };
-
-  ws.onclose = (event) => {
-    console.log("❌ WebSocket connection closed:", event);
-  };
-
-  ws.onerror = (err) => {
-    console.error("❌ WebSocket error:", err);
-  };
-
+  ws.onopen = () => { console.log("✅ WebSocket connection established."); };
+  ws.onclose = (event) => { console.log("❌ WebSocket connection closed:", event); };
+  ws.onerror = (err) => { console.error("❌ WebSocket error:", err); };
+  let latestTicker = defaultMessage;
+  let nextTicker = null;
+  let isAnimating = false;
   ws.onmessage = (event) => {
-    console.log("📨 WebSocket message received:", event.data);
     let msg;
     try {
       msg = JSON.parse(event.data);
@@ -182,19 +166,13 @@ window.onload = () => {
       setLogo(msg.text);
       return;
     }
-
-    // Flexible action handler
+    if (msg.type === "image" && typeof msg.url === "string") { showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME); return; }
+    if (msg.type === "logo" && typeof msg.text === "string") { setLogo(msg.text); return; }
     if (msg.action && typeof msg.action === "string") {
       const parsed = parseAction(msg.action);
-      if (parsed) {
-        const { folder, base } = parsed;
-        tryImageExtensions(folder, base, OVERLAY_DISPLAY_TIME);
-      } else {
-        console.warn("⚠️ Couldn't parse overlay action:", msg.action);
-      }
+      if (parsed) { const { folder, base } = parsed; tryImageExtensions(folder, base, OVERLAY_DISPLAY_TIME); } else { console.warn("⚠️ Couldn't parse overlay action:", msg.action); }
       return;
     }
-
     console.warn("⚠️ Unknown message format:", msg);
   };
 
@@ -265,42 +243,15 @@ window.onload = () => {
       if (found) break;
     }
   }
-
-  // Preload image to check if it exists
-  function testImage(url, onLoad, onError) {
-    const img = new window.Image();
-    img.onload = onLoad;
-    img.onerror = onError;
-    img.src = url + '?cachebust=' + Math.random();
-  }
-
+  // Center image display (for overlay commands)
   function showCenterImage(imgPath, duration) {
     centerImg.src = imgPath;
-    centerDisplay.style.display = "block";
+    centerDisplay.style.display = 'block';
     clearTimeout(centerDisplay._hideTimeout);
     centerDisplay._hideTimeout = setTimeout(() => {
-      centerDisplay.style.display = "none";
-      centerImg.src = "";
+      centerDisplay.style.display = 'none';
+      centerImg.src = '';
     }, duration);
   }
-
-  // Returns {folder, base} for supported actions, or null
-  function parseAction(action) {
-    // 1. Heart folder logic: trigger_<base>_heart
-    let m = /^trigger_([a-z][a-z0-9]*)(\d*)_heart$/.exec(action);
-    if (m) {
-      // m[1] is the base (e.g. "dar", "hop"), m[2] is the number if any (e.g. "2", "7", "")
-      let base = m[1];
-      if (m[2]) base += m[2];
-      return { folder: "heart", base };
-    }
-    // 2. gifs/ folder for non-heart: trigger_<base>
-    m = /^trigger_([a-z0-9_]+)$/.exec(action);
-    if (m) return { folder: "gif", base: m[1] };
-    return null;
-  }
-};
+}
 </script>
-
-</body>
-</html>

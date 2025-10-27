@@ -1,3 +1,12 @@
+# Non-API cache for local text sources
+_local_text_cache = {
+    'modnews': [],
+    'derpisms': [],
+    'tics': [],
+    'quotes': [],
+    'timestamp': 0
+}
+_local_text_cache_interval = 30  # seconds
 import os
 import asyncio
 from bot.twitch_stats import get_stream_info
@@ -159,10 +168,34 @@ async def get_ticker_messages():
 
         # Add a random quote
         try:
-            import json
-            from datetime import datetime
+            workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
+            # Modnews
+            modnews_path = os.path.join(assets_txt_dir, "modnews.txt")
+            modnews_msgs = []
+            if os.path.isfile(modnews_path):
+                with open(modnews_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        msg = line.strip()
+                        if msg:
+                            modnews_msgs.append(f"ModNews: {msg}")
+            # Derpisms
+            derpisms_path = os.path.join(assets_txt_dir, "derpisms.txt")
+            derpisms = []
+            if os.path.isfile(derpisms_path):
+                with open(derpisms_path, "r", encoding="utf-8") as f:
+                    derpisms = [line.strip() for line in f if line.strip()]
+            # Tics
+            tic_path = os.path.join(assets_txt_dir, "tic.txt")
+            tics = []
+            if os.path.isfile(tic_path):
+                with open(tic_path, "r", encoding="utf-8") as tf:
+                    tics = [line.strip() for line in tf if line.strip()]
+            # Quotes
             quotes_path = os.path.join(workspace_root, "data", "quotes.json")
+            quotes = []
             if os.path.isfile(quotes_path):
+                import json
                 with open(quotes_path, "r", encoding="utf-8") as f:
                     quotes = json.load(f)
                 valid_quotes = {qid: q for qid, q in quotes.items() if q["text"] != "MISSING QUOTE"}
