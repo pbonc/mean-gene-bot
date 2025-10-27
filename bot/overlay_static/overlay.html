@@ -120,6 +120,8 @@
 <script>
 window.onload = () => {
   const tickerText = document.getElementById("ticker-text");
+  let tickerQueue = [];
+  let isScrolling = false;
   const defaultMessage = "Welcome to the Darmunist News Network.";
   const logo = document.getElementById("logo");
   const centerDisplay = document.getElementById("center-display");
@@ -142,9 +144,26 @@ window.onload = () => {
   let isAnimating = false;
   ws.onmessage = (event) => {
     let msg;
-    try { msg = JSON.parse(event.data); } catch (err) { console.error("❌ Failed to parse message as JSON:", err); return; }
+    try {
+      msg = JSON.parse(event.data);
+    } catch (err) {
+      console.error("❌ Failed to parse message as JSON:", err);
+      return;
+    }
+
+    // Ticker: queue up messages for scrolling
     if (msg.type === "ticker" && typeof msg.text === "string") {
-      if (!isAnimating) { latestTicker = msg.text; startTickerScroll(latestTicker); } else { nextTicker = msg.text; }
+      tickerQueue.push(msg.text);
+      if (!isScrolling) startTickerScroll();
+      return;
+    }
+    if (msg.type === "image" && typeof msg.url === "string") {
+      showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME);
+      return;
+    }
+    // NEW: Set logo/category
+    if (msg.type === "logo" && typeof msg.text === "string") {
+      setLogo(msg.text);
       return;
     }
     if (msg.type === "image" && typeof msg.url === "string") { showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME); return; }
@@ -156,22 +175,73 @@ window.onload = () => {
     }
     console.warn("⚠️ Unknown message format:", msg);
   };
-  function startTickerScroll(text) {
-    isAnimating = true;
+
+  // Ticker scroll logic
+  function startTickerScroll() {
+    isScrolling = true;
+    // Show default message first
+    showStaticTicker(defaultMessage);
+    setTimeout(() => {
+      if (tickerQueue.length === 0) {
+        isScrolling = false;
+        showStaticTicker(defaultMessage);
+        return;
+      }
+      // Concatenate all messages in the queue
+      const fullMsg = tickerQueue.join(' | ');
+      tickerQueue = [];
+      scrollTicker(fullMsg, () => {
+        // After scroll, revert to default, then restart
+        showStaticTicker(defaultMessage);
+        setTimeout(() => {
+          isScrolling = false;
+          if (tickerQueue.length > 0) startTickerScroll();
+        }, 2000);
+      });
+    }, 2000);
+  }
+
+  function showStaticTicker(text) {
+    tickerText.innerHTML = '';
+    tickerText.textContent = text;
+  }
+
+  function scrollTicker(text, onComplete) {
     tickerText.innerHTML = '';
     const span = document.createElement('span');
     span.className = 'scrolling';
     span.textContent = text;
     tickerText.appendChild(span);
+    // Calculate animation duration based on text length
+    const pxPerChar = 22; // adjust for speed
     const duration = Math.max(8, text.length * 0.22); // seconds
     span.style.animationDuration = duration + 's';
-    let preloaded = false;
+    // Remove after animation
     span.addEventListener('animationend', () => {
       tickerText.innerHTML = '';
-      isAnimating = false;
-      if (nextTicker) { latestTicker = nextTicker; nextTicker = null; startTickerScroll(latestTicker); } else { startTickerScroll(latestTicker || defaultMessage); }
+      if (onComplete) onComplete();
     });
-    setTimeout(() => { if (nextTicker && !preloaded) { preloaded = true; } }, duration * 800);
+  }
+
+  // Try all supported extensions, show the first image that loads
+  function tryImageExtensions(folder, base, duration) {
+    let tried = 0;
+    let found = false;
+    for (const ext of IMAGE_EXTENSIONS) {
+      const imgPath = FOLDERS[folder] + base + ext;
+      testImage(imgPath, () => {
+        if (!found) {
+          found = true;
+          showCenterImage(imgPath, duration);
+        }
+      }, () => {
+        tried++;
+        if (tried === IMAGE_EXTENSIONS.length && !found) {
+          console.warn(`⚠️ No image found for ${base} in ${folder}`);
+        }
+      });
+      if (found) break;
+    }
   }
   // Center image display (for overlay commands)
   function showCenterImage(imgPath, duration) {

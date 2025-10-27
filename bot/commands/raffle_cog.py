@@ -37,6 +37,8 @@ class SimpleRaffleState:
         # Ensure jackpot default exists before loading (load may call save)
         self.bad_beat_jackpot = 25
         self.load()
+        if not hasattr(self, 'bad_beat_jackpot'):
+            self.bad_beat_jackpot = 25
 
     def load(self):
         if os.path.exists(self.state_file):
@@ -380,11 +382,11 @@ class RaffleCog(commands.Cog):
                     self.state.bad_beat_jackpot = 25
                     self.state.save()
                 else:
-                    # No bad beat this draw: do not reset the jackpot — leave it as-is
                     no_bad_beat_message = "There were no bad beats this draw."
                     await ctx.send(no_bad_beat_message)
                     await self.send_to_discord(f"ℹ️ {no_bad_beat_message}")
-                    # Intentionally do NOT change self.state.bad_beat_jackpot here
+                    self.state.bad_beat_jackpot = 25
+                    self.state.save()
             else:
                 total_picks = len(self.state.picks)
                 no_winner_message = f"The winning number is {num}! No winner! The prize rolls over!"

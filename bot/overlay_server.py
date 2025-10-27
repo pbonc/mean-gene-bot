@@ -24,9 +24,6 @@ async def websocket_handler(request):
                         as_overlay_clients.add(ws)
                 except Exception:
                     pass
-    except Exception as e:
-        import logging
-        logging.error(f"[WS] Exception in websocket_handler: {e}")
     finally:
         overlay_clients.discard(ws)
         as_overlay_clients.discard(ws)
@@ -45,6 +42,32 @@ async def as_overlay(request):
 async def anime_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "anime_overlay.html"))
 
+    # Start AS_overlay message task
+    async def as_overlay_task():
+        import random
+        import time
+        from bot.labels_stats import get_ticker_messages
+        while True:
+            try:
+                # Only send if there are clients
+                if as_overlay_clients:
+                    msgs = await get_ticker_messages()
+                    if msgs:
+                        msg = random.choice(msgs)
+                        for ws in list(as_overlay_clients):
+                            if not ws.closed:
+                                await ws.send_json({"type": "as_overlay_message", "message": msg})
+                            else:
+                                as_overlay_clients.discard(ws)
+                await asyncio.sleep(10)
+            except Exception:
+                await asyncio.sleep(10)
+    asyncio.create_task(as_overlay_task())
+
+async def shutdown():
+    global _runner
+    if _runner:
+        await _runner.cleanup()
 
 # Store the most recent ticker message
 latest_ticker_message = "Welcome to the Darmunist News Network."
