@@ -8,6 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
 from PIL import Image
 from typing import List, Dict
+import wave
+import contextlib
+import math
 
 # Optional Google Sheets sync helper (if requirements installed)
 try:
@@ -49,6 +52,56 @@ def get_gif_duration_ms(path):
     except Exception:
         pass
     return 5000
+
+
+def get_audio_duration_ms(path: str):
+    """Return audio duration in milliseconds for common types.
+
+    Strategies:
+    - For WAV files, use the stdlib wave module.
+    - Try mutagen (if installed) for mp3/ogg and others.
+    - If all else fails, return empty string.
+    """
+    if not path or not isinstance(path, str):
+        return ""
+    try:
+        _, ext = os.path.splitext(path)
+        ext = ext.lower()
+        if ext == ".wav":
+            with contextlib.closing(wave.open(path, "r")) as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                seconds = frames / float(rate) if rate else 0
+                return int(seconds * 1000)
+        # try mutagen if available for mp3/ogg/etc
+        try:
+            # import lazily; optional dependency
+            from mutagen import File as MutagenFile  # type: ignore
+            m = MutagenFile(path)
+            if m and hasattr(m, "info") and getattr(m.info, "length", None) is not None:
+                return int(m.info.length * 1000)
+        except Exception:
+            # mutagen not installed or failed to read file -> skip
+            pass
+    except Exception:
+        pass
+    return ""
+
+
+def get_audio_duration_seconds_truncated(path: str):
+    """Return audio duration in seconds truncated to the tenth (e.g. 12.3).
+
+    Returns a float with one decimal place, or empty string if unknown.
+    """
+    ms = get_audio_duration_ms(path)
+    if not ms:
+        return ""
+    try:
+        seconds = float(ms) / 1000.0
+        truncated = math.floor(seconds * 10) / 10.0
+        return truncated
+    except Exception:
+        return ""
 
 class MediaOverlayCog(commands.Cog):
     def __init__(self, bot):
@@ -227,22 +280,64 @@ class MediaOverlayCog(commands.Cog):
         self.logger.info(f"Registered media overlay command: !{cmd}")
 
     def get_registered_media_command_rows(self) -> List[Dict]:
-        """Return a list of dicts representing the current media commands for syncing.
+        """For a public-facing sheet we only expose two columns:
 
-        Fields: command_name, has_image, image_rel, duration_ms, has_sfx, sfx_type, sfx_paths
+        - command_name
+        - description
+
+        The description is a short, non-sensitive summary combining whether the command
+        has an overlay image (and the image filename) and whether it plays an SFX.
         """
         rows: List[Dict] = []
         for cmd, entry in self.media_commands.items():
-            row = {
-                "command_name": cmd,
-                "has_image": "image" in entry,
-                "image_rel": entry.get("image", (None, None))[1] if entry.get("image") else "",
-                "duration_ms": (get_gif_duration_ms(entry.get("image")[0]) if (entry.get("image") and entry.get("image")[1].lower().endswith('.gif')) else (entry.get("image") and 5000)) if entry.get("image") else "",
-                "has_sfx": "sfx" in entry,
-                "sfx_type": entry.get("sfx", (None, None, None))[1] if entry.get("sfx") else "",
-                "sfx_paths": ",".join(entry.get("sfx")[0]) if (entry.get("sfx") and isinstance(entry.get("sfx")[0], list)) else (entry.get("sfx")[0] if entry.get("sfx") else ""),
-            }
-            rows.append(row)
+            parts = []
+            if "image" in entry:
+                # image_rel is the relative path used by the overlay (folder/file.ext)
+                image_rel = entry.get("image", (None, None))[1] or ""
+                parts.append(f"Image: {image_rel}")
+            if "sfx" in entry:
+                sfx = entry.get("sfx")
+                sfx_type = sfx[1]
+                if sfx_type == "folder":
+                    parts.append(f"SFX: {sfx[2]} (folder)")
+                else:
+                    # sfx[0] may be a path string
+                    sfx_path = sfx[0]
+                    if isinstance(sfx_path, list):
+                        # shouldn't happen for non-folder types, but guard anyway
+                        parts.append(f"SFX: {sfx[2]} (multiple)")
+                    else:
+                        parts.append(f"SFX: {os.path.splitext(os.path.basename(sfx_path))[0]}")
+                        # compute duration if available for single-file SFX
+                        dur_ms = get_audio_duration_ms(sfx_path)
+                        # do not append duration to the public description; duration will be a separate column
+
+            description = " | ".join(parts)
+
+            # include duration as a separate column when available (seconds truncated to 0.1s)
+            # For folder randomizers or multi-path entries this will be blank.
+            sfx_duration = ""
+            if "sfx" in entry:
+                sfx_entry = entry.get("sfx")
+                sfx_path_or_list = sfx_entry[0]
+                if isinstance(sfx_path_or_list, str):
+                    sfx_duration = get_audio_duration_seconds_truncated(sfx_path_or_list)
+
+            rows.append({"command_name": cmd, "description": description, "duration": sfx_duration})
+        # Sort rows so symbols come first, then letters, then numbers (both within-group sorted lexicographically)
+        def _sort_key(name: str):
+            if not name:
+                return (3, "")
+            first = name[0]
+            if first.isalpha():
+                cat = 1
+            elif first.isdigit():
+                cat = 2
+            else:
+                cat = 0
+            return (cat, name.lower())
+
+        rows.sort(key=lambda r: _sort_key(r.get("command_name", "")))
         return rows
 
     async def _maybe_sync_sheet(self, ctx=None):

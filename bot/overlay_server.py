@@ -20,8 +20,19 @@ async def websocket_handler(request):
                 try:
                     import json
                     data = json.loads(msg.data)
+                    # AS overlay subscription (AS overlay pages send this)
                     if data.get('type') == 'as_overlay_subscribe':
                         as_overlay_clients.add(ws)
+                    # Standard overlay pages request the latest full ticker
+                    # on connect. Respond only to the requesting client so
+                    # AS overlay clients do not receive the full ticker.
+                    if data.get('type') == 'request_latest_ticker':
+                        # Only reply if we have a non-empty canonical ticker to send.
+                        if latest_ticker_message and latest_ticker_message.strip():
+                            try:
+                                await ws.send_json({"type": "ticker", "text": latest_ticker_message})
+                            except Exception:
+                                pass
                 except Exception:
                     pass
     finally:
@@ -42,63 +53,38 @@ async def as_overlay(request):
 async def anime_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "anime_overlay.html"))
 
-    # Start AS_overlay message task
-    async def as_overlay_task():
-        import random
-        import time
-        from bot.labels_stats import get_ticker_messages
-        while True:
-            try:
-                # Only send if there are clients
-                if as_overlay_clients:
-                    msgs = await get_ticker_messages()
-                    if msgs:
-                        msg = random.choice(msgs)
-                        for ws in list(as_overlay_clients):
-                            if not ws.closed:
-                                await ws.send_json({"type": "as_overlay_message", "message": msg})
-                            else:
-                                as_overlay_clients.discard(ws)
-                await asyncio.sleep(10)
-            except Exception:
-                await asyncio.sleep(10)
-    asyncio.create_task(as_overlay_task())
-
 async def shutdown():
     global _runner
     if _runner:
         await _runner.cleanup()
 
-# Store the most recent ticker message
-latest_ticker_message = "Welcome to the Darmunist News Network."
+# Store the most recent ticker message. Start empty so overlays don't
+# receive a welcome/default ticker on connect.
+latest_ticker_message = ""
 
 async def as_overlay_task():
     logging.basicConfig(level=logging.INFO)
     import time
     import random
-    from bot.labels_stats import get_ticker_on_deck
+    # This task sends the latest full ticker string (as produced by main.ticker_cycle_task)
+    # to AS overlay clients at a regular interval. It does NOT build the ticker itself
+    # to avoid diverging formatting or ordering.
     while True:
         try:
             now = time.time()
             logging.info(f"[TICKER DEBUG] Broadcast at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}, clients: {len(as_overlay_clients)}")
-            ticker_messages = get_ticker_on_deck()
-            # Pick one singular message (random or first)
-            if ticker_messages and isinstance(ticker_messages, list) and len(ticker_messages) > 0:
-                singular_message = random.choice(ticker_messages)
-            else:
-                singular_message = "Welcome to the Darmunist News Network."
-            # Send the same message as AFK overlay (afk_ticker)
+            # AS overlay task intentionally does not send ticker messages.
+            # AS overlay clients are a separate UI and should not receive the regular
+            # ticker payloads (those are sent via broadcast_overlay_message as type 'ticker').
             if as_overlay_clients:
-                for ws in list(as_overlay_clients):
-                    if not ws.closed:
-                        await ws.send_json({"type": "as_overlay_message", "message": singular_message})
-                    else:
-                        as_overlay_clients.discard(ws)
+                # For now we simply log connected AS overlay clients; custom AS messages
+                # can be implemented here in the future.
+                logging.info(f"[AS_OVERLAY] AS clients connected: {len(as_overlay_clients)}")
             else:
-                logging.info("[TICKER DEBUG] No overlay clients connected.")
+                logging.debug("[AS_OVERLAY] No AS overlay clients connected.")
         except Exception as e:
             logging.error(f"[TICKER] Exception in overlay task: {e}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(60)
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
