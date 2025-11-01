@@ -40,7 +40,7 @@ logging.basicConfig(
     filename=LOG_FILE,
     filemode='a',
     format='%(asctime)s %(levelname)s %(message)s',
-    level=logging.ERROR
+    level=logging.INFO
 )
 
 class Bot(commands.Bot):
@@ -133,7 +133,12 @@ class Bot(commands.Bot):
                     await broadcast_overlay_message({"type": "afk_ticker", "message": msg})
                 else:
                     await broadcast_overlay_message({"type": "afk_ticker", "message": "AFK: No data available."})
-                await asyncio.sleep(0.25)
+                # AFK ticker: send messages very frequently so the AFK overlay will
+                # display many concurrent rows. Reducing to 1s produces a denser
+                # matrix (typically ~40-60 visible rows given 40-60s animations).
+                # Monitor performance; if this proves noisy we can dial back to 2-3s
+                # or implement a burst-on-start plus a steadier cadence.
+                await asyncio.sleep(1)
             except Exception as e:
                 logging.error(f"[AFK TICKER ERROR] {e}", exc_info=True)
     async def ticker_cycle_task(self):
@@ -223,13 +228,49 @@ class Bot(commands.Bot):
                         unified.append(m)
                         seen.add(m)
                 if unified:
-                    full_ticker = ' | '.join(unified)
+                    # Prepend a timestamp (CST and UTC) so the ticker always
+                    # starts with the current times before the Title.
+                    # Build a robust timestamp that prefers zoneinfo but falls
+                    # back to other methods if unavailable (common on Windows
+                    # without tzdata installed). The goal is to avoid "N/A".
+                    try:
+                        from datetime import datetime, timezone, timedelta
+                        timestamp_msg = None
+                        try:
+                            # Prefer stdlib zoneinfo (Python 3.9+)
+                            from zoneinfo import ZoneInfo
+                            now_utc = datetime.now(timezone.utc)
+                            cst = now_utc.astimezone(ZoneInfo("America/Chicago")).strftime("%I:%M %p").lstrip('0')
+                            gmt = now_utc.astimezone(ZoneInfo("UTC")).strftime("%H:%M")
+                            timestamp_msg = f"{cst} CST | {gmt} GMT"
+                        except Exception:
+                            # Try pytz if available
+                            try:
+                                import pytz
+                                now_utc = datetime.now(pytz.utc)
+                                cst = now_utc.astimezone(pytz.timezone("America/Chicago")).strftime("%I:%M %p").lstrip('0')
+                                gmt = now_utc.astimezone(pytz.utc).strftime("%H:%M")
+                                timestamp_msg = f"{cst} CST | {gmt} GMT"
+                            except Exception:
+                                # Last-resort fallback: use UTC and approximate CST as UTC-6
+                                now = datetime.utcnow()
+                                gmt = now.strftime("%H:%M")
+                                approx_cst = (now - timedelta(hours=6)).strftime("%I:%M %p").lstrip('0')
+                                timestamp_msg = f"{approx_cst} CST | {gmt} GMT"
+                        if not timestamp_msg:
+                            timestamp_msg = "N/A CST | N/A GMT"
+                    except Exception:
+                        timestamp_msg = "N/A CST | N/A GMT"
+
+                    full_ticker = ' | '.join([timestamp_msg] + unified)
                     await broadcast_overlay_message({"type": "ticker", "text": full_ticker})
                 else:
                     await broadcast_overlay_message({"type": "ticker", "text": "No ticker data available."})
             except Exception as e:
                 logging.error(f"[TICKER ERROR] {e}", exc_info=True)
-            await asyncio.sleep(0.5)
+            # Wait ~60 seconds between full-ticker broadcasts to overlays
+            # This makes a new ticker string at roughly one-minute intervals.
+            await asyncio.sleep(60)
     @commands.command(name='ticker')
     async def ticker(self, ctx):
         if not ctx.author.is_mod:
@@ -265,10 +306,10 @@ class Bot(commands.Bot):
 
     async def event_ready(self):
         print(f"Logged in as | {self.nick}")
-        # Show overlay ticker message once, then revert
-        await broadcast_overlay_message({"type": "ticker", "text": "Mean Gene Bot connected."})
-        await asyncio.sleep(4)  # Show for 4 seconds
-        await broadcast_overlay_message({"type": "ticker", "text": "Welcome to the Darmunist News Network."})
+        # Don't broadcast an initial ticker on startup — overlays should
+        # receive only canonical ticker strings produced by the ticker task.
+        # Keep a simple console log for visibility.
+        logging.info("Bot ready — ticker task will produce overlay messages shortly.")
 
     async def event_message(self, message):
         author_name = message.author.name if message.author else "Unknown"

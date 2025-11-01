@@ -7,6 +7,16 @@ from twitchio.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
 from PIL import Image
+from typing import List, Dict
+import wave
+import contextlib
+import math
+
+# Optional Google Sheets sync helper (if requirements installed)
+try:
+    from bot.google_sheets_sync import write_full_sheet
+except Exception:
+    write_full_sheet = None
 
 GIF_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "overlay_static", "gifs"))
 SFX_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sfx"))
@@ -42,6 +52,56 @@ def get_gif_duration_ms(path):
     except Exception:
         pass
     return 5000
+
+
+def get_audio_duration_ms(path: str):
+    """Return audio duration in milliseconds for common types.
+
+    Strategies:
+    - For WAV files, use the stdlib wave module.
+    - Try mutagen (if installed) for mp3/ogg and others.
+    - If all else fails, return empty string.
+    """
+    if not path or not isinstance(path, str):
+        return ""
+    try:
+        _, ext = os.path.splitext(path)
+        ext = ext.lower()
+        if ext == ".wav":
+            with contextlib.closing(wave.open(path, "r")) as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                seconds = frames / float(rate) if rate else 0
+                return int(seconds * 1000)
+        # try mutagen if available for mp3/ogg/etc
+        try:
+            # import lazily; optional dependency
+            from mutagen import File as MutagenFile  # type: ignore
+            m = MutagenFile(path)
+            if m and hasattr(m, "info") and getattr(m.info, "length", None) is not None:
+                return int(m.info.length * 1000)
+        except Exception:
+            # mutagen not installed or failed to read file -> skip
+            pass
+    except Exception:
+        pass
+    return ""
+
+
+def get_audio_duration_seconds_truncated(path: str):
+    """Return audio duration in seconds truncated to the tenth (e.g. 12.3).
+
+    Returns a float with one decimal place, or empty string if unknown.
+    """
+    ms = get_audio_duration_ms(path)
+    if not ms:
+        return ""
+    try:
+        seconds = float(ms) / 1000.0
+        truncated = math.floor(seconds * 10) / 10.0
+        return truncated
+    except Exception:
+        return ""
 
 class MediaOverlayCog(commands.Cog):
     def __init__(self, bot):
@@ -85,9 +145,19 @@ class MediaOverlayCog(commands.Cog):
                 if cmd not in prev_snapshot:
                     self._register_media_command(cmd, entry)
                     await self._announce_new_command(cmd, entry)
+                    # Sync sheet after adding a new command
+                    try:
+                        await self._maybe_sync_sheet()
+                    except Exception:
+                        self.logger.exception("Error syncing sheet after add")
             for cmd in list(prev_snapshot.keys()):
                 if cmd not in snapshot:
                     self._unregister_media_command(cmd)
+                    # Sync sheet after removal
+                    try:
+                        await self._maybe_sync_sheet()
+                    except Exception:
+                        self.logger.exception("Error syncing sheet after remove")
             prev_snapshot = snapshot
             self.media_commands = snapshot
             await asyncio.sleep(SCAN_INTERVAL)
@@ -209,6 +279,98 @@ class MediaOverlayCog(commands.Cog):
         self._registered.add(cmd)
         self.logger.info(f"Registered media overlay command: !{cmd}")
 
+    def get_registered_media_command_rows(self) -> List[Dict]:
+        """For a public-facing sheet we only expose two columns:
+
+        - command_name
+        - description
+
+        The description is a short, non-sensitive summary combining whether the command
+        has an overlay image (and the image filename) and whether it plays an SFX.
+        """
+        rows: List[Dict] = []
+        for cmd, entry in self.media_commands.items():
+            parts = []
+            if "image" in entry:
+                # image_rel is the relative path used by the overlay (folder/file.ext)
+                image_rel = entry.get("image", (None, None))[1] or ""
+                parts.append(f"Image: {image_rel}")
+            if "sfx" in entry:
+                sfx = entry.get("sfx")
+                sfx_type = sfx[1]
+                if sfx_type == "folder":
+                    parts.append(f"SFX: {sfx[2]} (folder)")
+                else:
+                    # sfx[0] may be a path string
+                    sfx_path = sfx[0]
+                    if isinstance(sfx_path, list):
+                        # shouldn't happen for non-folder types, but guard anyway
+                        parts.append(f"SFX: {sfx[2]} (multiple)")
+                    else:
+                        parts.append(f"SFX: {os.path.splitext(os.path.basename(sfx_path))[0]}")
+                        # compute duration if available for single-file SFX
+                        dur_ms = get_audio_duration_ms(sfx_path)
+                        # do not append duration to the public description; duration will be a separate column
+
+            description = " | ".join(parts)
+
+            # include duration as a separate column when available (seconds truncated to 0.1s)
+            # For folder randomizers or multi-path entries this will be blank.
+            sfx_duration = ""
+            if "sfx" in entry:
+                sfx_entry = entry.get("sfx")
+                sfx_path_or_list = sfx_entry[0]
+                if isinstance(sfx_path_or_list, str):
+                    sfx_duration = get_audio_duration_seconds_truncated(sfx_path_or_list)
+
+            rows.append({"command_name": cmd, "description": description, "duration": sfx_duration})
+        # Sort rows so symbols come first, then letters, then numbers (both within-group sorted lexicographically)
+        def _sort_key(name: str):
+            if not name:
+                return (3, "")
+            first = name[0]
+            if first.isalpha():
+                cat = 1
+            elif first.isdigit():
+                cat = 2
+            else:
+                cat = 0
+            return (cat, name.lower())
+
+        rows.sort(key=lambda r: _sort_key(r.get("command_name", "")))
+        return rows
+
+    async def _maybe_sync_sheet(self, ctx=None):
+        """Attempt to sync the current media command list to Google Sheets if configured.
+
+        This runs the blocking `write_full_sheet` in an executor to avoid blocking the event loop.
+        If ctx is provided, send status messages to the channel.
+        """
+        json_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+        spreadsheet_id = os.environ.get("SFX_SPREADSHEET_ID")
+        sheet_name = os.environ.get("SFX_SHEET_NAME", "sfx")
+        if not write_full_sheet:
+            self.logger.warning("Google Sheets sync attempted but gspread is unavailable")
+            if ctx:
+                await ctx.send("⚠️ Google Sheets sync is not configured (missing requirements).")
+            return
+        if not json_path or not spreadsheet_id:
+            self.logger.warning("Google Sheets sync attempted but env vars missing")
+            if ctx:
+                await ctx.send("⚠️ Google Sheets sync not configured (set GOOGLE_SERVICE_ACCOUNT_JSON and SFX_SPREADSHEET_ID).")
+            return
+
+        rows = self.get_registered_media_command_rows()
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, write_full_sheet, json_path, spreadsheet_id, sheet_name, rows)
+            if ctx:
+                await ctx.send(f"✅ SFX sheet synced ({len(rows)} rows).")
+        except Exception as e:
+            self.logger.exception("Failed to sync SFX sheet: %s", e)
+            if ctx:
+                await ctx.send("❌ Failed to sync SFX sheet; check logs.")
+
     def _unregister_media_command(self, cmd):
         if cmd in self._registered:
             try:
@@ -273,6 +435,14 @@ class MediaOverlayCog(commands.Cog):
             if "sfx" in entry and entry["sfx"][1] in ("flat", "folderfile", "folder")
         ])
         await ctx.send(f"{count} unique sound effect commands.")
+
+    @commands.command(name="syncsfx")
+    async def syncsfx(self, ctx):
+        """Force a sync of the SFX/GIF command list to the configured Google Sheet. Mod-only."""
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send("Only mods can force SFX sync.")
+            return
+        await self._maybe_sync_sheet(ctx)
 
 def prepare(bot):
     bot.add_cog(MediaOverlayCog(bot))

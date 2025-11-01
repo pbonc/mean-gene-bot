@@ -1,3 +1,5 @@
 twitchio
 aiohttp
 discord.py
+gspread
+google-auth
