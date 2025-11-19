@@ -172,7 +172,6 @@ async def get_ticker_messages():
                     print(f"[TICKER] Added {len(sports_messages)} sports messages to ticker")
             except Exception as e:
                 print(f"Error getting sports messages: {e}")
-
             # Add modnews (limit to 1 random item)
             workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
@@ -188,11 +187,19 @@ async def get_ticker_messages():
             import random
             if modnews_msgs:
                 messages.append(random.choice(modnews_msgs))
-
             # Add a random quote
             try:
                 workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
+                # Modnews
+                modnews_path = os.path.join(assets_txt_dir, "modnews.txt")
+                modnews_msgs = []
+                if os.path.isfile(modnews_path):
+                    with open(modnews_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            msg = line.strip()
+                            if msg:
+                                modnews_msgs.append(f"ModNews: {msg}")
                 # Derpisms
                 derpisms_path = os.path.join(assets_txt_dir, "derpisms.txt")
                 derpisms = []
@@ -225,7 +232,6 @@ async def get_ticker_messages():
                         messages.append(f'Quote #{qid}: "{quote["text"]}" — {quote["user"]} ({formatted_date})')
             except Exception:
                 pass
-
             # Add a random derpism and tic
             try:
                 derpisms_path = os.path.join(workspace_root, "assets", "txt", "derpisms.txt")
@@ -244,7 +250,6 @@ async def get_ticker_messages():
                                 messages.append(f'Tic: {tic}')
             except Exception:
                 pass
-
             # Add weather messages (5 random)
             from bot.weather_utils import get_random_weather_messages
             weather_msgs = await get_random_weather_messages(5)

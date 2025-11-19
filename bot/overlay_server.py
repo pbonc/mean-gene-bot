@@ -223,7 +223,6 @@ def get_relative_path(file_path, filename, base_dir):
     full_path = os.path.join(file_path, filename)
     rel_path = os.path.relpath(full_path, base_dir)
     return f"/cards/{rel_path.replace(os.sep, '/')}"
-
 async def shutdown():
     global _runner
     if _runner:

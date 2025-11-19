@@ -125,7 +125,6 @@ def get_gif_duration_ms(path):
 
 def get_audio_duration_ms(path: str):
     """Return audio duration in milliseconds for common types.
-
     Strategies:
     - For WAV files, use the stdlib wave module.
     - Try mutagen (if installed) for mp3/ogg and others.
@@ -153,7 +152,6 @@ def get_audio_duration_ms(path: str):
         except Exception:
             # mutagen not installed or failed to read file -> try PowerShell fallback
             pass
-        
         # Fallback: Try PowerShell Windows Shell method for MP3 files
         if ext in [".mp3", ".m4a", ".wma"]:
             try:
@@ -186,7 +184,6 @@ def get_audio_duration_ms(path: str):
     except Exception:
         pass
     return ""
-
 
 def _was_duration_detected_by_powershell(path: str):
     """Check if duration was detected using PowerShell method"""
@@ -609,6 +606,7 @@ class MediaOverlayCog(commands.Cog):
         global SFX_VOLUME
         SFX_VOLUME = level / 100.0
         await ctx.send(f"🔊 SFX volume set to {level}%")
+
 
 def prepare(bot):
     bot.add_cog(MediaOverlayCog(bot))

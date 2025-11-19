@@ -263,7 +263,7 @@ class SportsAPIManager:
                         upcoming_games = []
 
                         print(f"[SPORTS] MLB: Filtering for recent games (live games always included)")
-                        
+                      
                         for event in events:
                             competitions = event.get('competitions', [])
                             if not competitions:
