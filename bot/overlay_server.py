@@ -47,11 +47,182 @@ async def index(request):
 async def afk_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "afk_overlay.html"))
 
+async def cards_afk_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "cards_afk_overlay.html"))
+
+async def raffle_numbers_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "raffle_numbers.html"))
+
 async def as_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "as_overlay.html"))
 
 async def anime_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "anime_overlay.html"))
+
+async def get_raffle_data(request):
+    """API endpoint to return current raffle state"""
+    import json
+    import os
+    
+    try:
+        # Load raffle state from the same location as the raffle cog
+        raffle_file = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "raffle_state.json")
+        
+        if os.path.exists(raffle_file):
+            with open(raffle_file, 'r') as f:
+                raffle_data = json.load(f)
+            return web.json_response(raffle_data)
+        else:
+            return web.json_response({"error": "Raffle state file not found"})
+            
+    except Exception as e:
+        return web.json_response({"error": str(e)})
+
+async def get_card_data(request):
+    """API endpoint to return card data from scanned directory"""
+    import json
+    import re
+    
+    cards_dir = os.path.join(os.path.dirname(STATIC_DIR), "assets", "cards")
+    card_data = []
+    
+    if not os.path.isdir(cards_dir):
+        return web.json_response({"cards": [], "error": "Cards directory not found"})
+    
+    # Supported image extensions
+    image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+    
+    try:
+        # Scan all files in cards directory (including subdirectories)
+        for root, dirs, files in os.walk(cards_dir):
+            for filename in files:
+                filepath = os.path.join(root, filename)
+                file_ext = os.path.splitext(filename)[1].lower()
+                
+                if file_ext in image_extensions:
+                    # Parse filename for card info
+                    card_info = parse_card_filename(filename, root, cards_dir)
+                    if card_info:
+                        card_data.append(card_info)
+        
+        return web.json_response({"cards": card_data})
+    
+    except Exception as e:
+        return web.json_response({"cards": [], "error": str(e)})
+
+def parse_card_filename(filename, file_path, base_cards_dir):
+    """
+    Parse card filename to extract card information
+    Expected formats:
+    - player-year-set-grade.jpg (e.g., jordan-1986-fleer-psa9.jpg)
+    - player-year-set.jpg (raw card, e.g., gretzky-1979-opc.jpg)
+    - Custom formats with hyphens as delimiters
+    """
+    try:
+        # Remove file extension
+        name_without_ext = os.path.splitext(filename)[0]
+        
+        # Split by hyphens
+        parts = name_without_ext.split('-')
+        
+        if len(parts) < 3:
+            # Fallback: use filename as player name
+            return {
+                "name": name_without_ext.replace('-', ' ').title(),
+                "year": "Unknown",
+                "set": "Unknown", 
+                "grade": "Raw",
+                "type": "raw-card",
+                "rarity": "Unknown",
+                "image": get_relative_path(file_path, filename, base_cards_dir)
+            }
+        
+        # Extract basic info
+        player = parts[0].replace('_', ' ').title()
+        year = parts[1] if len(parts) > 1 else "Unknown"
+        set_name = parts[2].replace('_', ' ').title() if len(parts) > 2 else "Unknown"
+        
+        # Determine grade and type from filename or directory
+        grade = "Raw"
+        card_type = "raw-card"
+        rarity = "Base"
+        
+        # Check for grade in filename (last part usually)
+        if len(parts) >= 4:
+            grade_part = parts[-1].lower()
+            if 'psa' in grade_part:
+                card_type = "psa-slab"
+                grade = f"PSA {extract_number(grade_part)}"
+            elif 'bgs' in grade_part or 'beckett' in grade_part:
+                card_type = "bgs-slab" 
+                grade = f"BGS {extract_number(grade_part)}"
+            elif 'sgc' in grade_part:
+                card_type = "sgc-slab"
+                grade = f"SGC {extract_number(grade_part)}"
+            else:
+                grade = parts[-1].upper()
+        
+        # Check directory name for card type if not found in filename
+        rel_path = os.path.relpath(file_path, base_cards_dir)
+        if 'psa' in rel_path.lower():
+            card_type = "psa-slab"
+        elif 'bgs' in rel_path.lower() or 'beckett' in rel_path.lower():
+            card_type = "bgs-slab"
+        elif 'sgc' in rel_path.lower():
+            card_type = "sgc-slab"
+        elif 'raw' in rel_path.lower():
+            card_type = "raw-card"
+        
+        # Detect rarity keywords
+        filename_lower = filename.lower()
+        if any(word in filename_lower for word in ['rookie', 'rc', 'rook']):
+            rarity = "Rookie"
+        elif any(word in filename_lower for word in ['auto', 'autograph', 'sig']):
+            rarity = "Autograph"
+        elif any(word in filename_lower for word in ['patch', 'jersey', 'relic']):
+            rarity = "Memorabilia"
+        elif any(word in filename_lower for word in ['refractor', 'prizm', 'chrome']):
+            rarity = "Parallel"
+        
+        return {
+            "name": player,
+            "year": year,
+            "set": set_name,
+            "grade": grade,
+            "type": card_type,
+            "rarity": rarity,
+            "image": get_relative_path(file_path, filename, base_cards_dir)
+        }
+        
+    except Exception as e:
+        # Return basic info if parsing fails
+        return {
+            "name": os.path.splitext(filename)[0].replace('-', ' ').title(),
+            "year": "Unknown",
+            "set": "Unknown",
+            "grade": "Raw", 
+            "type": "raw-card",
+            "rarity": "Unknown",
+            "image": get_relative_path(file_path, filename, base_cards_dir)
+        }
+
+def extract_number(text):
+    """Extract number from grade text (e.g., 'psa9' -> '9', 'bgs95' -> '9.5')"""
+    import re
+    numbers = re.findall(r'\d+', text)
+    if numbers:
+        num = numbers[0]
+        # Handle decimal grades (e.g., 95 -> 9.5)
+        if len(num) == 2 and num[1] == '5':
+            return f"{num[0]}.5"
+        return num
+    return "?"
+
+def get_relative_path(file_path, filename, base_dir):
+    """Get the relative URL path for the image"""
+    full_path = os.path.join(file_path, filename)
+    rel_path = os.path.relpath(full_path, base_dir)
+    return f"/cards/{rel_path.replace(os.sep, '/')}"
 
 async def shutdown():
     global _runner
@@ -103,12 +274,23 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/ws", websocket_handler)
     app.router.add_get("/", index)
     app.router.add_get("/afk", afk_overlay)
+    app.router.add_get("/cards", cards_afk_overlay)
+    app.router.add_get("/raffle", raffle_numbers_overlay)
     app.router.add_get("/as", as_overlay)
     app.router.add_get("/anime", anime_overlay)
+    
+    # API routes
+    app.router.add_get("/api/cards", get_card_data)
+    app.router.add_get("/api/raffle", get_raffle_data)
     # Serve GIFs and other overlay static assets
     gifs_dir = os.path.join(STATIC_DIR, "gifs")
     if os.path.isdir(gifs_dir):
         app.router.add_static('/gifs', gifs_dir)
+    
+    # Serve trading card images
+    cards_dir = os.path.join(os.path.dirname(STATIC_DIR), "assets", "cards")
+    if os.path.isdir(cards_dir):
+        app.router.add_static('/cards', cards_dir)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)

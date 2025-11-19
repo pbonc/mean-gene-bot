@@ -1,6 +1,56 @@
 import os
 import aiohttp
 import random
+
+def get_weather_emoji(condition):
+    """Map weather condition text to appropriate emoji"""
+    condition_lower = condition.lower()
+    
+    # Clear/Sunny conditions
+    if any(word in condition_lower for word in ['sunny', 'clear']):
+        return '☀️'
+    
+    # Cloudy conditions
+    elif any(word in condition_lower for word in ['partly cloudy', 'partly sunny']):
+        return '⛅'
+    elif any(word in condition_lower for word in ['cloudy', 'overcast']):
+        return '☁️'
+    
+    # Rain conditions
+    elif any(word in condition_lower for word in ['heavy rain', 'torrential']):
+        return '🌧️'
+    elif any(word in condition_lower for word in ['light rain', 'drizzle', 'mist']):
+        return '🌦️'
+    elif any(word in condition_lower for word in ['rain', 'shower']):
+        return '🌧️'
+    
+    # Snow conditions
+    elif any(word in condition_lower for word in ['heavy snow', 'blizzard']):
+        return '❄️'
+    elif any(word in condition_lower for word in ['light snow', 'snow shower']):
+        return '🌨️'
+    elif any(word in condition_lower for word in ['snow', 'sleet']):
+        return '❄️'
+    
+    # Thunderstorm conditions
+    elif any(word in condition_lower for word in ['thunderstorm', 'thunder']):
+        return '⛈️'
+    
+    # Fog conditions
+    elif any(word in condition_lower for word in ['fog', 'haze', 'mist']):
+        return '🌫️'
+    
+    # Wind conditions
+    elif any(word in condition_lower for word in ['windy', 'breezy']):
+        return '💨'
+    
+    # Ice conditions
+    elif any(word in condition_lower for word in ['ice', 'freezing']):
+        return '🧊'
+    
+    # Default for unknown conditions
+    else:
+        return '🌤️'
 WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY")
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEATHER_FILE = os.path.join(WORKSPACE_ROOT, "assets", "txt", "weather_messages.txt")
@@ -24,23 +74,11 @@ async def fetch_weather(location):
                     logging.error(f"[WEATHER ERROR] Missing 'current' or 'location' in response for {location}")
                     return f"{location} : [weather error]"
                 try:
-                    condition = data["current"]["condition"]["text"].lower()
-                    emoji = {
-                        "sunny": "☀️",
-                        "clear": "☀️",
-                        "partly cloudy": "⛅",
-                        "cloudy": "☁️",
-                        "overcast": "☁️",
-                        "rain": "🌧️",
-                        "patchy rain possible": "🌦️",
-                        "snow": "❄️",
-                        "thunder": "⛈️",
-                        "mist": "🌫️",
-                        "fog": "🌫️"
-                    }.get(condition, "🌡️")
+                    condition = data["current"]["condition"]["text"]
                     temp_f = int(data["current"]["temp_f"])
                     temp_c = int(data["current"]["temp_c"])
-                    return f"{location} : {emoji} {temp_f}°F / {temp_c}°C"
+                    emoji = get_weather_emoji(condition)
+                    return f"{location}: {emoji} {condition}, {temp_f}°F / {temp_c}°C"
                 except Exception as e:
                     logging.error(f"[WEATHER ERROR] Exception parsing response for {location}: {e}", exc_info=True)
                     return f"{location} : [weather error]"

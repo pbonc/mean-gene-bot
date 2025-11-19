@@ -17,19 +17,74 @@ import importlib
 import asyncio
 from twitchio.ext import commands
 from dotenv import load_dotenv
-import discord
-from discord.ext import commands as discord_commands
+try:
+    import discord
+    from discord.ext import commands as discord_commands
+    DISCORD_AVAILABLE = True
+except ImportError:
+    DISCORD_AVAILABLE = False
+    print("[DISCORD] discord.py not available, Discord features disabled")
 from bot.overlay_server import start_overlay_server, broadcast_overlay_message
 from bot.weather_utils import fetch_weather, save_weather_message, get_random_weather_messages, get_any_weather_message
+from bot.oauth_refresh import auto_refresh_if_needed
+
+# Auto-install dependencies on startup
+try:
+    from bot.dependency_manager import DependencyManager
+    
+    # Check if we should auto-install dependencies
+    AUTO_INSTALL = os.getenv("AUTO_INSTALL_DEPENDENCIES", "false").lower() == "true"
+    
+    if AUTO_INSTALL:
+        print("🔧 Auto-installing dependencies (AUTO_INSTALL_DEPENDENCIES=true)...")
+        manager = DependencyManager()
+        manager.install_missing_dependencies()
+        print("✅ Dependency check complete!")
+    else:
+        # Just check and report status
+        print("🔍 Checking dependency status...")
+        manager = DependencyManager()
+        status = manager.get_dependency_status()
+        
+        missing_core = [pkg for pkg, status in status["core"].items() if "Missing" in status]
+        missing_optional = [pkg for pkg, info in status["optional"].items() 
+                          if isinstance(info, dict) and "Missing" in info["status"]]
+        available_optional = [pkg for pkg, info in status["optional"].items() 
+                            if isinstance(info, dict) and "Available" in info["status"]]
+        
+        if missing_core:
+            print(f"⚠️ Missing core dependencies: {', '.join(missing_core)}")
+            print("💡 Set AUTO_INSTALL_DEPENDENCIES=true in .env or run: python -m bot.dependency_manager")
+        
+        if available_optional:
+            print(f"🎵 Music features available: {', '.join(available_optional)}")
+        
+        if missing_optional:
+            if available_optional:  # Some available, some missing
+                print(f"ℹ️ Additional music features available with: {', '.join(missing_optional)}")
+            else:  # None available
+                print(f"ℹ️ Optional music features unavailable: {', '.join(missing_optional)}")
+            print(f"📦 Install with: pip install {' '.join(missing_optional)}")
+
+except ImportError:
+    print("⚠️ Dependency manager not available. Install requirements manually if needed.")
+except Exception as e:
+    print(f"⚠️ Dependency check error: {e}")
 
 # Load .env file
 load_dotenv()
 
 # Import Discord config after loading .env
-from bot.config import DISCORD_TOKEN, DISCORD_CHANNEL_ID
+try:
+    from bot.config import DISCORD_TOKEN, DISCORD_CHANNEL_ID
+except ImportError as e:
+    print(f"[CONFIG] Error importing Discord config: {e}")
+    DISCORD_TOKEN = None
+    DISCORD_CHANNEL_ID = None
 
 TWITCH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
+TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 TWITCH_BOT_ID = os.getenv("TWITCH_BOT_ID")
 TWITCH_CHANNELS = os.getenv("TWITCH_CHANNELS", "").split(",")
 
@@ -297,12 +352,8 @@ class Bot(commands.Bot):
             await ctx.send("Location not found or API error.")
 
     def __init__(self):
-        super().__init__(
-            token=TWITCH_TOKEN,
-            client_id=TWITCH_CLIENT_ID,
-            prefix="!",
-            initial_channels=TWITCH_CHANNELS
-        )
+        super().__init__(token=TWITCH_TOKEN, prefix='!', initial_channels=TWITCH_CHANNELS)
+        self.discord_client = None
 
     async def event_ready(self):
         print(f"Logged in as | {self.nick}")
@@ -339,28 +390,76 @@ class Bot(commands.Bot):
         await broadcast_overlay_message({"image": "/gifs/darheart2.jpg"})
         await ctx.send("Overlay image triggered!")
 
-class DiscordBot(discord_commands.Bot):
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
-        super().__init__(command_prefix='!', intents=intents)
-        
-    async def on_ready(self):
-        print(f'[DISCORD] Bot logged in as {self.user}')
-        
-    async def send_to_channel(self, message):
-        if DISCORD_CHANNEL_ID:
-            channel = self.get_channel(DISCORD_CHANNEL_ID)
-            if channel:
-                await channel.send(message)
+if DISCORD_AVAILABLE:
+    class DiscordBot(discord_commands.Bot):
+        def __init__(self):
+            intents = discord.Intents.default()
+            intents.message_content = True
+            super().__init__(command_prefix='!', intents=intents)
+            
+        async def on_ready(self):
+            print(f'[DISCORD] Bot logged in as {self.user}')
+            
+        async def send_to_channel(self, message):
+            if DISCORD_CHANNEL_ID:
+                channel = self.get_channel(DISCORD_CHANNEL_ID)
+                if channel:
+                    await channel.send(message)
+                else:
+                    print(f'[DISCORD ERROR] Channel {DISCORD_CHANNEL_ID} not found')
             else:
-                print(f'[DISCORD ERROR] Channel {DISCORD_CHANNEL_ID} not found')
-        else:
-            print('[DISCORD ERROR] No channel ID configured')
+                print('[DISCORD ERROR] No channel ID configured')
+else:
+    # Dummy DiscordBot class when Discord is not available
+    class DiscordBot:
+        def __init__(self):
+            pass
+        async def start(self, token):
+            pass
+        async def send_to_channel(self, message):
+            print(f'[DISCORD DISABLED] Would send: {message}')
 
 async def main():
     # Backup raffle state at startup
     backup_raffle_state()
+
+    # Set up signal handlers for graceful shutdown
+    def signal_handler(signum, frame):
+        print(f"\n[BOT] Received signal {signum}, shutting down gracefully...")
+        # Kill any music processes using brute force approach
+        try:
+            import subprocess
+            # Kill any python processes that might be playing audio
+            try:
+                subprocess.run(['taskkill', '/F', '/IM', 'python.exe'], 
+                             capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                print("[BOT] Killed any remaining python audio processes")
+            except Exception as e:
+                print(f"[BOT] Error killing processes: {e}")
+        except Exception as e:
+            print(f"[BOT] Error cleaning up audio: {e}")
+        
+        # Exit the program
+        import sys
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
+    
+    print("[BOT] Signal handlers registered for graceful shutdown.")
+
+    # Check and refresh Twitch token if needed
+    print("[BOT] Validating Twitch authentication...")
+    try:
+        success, auth_msg = auto_refresh_if_needed()
+        if success:
+            print(f"[BOT] Authentication OK: {auth_msg}")
+        else:
+            print(f"[BOT] Authentication issue: {auth_msg}")
+            print("[BOT] Continuing startup, but Twitch connection may fail...")
+    except Exception as auth_error:
+        print(f"[BOT] Error checking authentication: {auth_error}")
+        print("[BOT] Continuing startup, but Twitch connection may fail...")
 
     # Start the overlay server in the background
     overlay_task = asyncio.create_task(start_overlay_server())
@@ -370,12 +469,20 @@ async def main():
     
     # Initialize Discord bot if token is provided
     discord_bot = None
-    if DISCORD_TOKEN:
-        discord_bot = DiscordBot()
-        bot.discord_client = discord_bot
-        print('[DISCORD] Discord integration enabled')
+    if DISCORD_AVAILABLE and DISCORD_TOKEN:
+        try:
+            discord_bot = DiscordBot()
+            bot.discord_client = discord_bot
+            print('[DISCORD] Discord integration enabled')
+        except Exception as discord_error:
+            print(f'[DISCORD] Error setting up Discord: {discord_error}')
+            print('[DISCORD] Continuing without Discord integration')
+            discord_bot = None
     else:
-        print('[DISCORD] Discord token not found, Discord integration disabled')
+        if not DISCORD_AVAILABLE:
+            print('[DISCORD] discord.py not available, Discord integration disabled')
+        else:
+            print('[DISCORD] Discord token not found, Discord integration disabled')
 
     # Start ticker cycle tasks
     ticker_task = asyncio.create_task(bot.ticker_cycle_task())
@@ -385,11 +492,20 @@ async def main():
     commands_dir = os.path.join(os.path.dirname(__file__), "commands")
     if os.path.isdir(commands_dir):
         for filename in os.listdir(commands_dir):
-            if filename.endswith(".py") and filename not in ("__init__.py", "base_command.py"):
+            if filename.endswith(".py") and filename not in ("__init__.py", "base_command.py", "analytics_cog.py"):
                 modulename = f"bot.commands.{filename[:-3]}"
-                module = importlib.import_module(modulename)
-                if hasattr(module, "prepare"):
-                    module.prepare(bot)
+                try:
+                    print(f"[COG] Loading {modulename}...")
+                    module = importlib.import_module(modulename)
+                    if hasattr(module, "prepare"):
+                        module.prepare(bot)
+                        print(f"[COG] ✅ {filename} loaded successfully")
+                    else:
+                        print(f"[COG] ⚠️ {filename} has no prepare function")
+                except Exception as e:
+                    print(f"[COG] ❌ Failed to load {filename}: {e}")
+                    import traceback
+                    traceback.print_exc()
     # Load modnews cog
     from bot.commands.modnews import prepare as modnews_prepare
     modnews_prepare(bot)
@@ -403,13 +519,41 @@ async def main():
     signal.signal(signal.SIGTERM, shutdown_handler)
 
     # Start both bots concurrently
+    print("[BOT] Starting Twitch bot...")
     tasks = [bot.start()]
     
     if discord_bot:
+        print("[BOT] Adding Discord bot to tasks...")
         tasks.append(discord_bot.start(DISCORD_TOKEN))
     
+    print(f"[BOT] Running {len(tasks)} bot tasks + overlay + ticker...")
     # Run all tasks concurrently
-    await asyncio.gather(*tasks, overlay_task, ticker_task)
+    try:
+        print("[BOT] Starting overlay server...")
+        print("[BOT] Starting ticker tasks...")
+        await asyncio.gather(*tasks, overlay_task, ticker_task)
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[BOT] Error in main gather: {error_msg}")
+        logging.error(f"[BOT] Main gather error: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
+        
+        # Check if it's an authentication error and try to refresh token
+        if "Invalid or unauthorized Access Token" in error_msg or "401" in error_msg:
+            print("[BOT] Detected authentication error, attempting token refresh...")
+            try:
+                success, refresh_msg = auto_refresh_if_needed()
+                if success:
+                    print(f"[BOT] Token refresh successful: {refresh_msg}")
+                    print("[BOT] Please restart the bot to use the new token.")
+                else:
+                    print(f"[BOT] Token refresh failed: {refresh_msg}")
+                    print("[BOT] Please manually refresh your Twitch OAuth token.")
+            except Exception as refresh_error:
+                print(f"[BOT] Error during token refresh: {refresh_error}")
+        
+        raise
 
 if __name__ == "__main__":
     try:

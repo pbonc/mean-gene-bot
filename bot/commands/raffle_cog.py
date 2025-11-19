@@ -36,9 +36,12 @@ class SimpleRaffleState:
         self.ignored_users = set()
         # Ensure jackpot default exists before loading (load may call save)
         self.bad_beat_jackpot = 25
+        self.giveaway_amount = 0.0  # Track the prize amount for the current giveaway
         self.load()
         if not hasattr(self, 'bad_beat_jackpot'):
             self.bad_beat_jackpot = 25
+        if not hasattr(self, 'giveaway_amount'):
+            self.giveaway_amount = 0.0
 
     def load(self):
         if os.path.exists(self.state_file):
@@ -55,6 +58,7 @@ class SimpleRaffleState:
             self.first_chatter_user = data.get("first_chatter_user", None)
             self.ignored_users = set([u.lower() for u in data.get("ignored_users", [])])
             self.bad_beat_jackpot = data.get("bad_beat_jackpot", 25)
+            self.giveaway_amount = data.get("giveaway_amount", 0.0)
         else:
             self.save()
 
@@ -72,6 +76,7 @@ class SimpleRaffleState:
             "first_chatter_user": self.first_chatter_user,
             "ignored_users": list(self.ignored_users),
             "bad_beat_jackpot": self.bad_beat_jackpot,
+            "giveaway_amount": self.giveaway_amount,
         }
         with open(self.state_file, "w") as f:
             json.dump(data, f, indent=2)
@@ -95,6 +100,7 @@ class SimpleRaffleState:
         self.chat_awarded = set()
         self.first_chatter_awarded = False
         self.first_chatter_user = None
+        self.giveaway_amount = 0.0  # Reset giveaway amount when clearing raffle
         # Do NOT reset bad_beat_jackpot here (leave as-is)
         self.save()
 
@@ -176,6 +182,19 @@ class SimpleRaffleState:
         user = user.lower()
         picks = [num for num, u in self.picks.items() if u == user]
         return sorted(picks, key=lambda x: int(x))
+
+    def set_giveaway_amount(self, amount):
+        """Set the giveaway amount for the current raffle"""
+        try:
+            self.giveaway_amount = float(amount)
+            self.save()
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    def get_giveaway_amount(self):
+        """Get the current giveaway amount"""
+        return self.giveaway_amount
 
     def draw_winner(self):
         number = f"{random.randint(0, 999):03}"
@@ -325,6 +344,190 @@ class RaffleCog(commands.Cog):
                 return
             self.state.reset()
             await ctx.send("All raffle data has been cleared. This action is irreversible!")
+            return
+
+        if cmd == "amount":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can set the giveaway amount.")
+                return
+            if len(args) < 2:
+                current_amount = self.state.get_giveaway_amount()
+                if current_amount > 0:
+                    await ctx.send(f"Current giveaway amount: ${current_amount:.2f}")
+                else:
+                    await ctx.send("No giveaway amount set. Usage: !raffle amount <dollar_amount>")
+                return
+            try:
+                amount = float(args[1])
+                if amount < 0:
+                    await ctx.send("Giveaway amount must be positive.")
+                    return
+                if self.state.set_giveaway_amount(amount):
+                    await ctx.send(f"Giveaway amount set to ${amount:.2f}")
+                else:
+                    await ctx.send("Failed to set giveaway amount.")
+            except (ValueError, TypeError):
+                await ctx.send("Please enter a valid dollar amount (e.g., 25.00)")
+            return
+
+        if cmd == "+":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can increase the giveaway amount.")
+                return
+            current_amount = self.state.get_giveaway_amount()
+            new_amount = current_amount + 1.0
+            if self.state.set_giveaway_amount(new_amount):
+                await ctx.send(f"Giveaway amount increased by $1! New total: ${new_amount:.2f}")
+            else:
+                await ctx.send("Failed to increase giveaway amount.")
+            return
+
+        if cmd == "set":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can set the giveaway amount.")
+                return
+            if len(args) < 2:
+                await ctx.send("Usage: !raffle set <dollar_amount>")
+                return
+            try:
+                amount = float(args[1])
+                if amount < 0:
+                    await ctx.send("Giveaway amount must be positive.")
+                    return
+                if self.state.set_giveaway_amount(amount):
+                    await ctx.send(f"Giveaway amount set to ${amount:.2f}")
+                else:
+                    await ctx.send("Failed to set giveaway amount.")
+            except (ValueError, TypeError):
+                await ctx.send("Please enter a valid dollar amount (e.g., 5.00)")
+            return
+
+        if cmd == "firstnumber":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can set the first dice number.")
+                return
+            if len(args) < 2:
+                await ctx.send("Usage: !raffle firstnumber <0-9>")
+                return
+            try:
+                first_digit = int(args[1])
+                if first_digit < 0 or first_digit > 9:
+                    raise ValueError
+                
+                # Broadcast dice roll to overlay
+                from bot.overlay_server import broadcast_overlay_message
+                await broadcast_overlay_message({
+                    "type": "dice_roll",
+                    "numbers": [first_digit]
+                })
+                
+                await ctx.send(f"🎲 First number set to: {first_digit}")
+                
+            except (ValueError, TypeError):
+                await ctx.send("Please enter a valid digit (0-9)")
+            return
+
+        if cmd == "secondnumber":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can set the second dice number.")
+                return
+            if len(args) < 3:
+                await ctx.send("Usage: !raffle secondnumber <first_digit> <second_digit>")
+                return
+            try:
+                first_digit = int(args[1])
+                second_digit = int(args[2])
+                if first_digit < 0 or first_digit > 9 or second_digit < 0 or second_digit > 9:
+                    raise ValueError
+                
+                # Broadcast dice roll to overlay
+                from bot.overlay_server import broadcast_overlay_message
+                await broadcast_overlay_message({
+                    "type": "dice_roll", 
+                    "numbers": [first_digit, second_digit]
+                })
+                
+                await ctx.send(f"🎲 Numbers set to: {first_digit}{second_digit}_")
+                
+            except (ValueError, TypeError):
+                await ctx.send("Please enter valid digits (0-9)")
+            return
+
+        if cmd == "thirdnumber":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can set the third dice number.")
+                return
+            if len(args) < 4:
+                await ctx.send("Usage: !raffle thirdnumber <first_digit> <second_digit> <third_digit>")
+                return
+            try:
+                first_digit = int(args[1])
+                second_digit = int(args[2])
+                third_digit = int(args[3])
+                if any(d < 0 or d > 9 for d in [first_digit, second_digit, third_digit]):
+                    raise ValueError
+                
+                # Broadcast dice roll to overlay
+                from bot.overlay_server import broadcast_overlay_message
+                await broadcast_overlay_message({
+                    "type": "dice_roll",
+                    "numbers": [first_digit, second_digit, third_digit]
+                })
+                
+                final_number = f"{first_digit}{second_digit}{third_digit}"
+                await ctx.send(f"🎲 Final number: {final_number}")
+                
+                # Check if it's a winner
+                if final_number in self.state.picks:
+                    winner = self.state.picks[final_number]
+                    await ctx.send(f"🎉 WINNER! {final_number} belongs to @{winner}!")
+                else:
+                    await ctx.send(f"No winner for {final_number}. The prize rolls over!")
+                
+            except (ValueError, TypeError):
+                await ctx.send("Please enter valid digits (0-9)")
+            return
+
+        if cmd == "resetfilter":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can reset the number filter.")
+                return
+            
+            # Broadcast reset to overlay
+            from bot.overlay_server import broadcast_overlay_message
+            await broadcast_overlay_message({
+                "type": "reset_filter"
+            })
+            
+            await ctx.send("🎲 Number filter reset - all numbers visible again")
+            return
+
+        if cmd == "testdraw":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can perform test draws.")
+                return
+            
+            # Generate random test dice
+            import random
+            test_numbers = [random.randint(0, 9) for _ in range(3)]
+            
+            # Broadcast test draw to overlay
+            from bot.overlay_server import broadcast_overlay_message
+            await broadcast_overlay_message({
+                "type": "dice_roll",
+                "numbers": test_numbers,
+                "test_mode": True
+            })
+            
+            final_number = f"{test_numbers[0]}{test_numbers[1]}{test_numbers[2]}"
+            await ctx.send(f"🎲 TEST DRAW: {final_number}")
+            
+            # Check if it would be a winner
+            if final_number in self.state.picks:
+                winner = self.state.picks[final_number]
+                await ctx.send(f"🎉 TEST RESULT: {final_number} would be won by @{winner}!")
+            else:
+                await ctx.send(f"💔 TEST RESULT: {final_number} would have no winner")
             return
 
         if cmd == "draw":
@@ -536,7 +739,11 @@ class RaffleCog(commands.Cog):
 
         if cmd == "odds":
             odds = len(self.state.picks)
-            await ctx.send(f"Current odds: {odds}/1000 numbers have been picked.")
+            giveaway_amount = self.state.get_giveaway_amount()
+            if giveaway_amount > 0:
+                await ctx.send(f"Current odds: {odds}/1000 numbers have been picked. Prize: ${giveaway_amount:.2f}")
+            else:
+                await ctx.send(f"Current odds: {odds}/1000 numbers have been picked.")
             return
 
         if cmd == "trade":

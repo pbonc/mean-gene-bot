@@ -1,0 +1,24 @@
+{
+  "audio_settings": {
+    "master_volume": 0.7,
+    "normalize_volume": true,
+    "target_loudness_db": -20,
+    "cache_audio_files": true,
+    "max_cache_size_mb": 1000,
+    "audio_quality": "192k"
+  },
+  "playback_settings": {
+    "auto_play_queue": true,
+    "auto_start_on_first_request": false,
+    "fade_between_songs": true,
+    "fade_duration_ms": 3000,
+    "max_song_duration_seconds": 600
+  },
+  "volume_normalization": {
+    "enabled": true,
+    "method": "ffmpeg_loudnorm",
+    "target_lufs": -16,
+    "peak_db": -1.0,
+    "range_db": 11.0
+  }
+}

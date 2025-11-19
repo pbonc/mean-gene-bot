@@ -19,20 +19,20 @@ sports_manager = SportsAPIManager()
 
 async def get_raffle_encouragement():
     """Encouragement message for raffle, including current prize as $XX."""
-    prize = get_raffle_prize()
-    if prize and prize.isdigit():
-        return f"Type !raffle random to enter for a chance to win a ${int(prize):d} gift card!"
+    amount = get_raffle_prize()
+    if amount and amount > 0:
+        return f"The current giveaway is a ${amount:.0f} gift card. Type !raffle random to enter!"
     else:
         return "Type !raffle random to enter the raffle!"
 
 def get_raffle_prize():
     try:
-        from bot.raffle_state import SimpleRaffleState
+        from bot.commands.raffle_cog import SimpleRaffleState
         state_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'raffle_state.json')
         if not os.path.isfile(state_file):
             return None
         state = SimpleRaffleState(state_file)
-        return state.prize
+        return state.get_giveaway_amount()
     except Exception:
         return None
 
@@ -173,7 +173,7 @@ async def get_ticker_messages():
             except Exception as e:
                 print(f"Error getting sports messages: {e}")
 
-            # Add modnews (limit to 5 random items)
+            # Add modnews (limit to 1 random item)
             workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
             modnews_path = os.path.join(assets_txt_dir, "modnews.txt")
@@ -187,21 +187,12 @@ async def get_ticker_messages():
                             modnews_msgs.append(f"ModNews: {msg}")
             import random
             if modnews_msgs:
-                messages.extend(random.sample(modnews_msgs, min(5, len(modnews_msgs))))
+                messages.append(random.choice(modnews_msgs))
 
             # Add a random quote
             try:
                 workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 assets_txt_dir = os.path.join(workspace_root, "assets", "txt")
-                # Modnews
-                modnews_path = os.path.join(assets_txt_dir, "modnews.txt")
-                modnews_msgs = []
-                if os.path.isfile(modnews_path):
-                    with open(modnews_path, "r", encoding="utf-8") as f:
-                        for line in f:
-                            msg = line.strip()
-                            if msg:
-                                modnews_msgs.append(f"ModNews: {msg}")
                 # Derpisms
                 derpisms_path = os.path.join(assets_txt_dir, "derpisms.txt")
                 derpisms = []

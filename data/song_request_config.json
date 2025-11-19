@@ -1,0 +1,22 @@
+{
+  "sheet_id": "",
+  "range": "A:F",
+  "columns": {
+    "number": "A",
+    "title": "B", 
+    "artist": "C",
+    "youtube_url": "D",
+    "duration": "E",
+    "verified": "F"
+  },
+  "settings": {
+    "quarters_per_youtube_request": 1,
+    "max_queue_length": 10,
+    "max_song_duration_seconds": 300,
+    "auto_refresh_playlist_minutes": 60,
+    "enable_youtube_requests": true,
+    "enable_playlist_requests": true,
+    "prefer_playlist_stingers": true,
+    "show_duration_in_chat": true
+  }
+}

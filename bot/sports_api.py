@@ -9,6 +9,9 @@ class SportsAPIManager:
         self.cache = {}
         self.cache_duration = 300  # 5 minutes
         self.last_update = {}
+        self.enabled = True  # Can be disabled if causing startup issues
+        self.startup_time = time.time()
+        self.startup_delay = 5  # Wait 5 seconds after startup before making API calls
         
         # API endpoints - switch to ESPN for current data
         self.espn_nhl_base = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl"
@@ -16,6 +19,67 @@ class SportsAPIManager:
         self.espn_mlb_base = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
         self.espn_nfl_base = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
         self.sportsdb_base = "https://www.thesportsdb.com/api/v1/json/3"
+
+    def get_current_streaming_day(self):
+        """
+        Get the current 'streaming day' date with 5 AM reset.
+        If it's before 5 AM, consider it the previous calendar day.
+        Returns date in YYYY-MM-DD format.
+        """
+        # Get current time in local timezone (assuming system timezone is correct)
+        now = datetime.now()
+        
+        # If it's before 5 AM, subtract one day to get the "streaming day"
+        if now.hour < 5:
+            streaming_day = now - timedelta(days=1)
+        else:
+            streaming_day = now
+        
+        return streaming_day.strftime("%Y-%m-%d")
+    
+    def is_game_recent_or_current(self, game_date_str):
+        """
+        Check if a game is from recent days (more permissive for ticker).
+        This allows showing recent final games and current live games.
+        Includes yesterday, today, and tomorrow to catch late-night games.
+        """
+        try:
+            now = datetime.now()
+            yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+            today = now.strftime("%Y-%m-%d")
+            tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            # Parse the game date
+            if 'T' in game_date_str:
+                game_date = datetime.fromisoformat(game_date_str.replace('Z', '+00:00'))
+                game_day = game_date.strftime("%Y-%m-%d")
+                return game_day in [yesterday, today, tomorrow]
+            else:
+                # If no time component, just check date
+                return game_date_str in [yesterday, today, tomorrow]
+        except Exception:
+            return False
+    
+    def is_game_on_streaming_day(self, game_date_str):
+        """
+        Check if a game date matches the current streaming day.
+        game_date_str should be in ISO format (YYYY-MM-DDTHH:MM:SSZ)
+        """
+        try:
+            current_day = self.get_current_streaming_day()
+            
+            # Parse the game date
+            if 'T' in game_date_str:
+                game_date = datetime.fromisoformat(game_date_str.replace('Z', '+00:00'))
+            else:
+                game_date = datetime.fromisoformat(game_date_str)
+            
+            game_day = game_date.strftime("%Y-%m-%d")
+            return game_day == current_day
+            
+        except Exception as e:
+            print(f"[SPORTS] Error parsing game date {game_date_str}: {e}")
+            return False  # If we can't parse, exclude the game
 
     def format_game_time(self, clock_seconds):
         """Convert clock seconds to MM:SS format for display"""
@@ -40,7 +104,7 @@ class SportsAPIManager:
         print("[SPORTS] Fetching NHL data...")
         messages = []
         try:
-            timeout = aiohttp.ClientTimeout(total=10)
+            timeout = aiohttp.ClientTimeout(total=8, connect=3)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 url = f"{self.espn_nhl_base}/scoreboard"
                 async with session.get(url) as response:
@@ -53,13 +117,26 @@ class SportsAPIManager:
                         final_games = []
                         upcoming_games = []
                         
+                        print(f"[SPORTS] NHL: Filtering for recent games (live games always included)")
+                        
                         for event in events:
                             competitions = event.get('competitions', [])
                             if not competitions:
                                 continue
+                                
                             competition = competitions[0]
-                            competitors = competition.get('competitors', [])
                             status = competition.get('status', {})
+                            status_type = status.get('type', {}).get('name', '')
+                            
+                            # Always include live/in-progress games regardless of date
+                            is_live = 'PROGRESS' in status_type or 'LIVE' in status_type
+                            
+                            # For non-live games, check if recent
+                            if not is_live:
+                                event_date = event.get('date')
+                                if not event_date or not self.is_game_recent_or_current(event_date):
+                                    continue  # Skip non-live games not from recent days
+                            competitors = competition.get('competitors', [])
 
                             # Find home and away entries (ESPN marks homeAway)
                             home = None
@@ -140,12 +217,19 @@ class SportsAPIManager:
                         messages.extend(upcoming_games) # All upcoming games  
                         messages.extend(final_games)    # All final games
                         
-                        print(f"[SPORTS] Found {len(live_games)} live, {len(upcoming_games)} upcoming, {len(final_games)} final games")
+                        print(f"[SPORTS] NHL: Found {len(live_games)} live, {len(upcoming_games)} upcoming, {len(final_games)} final games")
                         
                     else:
-                        print(f"[SPORTS] ESPN API returned status: {response.status}")
+                        print(f"[SPORTS] NHL: ESPN API returned status: {response.status}")
+                        return []
+        except asyncio.TimeoutError:
+            print(f"[SPORTS] NHL: Request timed out")
+            return []
+        except aiohttp.ClientError as e:
+            print(f"[SPORTS] NHL: Network error: {e}")
+            return []
         except Exception as e:
-            print(f"[SPORTS] Exception: {e}")
+            print(f"[SPORTS] NHL: Unexpected error: {e}")
             return []
         
         # Cache the results for 5 minutes
@@ -166,7 +250,7 @@ class SportsAPIManager:
         print("[SPORTS] Fetching MLB data...")
         messages = []
         try:
-            timeout = aiohttp.ClientTimeout(total=10)
+            timeout = aiohttp.ClientTimeout(total=8, connect=3)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 url = f"{self.espn_mlb_base}/scoreboard"
                 async with session.get(url) as response:
@@ -178,11 +262,25 @@ class SportsAPIManager:
                         final_games = []
                         upcoming_games = []
 
+                        print(f"[SPORTS] MLB: Filtering for recent games (live games always included)")
+                        
                         for event in events:
                             competitions = event.get('competitions', [])
                             if not competitions:
                                 continue
+                                
                             competition = competitions[0]
+                            status = competition.get('status', {})
+                            status_type = status.get('type', {}).get('name', '')
+                            
+                            # Always include live/in-progress games regardless of date
+                            is_live = 'PROGRESS' in status_type or 'LIVE' in status_type
+                            
+                            # For non-live games, check if recent
+                            if not is_live:
+                                event_date = event.get('date')
+                                if not event_date or not self.is_game_recent_or_current(event_date):
+                                    continue  # Skip non-live games not from recent days
                             competitors = competition.get('competitors', [])
                             status = competition.get('status', {})
 
@@ -302,13 +400,26 @@ class SportsAPIManager:
                         final_games = []
                         upcoming_games = []
 
+                        print(f"[SPORTS] NBA: Filtering for recent games (live games always included)")
+                        
                         for event in events:
                             competitions = event.get('competitions', [])
                             if not competitions:
                                 continue
+                                
                             competition = competitions[0]
-                            competitors = competition.get('competitors', [])
                             status = competition.get('status', {})
+                            status_type = status.get('type', {}).get('name', '')
+                            
+                            # Always include live/in-progress games regardless of date
+                            is_live = 'PROGRESS' in status_type or 'LIVE' in status_type
+                            
+                            # For non-live games, check if recent
+                            if not is_live:
+                                event_date = event.get('date')
+                                if not event_date or not self.is_game_recent_or_current(event_date):
+                                    continue  # Skip non-live games not from recent days
+                            competitors = competition.get('competitors', [])
 
                             home = None
                             away = None
@@ -414,11 +525,25 @@ class SportsAPIManager:
                         final_games = []
                         upcoming_games = []
 
+                        print(f"[SPORTS] NFL: Filtering for recent games (live games always included)")
+                        
                         for event in events:
                             competitions = event.get('competitions', [])
                             if not competitions:
                                 continue
+                                
                             competition = competitions[0]
+                            status = competition.get('status', {})
+                            status_type = status.get('type', {}).get('name', '')
+                            
+                            # Always include live/in-progress games regardless of date
+                            is_live = 'PROGRESS' in status_type or 'LIVE' in status_type
+                            
+                            # For non-live games, check if recent
+                            if not is_live:
+                                event_date = event.get('date')
+                                if not event_date or not self.is_game_recent_or_current(event_date):
+                                    continue  # Skip non-live games not from recent days
                             competitors = competition.get('competitors', [])
                             status = competition.get('status', {})
 
@@ -505,26 +630,43 @@ class SportsAPIManager:
         return messages
 
     async def get_sports_messages(self) -> List[str]:
-        """Get sports messages for ticker"""
-        # Aggregate messages from NHL, NBA, MLB, NFL
-        all_live = []
-        all_upcoming = []
-        all_final = []
-
-        nhl_messages = await self.fetch_nhl_scores()
-        nba_messages = await self.fetch_nba_scores()
-        mlb_messages = await self.fetch_mlb_scores()
-        nfl_messages = await self.fetch_nfl_scores()
-
-        # Each fetch returns messages in three segments separated by markers
-        # (we return lists with live then upcoming then final). We'll just
-        # concatenate preserving order: live -> upcoming -> final across leagues.
-        for msgs in (nhl_messages, nba_messages, mlb_messages, nfl_messages):
-            for m in msgs:
-                # Messages are already ordered by category in each fetch
-                all_live.append(m) if '(P' in m or '(F' not in m and '@' not in m and '-' in m else None
-        # Simpler: just combine lists in the order returned by each fetch
+        """Get sports messages for ticker with robust error handling"""
+        if not self.enabled:
+            print("[SPORTS] Sports API disabled, skipping")
+            return []
+        
+        # Skip sports data during initial startup to prevent blocking
+        elapsed_since_startup = time.time() - self.startup_time
+        if elapsed_since_startup < self.startup_delay:
+            print(f"[SPORTS] Skipping sports fetch during startup ({elapsed_since_startup:.1f}s < {self.startup_delay}s)")
+            return []
+            
+        print("[SPORTS] Starting sports data fetch...")
         combined = []
-        for msgs in (nhl_messages, nba_messages, mlb_messages, nfl_messages):
-            combined.extend(msgs)
+        
+        # Fetch each sport with individual timeouts and error handling
+        sports_fetchers = [
+            ("NHL", self.fetch_nhl_scores),
+            ("NBA", self.fetch_nba_scores),
+            ("MLB", self.fetch_mlb_scores),
+            ("NFL", self.fetch_nfl_scores)
+        ]
+        
+        for sport_name, fetch_func in sports_fetchers:
+            try:
+                # Add per-sport timeout to prevent hanging
+                messages = await asyncio.wait_for(fetch_func(), timeout=15.0)
+                if messages:
+                    combined.extend(messages)
+                    print(f"[SPORTS] {sport_name}: {len(messages)} messages")
+                else:
+                    print(f"[SPORTS] {sport_name}: No games found")
+            except asyncio.TimeoutError:
+                print(f"[SPORTS] {sport_name}: Timeout after 15s, skipping")
+                continue
+            except Exception as e:
+                print(f"[SPORTS] {sport_name}: Error - {e}, skipping")
+                continue
+        
+        print(f"[SPORTS] Total sports messages: {len(combined)}")
         return combined

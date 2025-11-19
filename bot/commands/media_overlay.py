@@ -3,6 +3,7 @@ import re
 import random
 import asyncio
 import logging
+import subprocess
 from twitchio.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
@@ -25,10 +26,78 @@ AUDIO_EXTS = [".mp3", ".wav", ".ogg"]
 SCAN_INTERVAL = 3  # seconds
 MODS_FOLDER = "mods"
 
+# Audio system with volume control
+SFX_VOLUME = 0.6  # 60% default volume for SFX
+
+# Try pygame first for volume control
+PYGAME_AVAILABLE = False
 try:
-    from playsound import playsound
+    import pygame
+    PYGAME_AVAILABLE = True
 except ImportError:
-    def playsound(path): print(f"Would play sound: {path}")
+    pygame = None
+
+def playsound_with_volume(path, volume=SFX_VOLUME):
+    """Play sound with volume control using pygame if available"""
+    try:
+        if PYGAME_AVAILABLE:
+            # Use pygame for volume-controlled playback
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=1024)
+            
+            # Load and play with volume control
+            sound = pygame.mixer.Sound(path)
+            sound.set_volume(volume)
+            channel = sound.play()
+            
+            # Wait for sound to finish
+            while channel.get_busy():
+                pygame.time.wait(10)
+            
+            print(f"Playing sound: {os.path.basename(path)} (pygame, volume={volume:.1%})")
+        else:
+            # Fallback to system audio without volume control
+            _fallback_playsound(path)
+    except Exception as e:
+        print(f"Error playing sound {path}: {e}")
+        _fallback_playsound(path)
+
+def _fallback_playsound(path):
+    """Fallback audio playback without volume control"""
+    try:
+        from playsound import playsound
+        playsound(path)
+        print(f"Playing sound: {os.path.basename(path)} (playsound fallback)")
+    except ImportError:
+        import platform
+        import os
+        
+        if platform.system() == "Windows":
+            import winsound
+            try:
+                # Use winsound for WAV files (native Windows audio, synchronous)
+                if path.lower().endswith('.wav'):
+                    winsound.PlaySound(path, winsound.SND_FILENAME)
+                    print(f"Playing sound: {os.path.basename(path)} (winsound)")
+                else:
+                    # For MP3 files, use playsound3
+                    try:
+                        from playsound3 import playsound as ps3
+                        ps3(path, block=True)
+                        print(f"Audio completed: {os.path.basename(path)} (playsound3)")
+                    except Exception:
+                        # Simple fallback
+                        os.startfile(path)
+                        import time
+                        time.sleep(5.0)
+                        print(f"Audio completed: {os.path.basename(path)} (fallback)")
+            except Exception as e:
+                print(f"Error playing sound {path}: {e}")
+        else:
+            print(f"Would play sound: {path}")
+
+# Alias for backwards compatibility
+playsound = playsound_with_volume
 
 def map_filename_to_command(filename):
     base = filename
@@ -60,6 +129,7 @@ def get_audio_duration_ms(path: str):
     Strategies:
     - For WAV files, use the stdlib wave module.
     - Try mutagen (if installed) for mp3/ogg and others.
+    - Try PowerShell Windows Shell method as fallback.
     - If all else fails, return empty string.
     """
     if not path or not isinstance(path, str):
@@ -81,25 +151,70 @@ def get_audio_duration_ms(path: str):
             if m and hasattr(m, "info") and getattr(m.info, "length", None) is not None:
                 return int(m.info.length * 1000)
         except Exception:
-            # mutagen not installed or failed to read file -> skip
+            # mutagen not installed or failed to read file -> try PowerShell fallback
             pass
+        
+        # Fallback: Try PowerShell Windows Shell method for MP3 files
+        if ext in [".mp3", ".m4a", ".wma"]:
+            try:
+                import subprocess
+                ps_script = f'''
+                $shell = New-Object -COMObject Shell.Application
+                $folder = $shell.Namespace([System.IO.Path]::GetDirectoryName("{path}"))
+                $file = $folder.ParseName([System.IO.Path]::GetFileName("{path}"))
+                $duration = $folder.GetDetailsOf($file, 27)
+                Write-Output $duration
+                '''
+                result = subprocess.run([
+                    'powershell', '-WindowStyle', 'Hidden', '-Command', ps_script
+                ], capture_output=True, text=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+                
+                if result.returncode == 0:
+                    duration_str = result.stdout.strip()
+                    # Parse duration string (format like "00:00:05")
+                    if ':' in duration_str and len(duration_str) >= 7:
+                        parts = duration_str.split(':')
+                        if len(parts) >= 3:
+                            hours = int(parts[0]) if parts[0].isdigit() else 0
+                            minutes = int(parts[1]) if parts[1].isdigit() else 0
+                            seconds = int(parts[2]) if parts[2].isdigit() else 0
+                            total_seconds = hours * 3600 + minutes * 60 + seconds
+                            return int(total_seconds * 1000)
+            except Exception:
+                # PowerShell method failed, will return empty string
+                pass
     except Exception:
         pass
     return ""
 
 
-def get_audio_duration_seconds_truncated(path: str):
-    """Return audio duration in seconds truncated to the tenth (e.g. 12.3).
+def _was_duration_detected_by_powershell(path: str):
+    """Check if duration was detected using PowerShell method"""
+    try:
+        from mutagen import File as MutagenFile
+        m = MutagenFile(path)
+        # If mutagen works, PowerShell wasn't needed
+        if m and hasattr(m, "info") and getattr(m.info, "length", None) is not None:
+            return False
+        # If mutagen failed and we're here, PowerShell was likely used
+        return True
+    except Exception:
+        # If mutagen import fails, PowerShell was used
+        return True
 
-    Returns a float with one decimal place, or empty string if unknown.
+def get_audio_duration_seconds_truncated(path: str):
+    """Return audio duration in seconds with conservative rounding.
+
+    Returns a float rounded UP to ensure we don't cut off sounds, or empty string if unknown.
     """
     ms = get_audio_duration_ms(path)
     if not ms:
         return ""
     try:
         seconds = float(ms) / 1000.0
-        truncated = math.floor(seconds * 10) / 10.0
-        return truncated
+        # Round UP to next tenth to ensure we don't cut sounds short
+        rounded_up = math.ceil(seconds * 10) / 10.0
+        return rounded_up
     except Exception:
         return ""
 
@@ -121,7 +236,7 @@ class MediaOverlayCog(commands.Cog):
             path, ctx, message = play_item
             try:
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(self.executor, playsound, path)
+                await loop.run_in_executor(self.executor, playsound_with_volume, path)
                 if message and ctx:
                     await ctx.send(message)
             except Exception as e:
@@ -436,6 +551,32 @@ class MediaOverlayCog(commands.Cog):
         ])
         await ctx.send(f"{count} unique sound effect commands.")
 
+    @commands.command(name="sfx")
+    async def sfx_help(self, ctx, *, args=None):
+        """
+        Explains how SFX commands work and shows available numbered SFX files.
+        Usage: !sfx
+        """
+        if args:
+            # User tried !sfx [something] - explain the correct usage
+            await ctx.send(f"❌ SFX files are individual commands, not numbers. Try !{args} if that file exists, or use !sfx to see numbered options.")
+            return
+            
+        # Get all numbered SFX commands (files that start with digits)
+        numbered_sfx = []
+        for cmd, entry in self.media_commands.items():
+            if "sfx" in entry and entry["sfx"][1] in ("flat", "folderfile") and cmd[0].isdigit():
+                numbered_sfx.append(cmd)
+        
+        if numbered_sfx:
+            numbered_sfx.sort(key=lambda x: int(''.join(filter(str.isdigit, x))))  # Sort numerically
+            numbered_list = ", ".join([f"!{cmd}" for cmd in numbered_sfx[:20]])  # Show first 20
+            if len(numbered_sfx) > 20:
+                numbered_list += f" ... and {len(numbered_sfx) - 20} more"
+            await ctx.send(f"🔊 SFX commands are individual (e.g., !magic, !damn). Numbered SFX: {numbered_list}")
+        else:
+            await ctx.send("🔊 SFX commands are individual (e.g., !magic, !damn). Use !randomsfx for a random sound or !sfxcount for total count.")
+
     @commands.command(name="syncsfx")
     async def syncsfx(self, ctx):
         """Force a sync of the SFX/GIF command list to the configured Google Sheet. Mod-only."""
@@ -443,6 +584,31 @@ class MediaOverlayCog(commands.Cog):
             await ctx.send("Only mods can force SFX sync.")
             return
         await self._maybe_sync_sheet(ctx)
+
+    @commands.command(name="sfxvolume")
+    async def sfx_volume(self, ctx, level: int = None):
+        """
+        Set or check SFX volume level (0-100). Mod-only.
+        Usage: !sfxvolume [0-100]
+        """
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send("Only mods can control SFX volume.")
+            return
+        
+        if level is None:
+            # Show current volume
+            current = int(SFX_VOLUME * 100)
+            await ctx.send(f"🔊 Current SFX volume: {current}%")
+            return
+        
+        if not (0 <= level <= 100):
+            await ctx.send("❌ Volume must be between 0 and 100.")
+            return
+        
+        # Update global SFX volume
+        global SFX_VOLUME
+        SFX_VOLUME = level / 100.0
+        await ctx.send(f"🔊 SFX volume set to {level}%")
 
 def prepare(bot):
     bot.add_cog(MediaOverlayCog(bot))
