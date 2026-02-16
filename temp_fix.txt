@@ -1,0 +1,35 @@
+            def _extract(opts):
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    return ydl.extract_info(youtube_url, download=False)
+
+            loop = asyncio.get_event_loop()
+            
+            try:
+                # First try with cookies
+                await asyncio.wait_for(loop.run_in_executor(self.executor, _extract, ydl_opts), timeout=15.0)
+                return True
+            except Exception as first_error:
+                error_str = str(first_error)
+                
+                # Retry with Android client if format/signature error
+                if any(x in error_str for x in [
+                    "Requested format is not available",
+                    "Signature solving failed",
+                    "n challenge solving failed",
+                    "Only images are available"
+                ]):
+                    print(f"[ANDROID FALLBACK - PREFLIGHT] Retrying preflight check with Android client")
+                    try:
+                        ydl_opts_android = get_ydl_opts(download=False, quiet=True, use_android_client=True)
+                        ydl_opts_android['socket_timeout'] = 15
+                        ydl_opts_android['retries'] = 3
+                        ydl_opts_android['fragment_retries'] = 3
+                        await asyncio.wait_for(loop.run_in_executor(self.executor, _extract, ydl_opts_android), timeout=15.0)
+                        print(f"[ANDROID FALLBACK - PREFLIGHT] ✅ Android client preflight succeeded")
+                        return True
+                    except Exception as android_error:
+                        # Android client also failed, treat as original error
+                        pass
+                
+                # Re-raise to be handled below
+                raise first_error

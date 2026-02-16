@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Allen & Ginter Breaks Board</title>
+  <style>
+    @font-face {
+      font-family: 'AGSerif';
+      src: local('Georgia');
+    }
+    :root {
+      --bg: #f3ecd9;
+      --ink: #2b2a28;
+      --accent: #3c6e71;
+      --accent2: #b08968;
+      --border: #9c6b3f;
+      --muted: #7a6f5a;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #f9f5e8 0%, #f3ecd9 50%, #efe5d4 100%);
+      color: var(--ink);
+      font-family: 'AGSerif', Georgia, 'Times New Roman', serif;
+    }
+    .frame {
+      max-width: 1400px;
+      margin: 24px auto;
+      padding: 24px;
+      background: rgba(255,255,255,0.6);
+      border: 8px double var(--border);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    }
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 42px;
+      letter-spacing: 1px;
+      color: var(--accent2);
+      text-shadow: 0 1px 0 #fff;
+    }
+    .subtitle {
+      font-size: 16px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .section-title {
+      font-size: 22px;
+      margin: 18px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 3px dotted var(--border);
+      color: var(--accent);
+    }
+    /* Make pick list text larger for on-stream readability */
+    #picklist { font-size: 18px; }
+    #picklist .pick-group .name { font-size: 20px; }
+    #picklist ul { font-size: 18px; }
+    .tile {
+      position: relative;
+      padding: 18px 16px;
+      background: #fffdf7;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.06);
+    }
+    .tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    .tile h4 { margin: 0; font-size: 18px; }
+    .tile small { display: block; color: var(--muted); margin-top: 4px; }
+    .tile.struck h4, .tile.struck small { text-decoration: line-through; text-decoration-thickness: 4px; text-decoration-color: rgba(120,0,0,0.85); color: #6e5d47; }
+    .tile .assign { display:block; margin-top:6px; font-size:13px; color:#7b4f4f; }
+    .tile .badge {
+      position: absolute; right: 8px; top: 8px;
+      font-size: 11px; padding: 3px 6px; border: 1px solid var(--border);
+      background: #f8efe0; border-radius: 4px; color: var(--muted);
+    }
+    .legend { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 8px; }
+    .legend .swatch { width: 18px; height: 18px; border: 2px solid var(--border); background: #fffdf7; }
+    .legend .line { height: 2px; width: 40px; background: var(--border); }
+    footer { text-align: center; margin-top: 12px; font-size: 12px; color: var(--muted); }
+    .controls { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
+    .btn {
+      padding: 8px 12px; border: 2px solid var(--border); background: #fffdf7; color: var(--ink);
+      border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 120ms ease;
+    }
+    .btn:hover { background: #f4ead8; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="title">Allen &amp; Ginter Break Board</div>
+      <div class="subtitle">Click a team or category, enter a username, and apply. The tile strikes through and shows the username.</div>
+      <div class="controls">
+        <button class="btn" id="clear">Clear All</button>
+        <button class="btn" id="export">Export Hits</button>
+        <!-- Assign button removed: assignment happens on tile click via modal -->
+      </div>
+      <div class="legend">
+        <div class="swatch" title="Tile"></div>
+        <div class="line" title="Border"></div>
+        <div>Struck items = hit/claimed</div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">MLB Teams</div>
+      <div class="grid" id="teams"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Non-Baseball Categories</div>
+      <div class="grid" id="categories"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Pick List (Grouped by Name)</div>
+      <div id="picklist"></div>
+    </section>
+
+    <footer>
+      Source hints: Beckett 2024 Allen &amp; Ginter overview mentions non-baseball signers and insert themes like Ballpark Bites, Flags of the World, Sister Cities, Buzzin', Batoids Beneath, Swamp Creatures, X-Ray'd, World’s Tallest Mountains. WWE appears in various years among non-baseball signers.
+    </footer>
+  </div>
+
+  <!-- Simple modal for assigning picker -->
+  <div id="assignModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4);">
+    <div style="max-width:520px; margin:10% auto; background:#fffdf7; border:3px solid var(--border); border-radius:8px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
+      <div style="font-size:18px; color:var(--accent); margin-bottom:8px;">Assign Picker</div>
+      <div id="assignTarget" style="color:var(--muted); margin-bottom:8px;">Selected: (none)</div>
+      <label for="pickerName">Picker name</label>
+      <input id="pickerName" list="pickerNames" type="text" style="width:100%; padding:8px; border:2px solid var(--border); border-radius:6px;" placeholder="Type name..." />
+      <datalist id="pickerNames"></datalist>
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button class="btn" id="assignCancel">Cancel</button>
+        <button class="btn" id="assignSave">Save</button>
+      </div>
+    </div>
+  </div>
+  <!-- Decorative vintage baseball fringes -->
+  <div style="pointer-events:none; position:fixed; left:0; top:0; bottom:0; width:56px; opacity:0.25; background:
+      linear-gradient(135deg, transparent 48%, #8a2f2f 48%, #8a2f2f 52%, transparent 52%) left center/28px 28px repeat-y,
+      linear-gradient(225deg, transparent 48%, #8a2f2f 48%, #8a2f2f 52%, transparent 52%) right center/28px 28px repeat-y,
+      radial-gradient(circle at 28px 14px, rgba(138,47,47,0.6) 2px, transparent 2px) left center/56px 28px repeat-y;"></div>
+  <div style="pointer-events:none; position:fixed; right:0; top:0; bottom:0; width:56px; opacity:0.25; background:
+      linear-gradient(135deg, transparent 48%, #8a2f2f 48%, #8a2f2f 52%, transparent 52%) left center/28px 28px repeat-y,
+      linear-gradient(225deg, transparent 48%, #8a2f2f 48%, #8a2f2f 52%, transparent 52%) right center/28px 28px repeat-y,
+      radial-gradient(circle at 28px 14px, rgba(138,47,47,0.6) 2px, transparent 2px) left center/56px 28px repeat-y;"></div>
+
+  <script>
+    const MLB_TEAMS = [
+      'Arizona Diamondbacks','Atlanta Braves','Baltimore Orioles','Boston Red Sox','Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians','Colorado Rockies','Detroit Tigers','Houston Astros','Kansas City Royals','Los Angeles Angels','Los Angeles Dodgers','Miami Marlins','Milwaukee Brewers','Minnesota Twins','New York Mets','New York Yankees','Oakland Athletics','Philadelphia Phillies','Pittsburgh Pirates','San Diego Padres','San Francisco Giants','Seattle Mariners','St. Louis Cardinals','Tampa Bay Rays','Texas Rangers','Toronto Blue Jays','Washington Nationals'
+    ];
+
+    // Categories influenced by Allen & Ginter checklists and themes (year-to-year variations exist)
+    // Requested simplified category boxes
+    const AG_CATEGORIES = [
+      { name: 'Actors / Actresses', note: 'Non-baseball' },
+      { name: 'Musicians', note: 'Non-baseball' },
+      { name: 'Other Athletes', note: 'Non-baseball' },
+      { name: 'WWE', note: 'Non-baseball' },
+      { name: 'MISC / Other', note: 'Everything else' }
+    ];
+
+    const hits = new Set();
+    let selectedKey = null; // currently selected tile key for assignment
+    const assignments = new Map(); // name -> Set of keys
+    const assignedNames = new Set(); // for autocomplete
+
+    function makeTile(label, group, note) {
+      const div = document.createElement('div');
+      div.className = 'tile';
+      div.dataset.key = `${group}:${label}`;
+      const h4 = document.createElement('h4');
+      h4.textContent = label;
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = group;
+      div.appendChild(h4);
+      if (note) { const sm = document.createElement('small'); sm.textContent = note; div.appendChild(sm); }
+      div.appendChild(badge);
+      div.addEventListener('click', () => {
+        const k = div.dataset.key;
+        selectedKey = k;
+        document.querySelectorAll('.tile').forEach(el => el.style.outline = '');
+        div.style.outline = '3px solid var(--accent2)';
+        // open modal for username input
+        openAssignModal(k);
+      });
+      return div;
+    }
+
+    function render() {
+      const tRoot = document.getElementById('teams');
+      const cRoot = document.getElementById('categories');
+      tRoot.innerHTML = '';
+      cRoot.innerHTML = '';
+      MLB_TEAMS.forEach(t => tRoot.appendChild(makeTile(t, 'MLB', 'Team')));
+      AG_CATEGORIES.forEach(c => cRoot.appendChild(makeTile(c.name, 'Category', c.note)));
+      restore();
+    }
+
+    function persist() {
+      try { localStorage.setItem('ag_hits', JSON.stringify([...hits])); } catch {}
+      try {
+        const obj = {};
+        assignments.forEach((set, name) => { obj[name] = [...set]; });
+        localStorage.setItem('ag_assignments', JSON.stringify(obj));
+      } catch {}
+    }
+    function restore() {
+      try {
+        const raw = localStorage.getItem('ag_hits');
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        arr.forEach(k => hits.add(k));
+        // apply strikes
+        document.querySelectorAll('.tile').forEach(el => {
+          if (hits.has(el.dataset.key)) el.classList.add('struck');
+        });
+      } catch {}
+      try {
+        const rawA = localStorage.getItem('ag_assignments');
+        if (rawA) {
+          const obj = JSON.parse(rawA);
+          Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
+        }
+        renderPickList();
+        refreshPickerNames();
+      } catch {}
+    }
+
+    document.getElementById('clear').addEventListener('click', () => {
+      hits.clear();
+      document.querySelectorAll('.tile').forEach(el => el.classList.remove('struck'));
+      try { localStorage.removeItem('ag_hits'); } catch {}
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const exportText = buildPickListExport();
+      navigator.clipboard.writeText(exportText).then(() => {
+        alert('Exported pick list to clipboard.');
+      }).catch(() => {
+        alert('Could not copy pick list to clipboard.');
+      });
+    });
+
+    // Assign modal logic
+    const modal = document.getElementById('assignModal');
+    const assignTarget = document.getElementById('assignTarget');
+    const pickerNameInput = document.getElementById('pickerName');
+    const pickerNamesDL = document.getElementById('pickerNames');
+    function openAssignModal(key) {
+      assignTarget.textContent = 'Selected: ' + key;
+      pickerNameInput.value = '';
+      refreshPickerNames();
+      modal.style.display = 'block';
+      pickerNameInput.focus();
+    }
+    document.getElementById('assignCancel').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    document.getElementById('assignSave').addEventListener('click', () => {
+      const name = (pickerNameInput.value || '').trim();
+      if (!name) { alert('Enter a picker name.'); return; }
+      if (!assignments.has(name)) assignments.set(name, new Set());
+      const set = assignments.get(name);
+      set.add(selectedKey);
+      assignedNames.add(name);
+      // visually strike and show name inside tile
+      const tile = document.querySelector(`.tile[data-key="${CSS.escape(selectedKey)}"]`);
+      if (tile) {
+        hits.add(selectedKey);
+        tile.classList.add('struck');
+        let assignEl = tile.querySelector('.assign');
+        if (!assignEl) { assignEl = document.createElement('span'); assignEl.className = 'assign'; tile.appendChild(assignEl); }
+        assignEl.textContent = name;
+      }
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    function renderPickList() {
+      const root = document.getElementById('picklist');
+      root.innerHTML = '';
+      const names = [...assignments.keys()].sort((a,b)=>a.localeCompare(b));
+      if (names.length === 0) { root.textContent = 'No picks yet.'; return; }
+      names.forEach(name => {
+        const group = document.createElement('div');
+        group.style.marginBottom = '10px';
+        const heading = document.createElement('div');
+        heading.textContent = name;
+        heading.style.fontWeight = '700';
+        heading.style.color = 'var(--accent)';
+        heading.style.marginBottom = '6px';
+        const list = document.createElement('ul');
+        list.style.margin = '0'; list.style.paddingLeft = '18px';
+        [...assignments.get(name)].sort().forEach(k => {
+          const li = document.createElement('li'); li.textContent = k; list.appendChild(li);
+        });
+        group.appendChild(heading);
+        group.appendChild(list);
+        root.appendChild(group);
+      });
+    }
+
+    // Build export text for pick list grouped by name
+    function buildPickListExport() {
+      const names = [...assignments.keys()].sort((a,b)=>a.localeCompare(b));
+      if (names.length === 0) return 'No picks yet.';
+      const lines = [];
+      names.forEach(name => {
+        const items = [...assignments.get(name)].sort();
+        lines.push(`${name}:`);
+        items.forEach(item => lines.push(`- ${item}`));
+        lines.push('');
+      });
+      return lines.join('\n');
+    }
+
+    function refreshPickerNames() {
+      pickerNamesDL.innerHTML = '';
+      const names = new Set([...assignments.keys(), ...assignedNames]);
+      names.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        pickerNamesDL.appendChild(opt);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>

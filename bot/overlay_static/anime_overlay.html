@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Anime Overlay</title>
+  <!-- Google Fonts for anime style + Symbol Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Permanent+Marker&family=Rampart+One&family=Rock+Salt&family=Press+Start+2P&family=Noto+Sans+Symbols&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Segoe UI Symbol';
+      src: local('Segoe UI Symbol');
+      unicode-range: U+2600-26FF, U+2700-27BF, U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
+      overflow: hidden;
+    }
+    #anime-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .anime-row {
+      position: absolute;
+      font-size: 2.1em;
+  font-family: 'Arial Black', 'Impact', 'Segoe UI', 'Arial', 'Noto Sans Symbols', 'Segoe UI Symbol', 'sans-serif';
+  font-feature-settings: 'liga' 1, 'calt' 1, 'ccmp' 1;
+  color: #f8f8fa;
+  text-shadow: 0 2px 8px #222a38;
+      white-space: nowrap;
+      opacity: 0.97;
+      filter: drop-shadow(0 0 6px #bfc0c0) drop-shadow(0 0 10px #4f5d75);
+      border-radius: 16px;
+      padding: 0.2em 0.7em;
+  background: rgba(30, 40, 60, 0.92);
+      border: 3px solid #4f5d75;
+      box-shadow: 0 0 18px #bfc0c0, 0 0 6px #4f5d75;
+      /* Animation will be set in JS */
+    }
+    /* Animations for different directions and bounce */
+    @keyframes anime-scroll-ltr {
+      from { left: -40vw; top: 10vh; opacity: 0; }
+      10% { opacity: 1; }
+      50% { left: 60vw; top: 10vh; transform: scale(1.2) rotate(2deg); }
+      to { left: 110vw; top: 10vh; opacity: 0.7; }
+    }
+    @keyframes anime-scroll-rtl {
+      from { left: 110vw; top: 30vh; opacity: 0; }
+      10% { opacity: 1; }
+      50% { left: 40vw; top: 30vh; transform: scale(1.2) rotate(-2deg); }
+      to { left: -40vw; top: 30vh; opacity: 0.7; }
+    }
+    @keyframes anime-scroll-ttb {
+      from { top: -20vh; left: 40vw; opacity: 0; }
+      10% { opacity: 1; }
+      50% { top: 50vh; left: 40vw; transform: scale(1.2) rotate(2deg); }
+      to { top: 110vh; left: 40vw; opacity: 0.7; }
+    }
+    @keyframes anime-scroll-btt {
+      from { top: 110vh; left: 60vw; opacity: 0; }
+      10% { opacity: 1; }
+      50% { top: 40vh; left: 60vw; transform: scale(1.2) rotate(-2deg); }
+      to { top: -20vh; left: 60vw; opacity: 0.7; }
+    }
+    @keyframes anime-bounce {
+      0% { left: 100vw; top: 70vh; opacity: 0; }
+      10% { opacity: 1; }
+      20% { left: 70vw; top: 60vh; }
+      40% { left: 40vw; top: 80vh; }
+      60% { left: 20vw; top: 60vh; }
+      80% { left: 0vw; top: 70vh; }
+      100% { left: -40vw; top: 70vh; opacity: 0.7; }
+    }
+    @keyframes anime-bounce-diag {
+      0% { left: 100vw; top: 0vh; opacity: 0; }
+      10% { opacity: 1; }
+      30% { left: 70vw; top: 30vh; }
+      60% { left: 30vw; top: 70vh; }
+      100% { left: -40vw; top: 110vh; opacity: 0.7; }
+    }
+    .burst {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      background: url('https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f525.png') no-repeat center/contain;
+      pointer-events: none;
+      z-index: 10;
+      animation: burst-anim 1.2s ease-out forwards;
+    }
+    @keyframes burst-anim {
+      0% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+      40% { opacity: 1; transform: scale(1.2) rotate(20deg); }
+      80% { opacity: 1; transform: scale(1.1) rotate(-10deg); }
+      100% { opacity: 0; transform: scale(2.2) rotate(0deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="anime-container"></div>
+  <div id="fish-emoji" style="position: absolute; font-size: 2.5em; pointer-events: none; z-index: 2; transform: scaleX(-1);">🐟</div>
+  <div id="fish2-emoji" style="position: absolute; font-size: 2.2em; pointer-events: none; z-index: 2;">🐠</div>
+  <div id="bird-emoji" style="position: absolute; font-size: 2.3em; pointer-events: none; z-index: 2;">🕊️</div>
+<script>
+window.onload = () => {
+  const animeContainer = document.getElementById("anime-container");
+  // Fish emoji swimming logic
+  // Animal logic
+  const fish = document.getElementById("fish-emoji");
+  const fish2 = document.getElementById("fish2-emoji");
+  const bird = document.getElementById("bird-emoji");
+  // Fish 1
+  let fishX = 10, fishY = 50, fishDir = -1, fishZ = 2, fishBehindTimer = 0;
+  // Fish 2
+  let fish2X = 80, fish2Y = 60, fish2Dir = 1, fish2Z = 2, fish2BehindTimer = 0;
+  // Bird
+  let birdX = 5, birdY = 20, birdDir = 1, birdZ = 2, birdTimer = 0;
+  function animateAnimals() {
+    // Fish 1 (🐟)
+    fishX += 0.13 * fishDir;
+    fishY = 30 + 35 * Math.sin(fishX / 10);
+    if (fishDir === -1) fish.style.transform = 'scaleX(-1)';
+    else fish.style.transform = 'scaleX(1)';
+    if (fishX > 97) { fishDir = -1; }
+    if (fishX < 1) { fishDir = 1; }
+    fish.style.left = fishX + 'vw';
+    fish.style.top = fishY + 'vh';
+    if (fishBehindTimer <= 0 && Math.random() < 0.003) {
+      fishZ = (fishZ === 2 ? 0 : 2);
+      fish.style.zIndex = fishZ;
+      fishBehindTimer = 200 + Math.random() * 400;
+    } else {
+      fishBehindTimer--;
+    }
+    // Fish 2 (🐠)
+    fish2X += 0.09 * fish2Dir;
+    fish2Y = 60 + 25 * Math.sin(fish2X / 8);
+    if (fish2Dir === 1) fish2.style.transform = 'scaleX(1)';
+    else fish2.style.transform = 'scaleX(-1)';
+    if (fish2X > 98) { fish2Dir = -1; }
+    if (fish2X < 0) { fish2Dir = 1; }
+    fish2.style.left = fish2X + 'vw';
+    fish2.style.top = fish2Y + 'vh';
+    if (fish2BehindTimer <= 0 && Math.random() < 0.002) {
+      fish2Z = (fish2Z === 2 ? 0 : 2);
+      fish2.style.zIndex = fish2Z;
+      fish2BehindTimer = 200 + Math.random() * 400;
+    } else {
+      fish2BehindTimer--;
+    }
+    // Bird (🕊️)
+    birdX += 0.18 * birdDir;
+    birdY = 10 + 10 * Math.sin(birdX / 7);
+    if (birdDir === 1) bird.style.transform = 'scaleX(1)';
+    else bird.style.transform = 'scaleX(-1)';
+    if (birdX > 99) { birdDir = -1; }
+    if (birdX < 0) { birdDir = 1; }
+    bird.style.left = birdX + 'vw';
+    bird.style.top = birdY + 'vh';
+    // Bird always in front
+    bird.style.zIndex = 3;
+    requestAnimationFrame(animateAnimals);
+  }
+  animateAnimals();
+  // Over-the-top anime sound effects (optional, can be expanded)
+  const sfx = [
+    'https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae7e2.mp3', // whoosh
+    'https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae7e2.mp3', // whoosh
+    'https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae7e2.mp3'  // whoosh
+  ];
+  function playSFX() {
+    const audio = new Audio(sfx[Math.floor(Math.random() * sfx.length)]);
+    audio.volume = 0.25;
+    audio.play();
+  }
+  // Kanji fun translations (not real translation, just for effect)
+  const kanjiPresets = [
+    '勝利', // Victory
+    '友情', // Friendship
+    '力',   // Power
+    '伝説', // Legend
+    '無敵', // Invincible
+    '必殺', // Finishing Move
+    '愛',   // Love
+    '勇気', // Courage
+    '奇跡', // Miracle
+    '覚醒', // Awakening
+    '超',   // Super
+    '神',   // God
+    '炎',   // Flame
+    '猫',   // Cat
+    'パンダ', // Panda
+    '星',   // Star
+    '心',   // Heart
+    '夢',   // Dream
+    '希望', // Hope
+    '運命', // Destiny
+    '魂',   // Soul
+  ];
+  function showAnimeMessage(message) {
+    // Play SFX
+    playSFX();
+    // Add random anime burst effect (fire, panda, sparkle, heart, sweat drop, star, etc)
+    const burstEmojis = [
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f525.png', // fire
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f43c.png', // panda
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2728.png',  // sparkle
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f49b.png', // yellow heart
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4a6.png', // sweat drop
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2b50.png',  // star
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f60d.png', // heart eyes
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f47b.png', // ghost (spirit)
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f47c.png', // angel
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f63b.png', // cat heart eyes
+      'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f648.png', // see-no-evil monkey
+    ];
+    const burst = document.createElement('div');
+    burst.className = 'burst';
+    burst.style.background = `url('${burstEmojis[Math.floor(Math.random() * burstEmojis.length)]}') no-repeat center/contain`;
+    burst.style.top = `${Math.random() * 70 + 10}vh`;
+    burst.style.left = `${Math.random() * 60 + 20}vw`;
+    animeContainer.appendChild(burst);
+    setTimeout(() => { burst.remove(); }, 1200);
+    // Add message row
+    const row = document.createElement("div");
+    row.className = "anime-row";
+    // Occasionally show a Kanji preset instead of the message
+    if (Math.random() < 0.18) {
+      row.textContent = kanjiPresets[Math.floor(Math.random() * kanjiPresets.length)];
+    } else {
+      row.textContent = message;
+    }
+    // Animation variety
+    const anims = [
+      'anime-scroll-ltr',
+      'anime-scroll-rtl',
+      'anime-scroll-ttb',
+      'anime-scroll-btt',
+      'anime-bounce',
+      'anime-bounce-diag',
+    ];
+    const anim = anims[Math.floor(Math.random() * anims.length)];
+    row.style.animationName = anim;
+    // All animations are slow and dramatic
+    row.style.animationDuration = `${14 + Math.random() * 6}s`;
+    // Randomize color, font
+    const colors = ["#2d3142", "#4f5d75", "#bfc0c0", "#ef8354", "#a1c6ea", "#7d8597", "#e0a899", "#b8b8ff"];
+    row.style.color = colors[Math.floor(Math.random() * colors.length)];
+    const fonts = [
+      'Arial Black', 'Impact', 'Segoe UI', 'Arial',
+      'Noto Sans Symbols', 'Segoe UI Symbol', 'sans-serif'
+    ];
+    row.style.fontFamily = fonts[Math.floor(Math.random() * fonts.length)];
+    row.style.fontFeatureSettings = "'liga' 1, 'calt' 1, 'ccmp' 1";
+    // Set initial position for vertical/horizontal/diagonal anims
+    if (anim === 'anime-scroll-ltr') {
+      row.style.left = '-40vw'; row.style.top = '10vh';
+    } else if (anim === 'anime-scroll-rtl') {
+      row.style.left = '110vw'; row.style.top = '30vh';
+    } else if (anim === 'anime-scroll-ttb') {
+      row.style.left = '40vw'; row.style.top = '-20vh';
+    } else if (anim === 'anime-scroll-btt') {
+      row.style.left = '60vw'; row.style.top = '110vh';
+    } else if (anim === 'anime-bounce') {
+      row.style.left = '100vw'; row.style.top = '70vh';
+    } else if (anim === 'anime-bounce-diag') {
+      row.style.left = '100vw'; row.style.top = '0vh';
+    }
+    animeContainer.appendChild(row);
+    setTimeout(() => { row.remove(); }, parseFloat(row.style.animationDuration) * 1000);
+  }
+  // WebSocket logic (same as afk overlay)
+  const ws = new WebSocket("ws://localhost:8080/ws");
+  ws.onopen = () => { console.log("[ANIME OVERLAY] ✅ WebSocket connection established."); };
+  ws.onclose = (event) => { console.log("[ANIME OVERLAY] ❌ WebSocket connection closed:", event); };
+  ws.onerror = (err) => { console.error("[ANIME OVERLAY] ❌ WebSocket error:", err); };
+  ws.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (err) { console.error('[ANIME OVERLAY] Failed to parse message as JSON:', err); return; }
+    if (msg.type === "afk_ticker" && typeof msg.message === "string") {
+      showAnimeMessage(msg.message);
+      return;
+    }
+  };
+};
+</script>
+</body>
+</html>

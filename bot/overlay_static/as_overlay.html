@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>AS_overlay</title>
+  <style>
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    #as-message {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+      color: #fff;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 2.8em;
+      text-align: center;
+      padding: 0 12vw;
+      word-break: break-word;
+      line-height: 1.25;
+      font-weight: 400;
+      background: #000;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <div id="as-message">Loading...</div>
+  <script>
+    // Connect to overlay WebSocket for AFK messages
+    let currentMsg = '';
+    function setMessage(msg) {
+      const el = document.getElementById('as-message');
+      el.textContent = msg;
+    }
+    // Fallback messages if overlay server is not available
+    const fallbackMessages = [
+      "We'll be right back.",
+      "Please stand by.",
+      "Adult Swim."
+    ];
+    let fallbackIdx = 0;
+    function nextFallback() {
+      setMessage(fallbackMessages[fallbackIdx % fallbackMessages.length]);
+      fallbackIdx++;
+    }
+    // Try to connect to overlay server for AFK messages
+    let ws;
+    function connectWS() {
+      ws = new WebSocket('ws://' + window.location.hostname + ':8080/ws');
+      ws.onopen = function() {
+        // Request AFK/AS message cycle
+        ws.send(JSON.stringify({ type: 'as_overlay_subscribe' }));
+      };
+      ws.onmessage = function(event) {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'as_overlay_message' && data.message) {
+            setMessage(data.message);
+          }
+        } catch {}
+      };
+      ws.onclose = function() {
+        setTimeout(connectWS, 3000);
+      };
+      ws.onerror = function() {
+        ws.close();
+      };
+    }
+    connectWS();
+    // Fallback: cycle through default messages every 10s if no server
+    setInterval(() => {
+      if (!ws || ws.readyState !== 1) {
+        nextFallback();
+      }
+    }, 10000);
+  </script>
+</body>
+</html>

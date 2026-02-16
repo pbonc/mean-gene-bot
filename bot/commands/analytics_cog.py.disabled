@@ -1,0 +1,155 @@
+"""
+Stream Analytics Commands for Mean Gene Bot
+Provides mod commands for tracking and analyzing stream performance
+"""
+import asyncio
+from twitchio.ext import commands
+from bot.stream_analytics import StreamAnalytics, DynamicGiveaway, initialize_stream_analytics
+from bot.performance_dashboard import StreamDashboard
+
+class AnalyticsCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.analytics = None
+        self.giveaway = None
+        self.dashboard = StreamDashboard()
+        
+    async def setup_analytics(self):
+        """Initialize analytics system"""
+        if not self.analytics:
+            self.analytics, self.giveaway, _ = await initialize_stream_analytics()
+    
+    @commands.command(name='analytics')
+    async def analytics_command(self, ctx: commands.Context):
+        """Display stream analytics summary (mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("This command is for mods only!")
+            return
+            
+        await self.setup_analytics()
+        
+        # Get today's milestones
+        daily_data = self.analytics.load_daily_milestones()
+        milestones = daily_data.get('milestones', {})
+        
+        # Count achieved milestones
+        achieved_count = sum(1 for v in milestones.values() if v)
+        
+        # Get current giveaway amount
+        current_amount = self.giveaway.get_current_giveaway_amount()
+        
+        message = f"📊 Today's Progress: {achieved_count} milestones hit. "
+        message += f"Giveaway: ${current_amount:.2f}. "
+        message += f"Use !checkgrowth for opportunities!"
+        
+        await ctx.send(message)
+    
+    @commands.command(name='checkgrowth')
+    async def check_growth_opportunities(self, ctx: commands.Context):
+        """Check for available growth opportunities (mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("This command is for mods only!")
+            return
+            
+        await self.setup_analytics()
+        
+        # Check for milestone opportunities
+        boost_info = await self.giveaway.check_and_update_giveaway()
+        
+        if boost_info['total_boost'] > 0:
+            message = f"🎉 Giveaway boosted by ${boost_info['total_boost']:.2f}! "
+            message += f"New total: ${boost_info['new_amount']:.2f}"
+            
+            # Show what triggered the boost
+            if boost_info['boosts_added']:
+                reasons = [boost['description'] for boost in boost_info['boosts_added']]
+                message += f" - {reasons[0]}"  # Show first reason
+        else:
+            # Show next opportunities
+            daily_data = self.analytics.load_daily_milestones()
+            milestones = daily_data.get('milestones', {})
+            
+            opportunities = []
+            if not milestones.get('first_follower'):
+                opportunities.append("First Follower (+$1)")
+            if not milestones.get('first_subscriber'):
+                opportunities.append("First New Sub (+$1)")
+            if not milestones.get('first_donation'):
+                opportunities.append("First Donation (+$1)")
+            if not milestones.get('first_bits'):
+                opportunities.append("First 100+ Bits (+$1)")
+                
+            if opportunities:
+                message = f"🎯 Next opportunities: {', '.join(opportunities[:2])}"
+            else:
+                message = "✅ All daily firsts achieved! Watch for viewer milestones."
+        
+        await ctx.send(message)
+    
+    @commands.command(name='giveawaytarget')
+    async def set_giveaway_target(self, ctx: commands.Context):
+        """Set giveaway target based on stream performance (mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("This command is for mods only!")
+            return
+            
+        parts = ctx.message.content.split(maxsplit=1)
+        if len(parts) < 2:
+            # Show suggested targets
+            analyzer = self.dashboard.analyzer
+            suggestions = analyzer.suggest_giveaway_targets()
+            
+            message = f"💡 Suggested targets: "
+            message += f"Conservative: ${suggestions['conservative_target']:.0f}, "
+            message += f"Ambitious: ${suggestions['ambitious_target']:.0f}, "
+            message += f"Stretch: ${suggestions['stretch_target']:.0f}. "
+            message += f"Use: !giveawaytarget <amount>"
+            
+            await ctx.send(message)
+            return
+        
+        try:
+            target_amount = float(parts[1])
+            
+            # Set the target in raffle system
+            from bot.commands.raffle_cog import SimpleRaffleState
+            import os
+            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            raffle_file = os.path.join(data_dir, "raffle_state.json")
+            
+            if os.path.exists(raffle_file):
+                state = SimpleRaffleState(raffle_file)
+                state.set_giveaway_amount(target_amount)
+                await ctx.send(f"🎯 Giveaway target set to ${target_amount:.2f}")
+            else:
+                await ctx.send("❌ Raffle system not found!")
+                
+        except ValueError:
+            await ctx.send("❌ Invalid amount. Use: !giveawaytarget <number>")
+    
+    @commands.command(name='streamstats')
+    async def stream_stats(self, ctx: commands.Context):
+        """Show current stream statistics (mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("This command is for mods only!")
+            return
+            
+        from bot.twitch_stats import get_stream_info
+        
+        try:
+            info = await get_stream_info()
+            if info:
+                message = f"📈 Viewers: {info.get('viewers', 'N/A')}, "
+                message += f"Uptime: {info.get('uptime', 'N/A')}, "
+                message += f"Game: {info.get('game', 'N/A')}"
+            else:
+                message = "📴 Stream appears to be offline"
+                
+            await ctx.send(message)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error getting stream stats: {str(e)}")
+
+def prepare(bot):
+    """Add the analytics cog to the bot"""
+    bot.add_cog(AnalyticsCog(bot))

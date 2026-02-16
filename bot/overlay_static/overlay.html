@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+  html, body {
+    width: 1920px;
+    height: 1080px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+  }
+
+  #ticker-bar {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 60px;
+    display: flex;
+    align-items: stretch;
+    font-family: sans-serif;
+    font-size: 32px;
+    color: white;
+  }
+
+  /* Logo box at left of ticker */
+  #logo {
+    background: #c00;
+    color: white;
+    padding: 0 20px;
+    font-weight: bold;
+    font-family: sans-serif;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-width: 120px;
+    box-shadow: inset 0 -2px 0 rgba(255, 255, 255, 0.2);
+    box-sizing: border-box;
+    transition: background 0.3s;
+  }
+
+  #ticker-text {
+    background: linear-gradient(to right, #111 0%, #222 100%);
+    flex: 1;
+    padding-left: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    height: 100%;
+    box-sizing: border-box;
+    position: relative;
+  }
+  .scrolling {
+    will-change: transform;
+    position: absolute;
+    left: 100%;
+    white-space: nowrap;
+    animation: ticker-scroll linear;
+    animation-fill-mode: forwards;
+  }
+  @keyframes ticker-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+  }
+
+  /* Center display: reserve space at the bottom so it cannot overlap
+     the ticker bar (ticker height is 60px). We leave an extra 20px gap. */
+  #center-display {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 80%;
+    /* Prevent the displayed image from extending into the bottom ticker area. */
+    max-height: calc(100vh - 80px); /* 60px ticker + 20px gap */
+    display: none;
+    z-index: 10;
+    background: rgba(0,0,0,0.0);
+    pointer-events: none;
+  }
+  #center-display img {
+    display: block;
+    margin: 0 auto;
+    /* Constrain image to the available viewport while keeping the bottom gap. */
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 80px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  </style>
+</head>
+<body>
+  <div id="ticker-bar">
+    <div id="logo">DNN</div>
+    <div id="ticker-text">Welcome to the Darmunist News Network.</div>
+  </div>
+  <div id="center-display"><img src="" alt="overlay" /></div>
+
+<script>
+window.onload = () => {
+  const tickerText = document.getElementById("ticker-text");
+  let tickerQueue = [];
+  let isScrolling = false;
+  let defaultMessage = "Welcome to the Darmunist News Network.";
+  let currentTicker = null;
+  let pendingTicker = null;
+  const logo = document.getElementById("logo");
+  const centerDisplay = document.getElementById("center-display");
+  const centerImg = centerDisplay.querySelector("img");
+  const FOLDERS = { heart: "gifs/heart/", gif: "gifs/" };
+  const IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".webp"];
+  const OVERLAY_DISPLAY_TIME = 2500;
+  let categoryText = "DNN";
+  function setLogo(text) {
+    categoryText = (typeof text === "string" && text.length > 0) ? text : "DNN";
+    logo.textContent = categoryText;
+  }
+  setLogo(categoryText);
+  // Build a dynamic default message showing CST and UTC timestamps.
+  function makeDefaultMessage() {
+    try {
+      const now = new Date();
+      // CST in 12-hour with AM/PM, remove leading zero if present
+      const cst = now.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', hour12: true });
+      // GMT in 24-hour format
+      const gmt = now.toLocaleTimeString('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${cst} CST | ${gmt} GMT`;
+    } catch (e) {
+      return "Welcome to the Darmunist News Network.";
+    }
+  }
+  defaultMessage = makeDefaultMessage();
+  // Update the timestamp every 30s while no full ticker is playing.
+  setInterval(() => {
+    defaultMessage = makeDefaultMessage();
+    if (!isScrolling && !fullTickerPlaying) showStaticTicker(defaultMessage);
+  }, 30000);
+  // WebSocket with automatic reconnect
+  let ws = null;
+  let wsBackoff = 1000;
+  function connectWS() {
+    const wsUrl = 'ws://' + window.location.hostname + ':8080/ws';
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      console.log("✅ WebSocket connection established.");
+      wsBackoff = 1000; // reset backoff
+      // NOTE: Do NOT subscribe as an AS overlay client from the standard
+      // ticker overlay. AS overlay clients are a separate UI and should
+      // only subscribe from the dedicated `as_overlay.html` page.
+      // Request the latest full ticker from the server so the overlay can
+      // show the current stream-title-first ticker immediately on connect.
+      try { ws.send(JSON.stringify({ type: 'request_latest_ticker' })); } catch (e) { /* ignore */ }
+    };
+    ws.onclose = (event) => {
+      console.log("❌ WebSocket connection closed:", event);
+      // try to reconnect
+      setTimeout(() => {
+        wsBackoff = Math.min(30000, wsBackoff * 2);
+        connectWS();
+      }, wsBackoff);
+    };
+    ws.onerror = (err) => { console.error("❌ WebSocket error:", err); };
+    ws.onmessage = (event) => handleMessage(event);
+  }
+  connectWS();
+  let latestTicker = defaultMessage;
+  let nextTicker = null;
+  let isAnimating = false;
+  let fullTickerPlaying = false;
+  
+  function handleMessage(event) {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (err) {
+      console.error("❌ Failed to parse message as JSON:", err);
+      return;
+    }
+
+    // Support incoming messages
+    if (msg.type === "ticker" && typeof msg.text === "string") {
+      const text = msg.text;
+      // Ignore server-side default/welcome messages that match the static default
+      try {
+        if (text && defaultMessage && text.trim() === defaultMessage.trim()) return;
+      } catch (e) {}
+      // If nothing is playing, start immediately. If a ticker is actively
+      // scrolling, queue the incoming ticker as pending so it will start
+      // only after the current scroll completes.
+      tickerQueue = [];
+      if (!isScrolling) {
+        currentTicker = text;
+        startTickerLoop();
+      } else {
+        // If the incoming ticker is the same as current or already pending, ignore
+        if (text !== currentTicker && text !== pendingTicker) {
+          pendingTicker = text;
+          console.debug('Queued pending ticker update');
+        }
+      }
+      return;
+    }
+
+    // Ignore AFK/AS single-message payloads on the standard overlay
+    if ((msg.type === "afk_ticker" && typeof msg.message === "string") ||
+        (msg.type === "as_overlay_message" && typeof msg.message === "string")) {
+      console.debug('Received AFK/AS message but ignoring on standard overlay');
+      return;
+    }
+
+    if (msg.type === "image" && typeof msg.url === "string") {
+      showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME);
+      return;
+    }
+
+    if (msg.type === "logo" && typeof msg.text === "string") {
+      setLogo(msg.text);
+      return;
+    }
+
+    if (msg.action && typeof msg.action === "string") {
+      const parsed = parseAction ? parseAction(msg.action) : null;
+      if (parsed) { const { folder, base } = parsed; tryImageExtensions(folder, base, OVERLAY_DISPLAY_TIME); } else { console.warn("⚠️ Couldn't parse overlay action:", msg.action); }
+      return;
+    }
+
+    console.warn("⚠️ Unknown message format:", msg);
+  }
+
+  // Ticker scroll logic
+  function startTickerScroll() {
+    isScrolling = true;
+    // Show default message first
+    showStaticTicker(defaultMessage);
+    setTimeout(() => {
+      if (tickerQueue.length === 0) {
+        isScrolling = false;
+        showStaticTicker(defaultMessage);
+        return;
+      }
+  // Use only the first queued message so each message scrolls by itself
+  const fullMsg = tickerQueue.shift();
+      scrollTicker(fullMsg, () => {
+        // After scroll, revert to default, then restart
+        showStaticTicker(defaultMessage);
+        setTimeout(() => {
+          isScrolling = false;
+          if (tickerQueue.length > 0) startTickerScroll();
+        }, 2000);
+      });
+    }, 2000);
+  }
+
+  // Start a loop that repeatedly scrolls the currentTicker until it changes.
+  function startTickerLoop() {
+    if (!currentTicker) {
+      showStaticTicker(defaultMessage);
+      return;
+    }
+    if (isScrolling) return;
+    // Play the current ticker repeatedly until currentTicker changes
+    function playOnce() {
+      if (!currentTicker) {
+        isScrolling = false;
+        fullTickerPlaying = false;
+        showStaticTicker(defaultMessage);
+        return;
+      }
+      isScrolling = true;
+      fullTickerPlaying = true;
+      // Play the currentTicker once to completion
+      scrollTicker(currentTicker, () => {
+        // After the currentTicker finishes, check for a pending update.
+        // If there's a pendingTicker, promote it to currentTicker and play it next.
+        setTimeout(() => {
+          if (pendingTicker && pendingTicker !== currentTicker) {
+            currentTicker = pendingTicker;
+            pendingTicker = null;
+            // continue with the newly promoted ticker
+            playOnce();
+            return;
+          }
+          // No pending update -> repeat the same currentTicker
+          if (currentTicker) {
+            // small pause between repeats
+            setTimeout(() => playOnce(), 2000);
+          } else {
+            isScrolling = false;
+            fullTickerPlaying = false;
+            showStaticTicker(defaultMessage);
+          }
+        }, 1000);
+      });
+    }
+    playOnce();
+  }
+
+  function showStaticTicker(text) {
+    tickerText.innerHTML = '';
+    tickerText.textContent = text;
+  }
+
+  function scrollTicker(text, onComplete) {
+    tickerText.innerHTML = '';
+    const span = document.createElement('span');
+    span.className = 'scrolling';
+    span.textContent = text;
+    tickerText.appendChild(span);
+
+    // Measure widths to compute a stable duration (px / pxPerSecond)
+    const containerWidth = tickerText.clientWidth || 800;
+    // Force layout to ensure offsetWidth is available
+    const spanWidth = span.offsetWidth || (text.length * 12);
+    const distance = containerWidth + spanWidth; // px to travel
+    // Configure speed: pixels per second. Lower = slower (more readable).
+    const pxPerSecond = 18; // slower for long tickers
+    let duration = distance / pxPerSecond; // seconds
+    // Clamp the duration to avoid extremely short/long runs
+    duration = Math.min(240, Math.max(20, duration)); // clamp between 20s and 240s
+
+    // Position the span and use transforms for animation
+    span.style.left = '0px';
+    span.style.transform = `translateX(${containerWidth}px)`;
+
+    // Use Web Animations API when available for precise control
+    if (span.animate) {
+      const anim = span.animate([
+        { transform: `translateX(${containerWidth}px)` },
+        { transform: `translateX(-${spanWidth}px)` }
+      ], { duration: duration * 1000, easing: 'linear', fill: 'forwards' });
+
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        tickerText.innerHTML = '';
+        if (onComplete) onComplete();
+      };
+
+      const fallback = setTimeout(() => {
+        try { anim.cancel(); } catch (e) {}
+        finish();
+      }, duration * 1000 + 1500);
+
+      anim.onfinish = () => {
+        clearTimeout(fallback);
+        finish();
+      };
+    } else {
+      // Fallback: use CSS animation (legacy). We approximate duration.
+      const cssDuration = Math.max(20, Math.min(240, duration));
+      span.style.animation = `ticker-scroll ${cssDuration}s linear forwards`;
+      const handler = () => {
+        tickerText.innerHTML = '';
+        if (onComplete) onComplete();
+      };
+      span.addEventListener('animationend', handler, { once: true });
+      setTimeout(() => {
+        if (tickerText.contains(span)) {
+          tickerText.innerHTML = '';
+          if (onComplete) onComplete();
+        }
+      }, cssDuration * 1000 + 1500);
+    }
+  }
+
+  // Try all supported extensions, show the first image that loads
+  function tryImageExtensions(folder, base, duration) {
+    let tried = 0;
+    let found = false;
+    for (const ext of IMAGE_EXTENSIONS) {
+      const imgPath = FOLDERS[folder] + base + ext;
+      testImage(imgPath, () => {
+        if (!found) {
+          found = true;
+          showCenterImage(imgPath, duration);
+        }
+      }, () => {
+        tried++;
+        if (tried === IMAGE_EXTENSIONS.length && !found) {
+          console.warn(`⚠️ No image found for ${base} in ${folder}`);
+        }
+      });
+      if (found) break;
+    }
+  }
+  // Center image display (for overlay commands)
+  function showCenterImage(imgPath, duration) {
+    centerImg.src = imgPath;
+    centerDisplay.style.display = 'block';
+    clearTimeout(centerDisplay._hideTimeout);
+    centerDisplay._hideTimeout = setTimeout(() => {
+      centerDisplay.style.display = 'none';
+      centerImg.src = '';
+    }, duration);
+  }
+}
+</script>

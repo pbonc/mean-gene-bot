@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NFL Break Board</title>
+  <style>
+    @font-face {
+      font-family: 'NFLFont';
+      src: local('Arial');
+    }
+    :root {
+      --bg: #1a1a1a;
+      --ink: #ffffff;
+      --accent: #00d4ff;
+      --accent2: #ff6b35;
+      --border: #333333;
+      --muted: #aaaaaa;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 50%, #0f0f0f 100%);
+      color: var(--ink);
+      font-family: 'NFLFont', Arial, sans-serif;
+    }
+    .frame {
+      max-width: 1400px;
+      margin: 24px auto;
+      padding: 24px;
+      background: rgba(25,25,25,0.95);
+      border: 4px solid var(--border);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 42px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      font-weight: 900;
+    }
+    .subtitle {
+      font-size: 16px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+    .section-title {
+      font-size: 22px;
+      margin: 18px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 3px solid var(--accent2);
+      color: var(--accent);
+      font-weight: 700;
+    }
+    /* Make pick list text larger for on-stream readability */
+    #picklist { font-size: 18px; color: var(--ink); }
+    #picklist .pick-group .name { font-size: 20px; color: var(--accent); }
+    #picklist ul { font-size: 18px; }
+    .tile {
+      position: relative;
+      padding: 18px 16px;
+      background: linear-gradient(135deg, #222222, #333333);
+      color: white;
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+    }
+    .tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
+    .tile h4 { margin: 0; font-size: 18px; font-weight: 700; color: inherit; }
+    .tile small { display: block; color: inherit; opacity: 0.9; margin-top: 4px; }
+    .tile.struck h4, .tile.struck small { text-decoration: line-through; text-decoration-thickness: 4px; text-decoration-color: rgba(200,0,0,0.85); }
+    .tile .assign { display:block; margin-top:6px; font-size:13px; color: inherit; font-weight: 600; }
+    .tile .badge {
+      position: absolute; right: 8px; top: 8px;
+      font-size: 11px; padding: 3px 6px; border: 1px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.2); border-radius: 4px; color: white; font-weight: 600;
+    }
+    .tile .card-types {
+      position: absolute; right: 8px; bottom: 8px;
+      display: flex; gap: 4px; font-size: 11px;
+    }
+    .tile .card-type-badge {
+      padding: 2px 4px; border-radius: 3px; font-weight: 600;
+      transition: opacity 150ms ease;
+    }
+    .tile .card-type-badge.stained-glass {
+      background: linear-gradient(135deg, #6366f1, #a855f7); color: white;
+      cursor: default;
+      opacity: 1;
+    }
+    .tile .card-type-badge.oversized-stained-glass {
+      background: linear-gradient(135deg, #3b82f6, #06b6d4); color: white;
+      cursor: default;
+      opacity: 1;
+    }
+    .tile .card-type-badge.micro-mosaic {
+      background: linear-gradient(135deg, #f97316, #ec4899); color: white;
+      cursor: default;
+      opacity: 1;
+    }
+    /* Team colors - update tile background on hover based on team */
+    .tile[data-key*="AFC East"] { --team-color: #002244; --team-bg: #e8f1ff; }
+    .tile[data-key*="AFC North"] { --team-color: #241773; --team-bg: #f0ebff; }
+    .tile[data-key*="AFC South"] { --team-color: #0b2340; --team-bg: #e8f1ff; }
+    .tile[data-key*="AFC West"] { --team-color: #003831; --team-bg: #e8f5f3; }
+    .tile[data-key*="NFC East"] { --team-color: #003a70; --team-bg: #e8f0ff; }
+    .tile[data-key*="NFC North"] { --team-color: #12385a; --team-bg: #ecf2ff; }
+    .tile[data-key*="NFC South"] { --team-color: #a71930; --team-bg: #ffe8e8; }
+    .tile[data-key*="NFC West"] { --team-color: #001a33; --team-bg: #e8f0ff; }
+    
+    /* Individual team colors - vivid backgrounds with appropriate text color */
+    .tile[data-team="New England Patriots"] { background: linear-gradient(135deg, #002244, #0047AB); color: white; }
+    .tile[data-team="New England Patriots"] h4, .tile[data-team="New England Patriots"] small { color: white; }
+    
+    .tile[data-team="Miami Dolphins"] { background: linear-gradient(135deg, #008E97, #00B4D8); color: white; }
+    .tile[data-team="Miami Dolphins"] h4, .tile[data-team="Miami Dolphins"] small { color: white; }
+    
+    .tile[data-team="New York Jets"] { background: linear-gradient(135deg, #125740, #1F6F3F); color: white; }
+    .tile[data-team="New York Jets"] h4, .tile[data-team="New York Jets"] small { color: white; }
+    
+    .tile[data-team="Buffalo Bills"] { background: linear-gradient(135deg, #00338D, #0047BB); color: white; }
+    .tile[data-team="Buffalo Bills"] h4, .tile[data-team="Buffalo Bills"] small { color: white; }
+    
+    .tile[data-team="Pittsburgh Steelers"] { background: linear-gradient(135deg, #27251F, #54321B); color: #FFB612; }
+    .tile[data-team="Pittsburgh Steelers"] h4, .tile[data-team="Pittsburgh Steelers"] small { color: #FFB612; }
+    
+    .tile[data-team="Baltimore Ravens"] { background: linear-gradient(135deg, #241773, #3D1F66); color: white; }
+    .tile[data-team="Baltimore Ravens"] h4, .tile[data-team="Baltimore Ravens"] small { color: white; }
+    
+    .tile[data-team="Cincinnati Bengals"] { background: linear-gradient(135deg, #FB4F14, #FF6B35); color: white; }
+    .tile[data-team="Cincinnati Bengals"] h4, .tile[data-team="Cincinnati Bengals"] small { color: white; }
+    
+    .tile[data-team="Cleveland Browns"] { background: linear-gradient(135deg, #311D00, #6B4423); color: #FFB612; }
+    .tile[data-team="Cleveland Browns"] h4, .tile[data-team="Cleveland Browns"] small { color: #FFB612; }
+    
+    .tile[data-team="Houston Texans"] { background: linear-gradient(135deg, #03202F, #1F4F5F); color: #EB6E1F; }
+    .tile[data-team="Houston Texans"] h4, .tile[data-team="Houston Texans"] small { color: #EB6E1F; }
+    
+    .tile[data-team="Indianapolis Colts"] { background: linear-gradient(135deg, #002C5F, #0047AB); color: white; }
+    .tile[data-team="Indianapolis Colts"] h4, .tile[data-team="Indianapolis Colts"] small { color: white; }
+    
+    .tile[data-team="Tennessee Titans"] { background: linear-gradient(135deg, #0C2340, #0E4B7F); color: #A2AAAD; }
+    .tile[data-team="Tennessee Titans"] h4, .tile[data-team="Tennessee Titans"] small { color: #A2AAAD; }
+    
+    .tile[data-team="Jacksonville Jaguars"] { background: linear-gradient(135deg, #006687, #0099CC); color: #FFB612; }
+    .tile[data-team="Jacksonville Jaguars"] h4, .tile[data-team="Jacksonville Jaguars"] small { color: #FFB612; }
+    
+    .tile[data-team="Kansas City Chiefs"] { background: linear-gradient(135deg, #E31937, #FF4C3B); color: white; }
+    .tile[data-team="Kansas City Chiefs"] h4, .tile[data-team="Kansas City Chiefs"] small { color: white; }
+    
+    .tile[data-team="Los Angeles Chargers"] { background: linear-gradient(135deg, #0080C6, #00A8FF); color: white; }
+    .tile[data-team="Los Angeles Chargers"] h4, .tile[data-team="Los Angeles Chargers"] small { color: white; }
+    
+    .tile[data-team="Denver Broncos"] { background: linear-gradient(135deg, #FB4F14, #FF7C38); color: white; }
+    .tile[data-team="Denver Broncos"] h4, .tile[data-team="Denver Broncos"] small { color: white; }
+    
+    .tile[data-team="Las Vegas Raiders"] { background: linear-gradient(135deg, #000000, #1a1a1a); color: #C4C4C4; }
+    .tile[data-team="Las Vegas Raiders"] h4, .tile[data-team="Las Vegas Raiders"] small { color: #C4C4C4; }
+    
+    .tile[data-team="Dallas Cowboys"] { background: linear-gradient(135deg, #003594, #0047BB); color: #C4C4C4; }
+    .tile[data-team="Dallas Cowboys"] h4, .tile[data-team="Dallas Cowboys"] small { color: #C4C4C4; }
+    
+    .tile[data-team="Philadelphia Eagles"] { background: linear-gradient(135deg, #004C54, #01785A); color: white; }
+    .tile[data-team="Philadelphia Eagles"] h4, .tile[data-team="Philadelphia Eagles"] small { color: white; }
+    
+    .tile[data-team="Washington Commanders"] { background: linear-gradient(135deg, #6B1B2F, #8B2E42); color: #FFD700; }
+    .tile[data-team="Washington Commanders"] h4, .tile[data-team="Washington Commanders"] small { color: #FFD700; }
+    
+    .tile[data-team="New York Giants"] { background: linear-gradient(135deg, #0B2265, #1F4788); color: #A71930; }
+    .tile[data-team="New York Giants"] h4, .tile[data-team="New York Giants"] small { color: #A71930; }
+    
+    .tile[data-team="Green Bay Packers"] { background: linear-gradient(135deg, #203731, #2D6B3F); color: #FFB612; }
+    .tile[data-team="Green Bay Packers"] h4, .tile[data-team="Green Bay Packers"] small { color: #FFB612; }
+    
+    .tile[data-team="Chicago Bears"] { background: linear-gradient(135deg, #0B162A, #1F3A5F); color: #FF6B35; }
+    .tile[data-team="Chicago Bears"] h4, .tile[data-team="Chicago Bears"] small { color: #FF6B35; }
+    
+    .tile[data-team="Detroit Lions"] { background: linear-gradient(135deg, #0076B6, #0099FF); color: white; }
+    .tile[data-team="Detroit Lions"] h4, .tile[data-team="Detroit Lions"] small { color: white; }
+    
+    .tile[data-team="Minnesota Vikings"] { background: linear-gradient(135deg, #4F2683, #6B3FA0); color: #FFB612; }
+    .tile[data-team="Minnesota Vikings"] h4, .tile[data-team="Minnesota Vikings"] small { color: #FFB612; }
+    
+    .tile[data-team="Tampa Bay Buccaneers"] { background: linear-gradient(135deg, #A71930, #D32E2E); color: white; }
+    .tile[data-team="Tampa Bay Buccaneers"] h4, .tile[data-team="Tampa Bay Buccaneers"] small { color: white; }
+    
+    .tile[data-team="New Orleans Saints"] { background: linear-gradient(135deg, #D3BC8D, #FFE6A8); color: #000000; }
+    .tile[data-team="New Orleans Saints"] h4, .tile[data-team="New Orleans Saints"] small { color: #000000; }
+    
+    .tile[data-team="Atlanta Falcons"] { background: linear-gradient(135deg, #A71930, #CC3333); color: white; }
+    .tile[data-team="Atlanta Falcons"] h4, .tile[data-team="Atlanta Falcons"] small { color: white; }
+    
+    .tile[data-team="Carolina Panthers"] { background: linear-gradient(135deg, #0085CA, #00B4FF); color: white; }
+    .tile[data-team="Carolina Panthers"] h4, .tile[data-team="Carolina Panthers"] small { color: white; }
+    
+    .tile[data-team="San Francisco 49ers"] { background: linear-gradient(135deg, #AA0000, #FF3333); color: white; }
+    .tile[data-team="San Francisco 49ers"] h4, .tile[data-team="San Francisco 49ers"] small { color: white; }
+    
+    .tile[data-team="Seattle Seahawks"] { background: linear-gradient(135deg, #002244, #0047BB); color: #00A8FF; }
+    .tile[data-team="Seattle Seahawks"] h4, .tile[data-team="Seattle Seahawks"] small { color: #00A8FF; }
+    
+    .tile[data-team="Los Angeles Rams"] { background: linear-gradient(135deg, #003594, #0066CC); color: #FFD700; }
+    .tile[data-team="Los Angeles Rams"] h4, .tile[data-team="Los Angeles Rams"] small { color: #FFD700; }
+    
+    .tile[data-team="Arizona Cardinals"] { background: linear-gradient(135deg, #97233F, #D32E2E); color: white; }
+    .tile[data-team="Arizona Cardinals"] h4, .tile[data-team="Arizona Cardinals"] small { color: white; }
+
+    .tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+    
+    .legend { display: flex; gap: 12px; align-items: center; justify-content: center; margin-top: 8px; color: var(--muted); }
+    .legend .swatch { width: 18px; height: 18px; border: 2px solid var(--border); background: rgba(100,100,100,0.3); }
+    .legend .line { height: 2px; width: 40px; background: var(--accent2); }
+    footer { text-align: center; margin-top: 12px; font-size: 12px; color: var(--muted); }
+    .controls { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
+    .btn {
+      padding: 8px 12px; border: 2px solid var(--accent2); background: rgba(255,107,53,0.1); color: var(--accent2);
+      border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 120ms ease;
+    }
+    .btn:hover { background: rgba(255,107,53,0.2); }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="title">NFL BREAK BOARD</div>
+      <div class="subtitle">Click a team or category, enter a username, and apply. The tile strikes through and shows the username.</div>
+      <div class="controls">
+        <button class="btn" id="clear">Clear All</button>
+        <button class="btn" id="export">Export Hits</button>
+      </div>
+      <div class="legend">
+        <div class="swatch" title="Tile"></div>
+        <div class="line" title="Border"></div>
+        <div>Struck items = hit/claimed</div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">AFC East</div>
+      <div class="grid" id="afc-east"></div>
+    </section>
+
+    <section>
+      <div class="section-title">AFC North</div>
+      <div class="grid" id="afc-north"></div>
+    </section>
+
+    <section>
+      <div class="section-title">AFC South</div>
+      <div class="grid" id="afc-south"></div>
+    </section>
+
+    <section>
+      <div class="section-title">AFC West</div>
+      <div class="grid" id="afc-west"></div>
+    </section>
+
+    <section>
+      <div class="section-title">NFC East</div>
+      <div class="grid" id="nfc-east"></div>
+    </section>
+
+    <section>
+      <div class="section-title">NFC North</div>
+      <div class="grid" id="nfc-north"></div>
+    </section>
+
+    <section>
+      <div class="section-title">NFC South</div>
+      <div class="grid" id="nfc-south"></div>
+    </section>
+
+    <section>
+      <div class="section-title">NFC West</div>
+      <div class="grid" id="nfc-west"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Pick List (Grouped by Name)</div>
+      <div id="picklist"></div>
+    </section>
+
+    <footer>
+      NFL Break Board - All 32 teams with official colors. Categories: Rookies, Hall of Famers, All-Pro Selections, Position Groups, and more.
+    </footer>
+  </div>
+
+  <!-- Simple modal for assigning picker -->
+  <div id="assignModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);">
+    <div style="max-width:520px; margin:10% auto; background:#1a1a1a; border:3px solid var(--accent2); border-radius:8px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+      <div style="font-size:18px; color:var(--accent); margin-bottom:8px; font-weight:700;">Assign Picker</div>
+      <div id="assignTarget" style="color:var(--muted); margin-bottom:8px;">Selected: (none)</div>
+      <label for="pickerName" style="display:block; margin-bottom:4px; font-weight:600; color:var(--ink);">Picker name</label>
+      <input id="pickerName" list="pickerNames" type="text" style="width:100%; padding:8px; border:2px solid var(--border); background:#222222; color:var(--ink); border-radius:6px; box-sizing:border-box;" placeholder="Type name..." />
+      <datalist id="pickerNames"></datalist>
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button class="btn" id="assignCancel">Cancel</button>
+        <button class="btn" id="assignSave" style="background:var(--accent2); color:white; border-color:var(--accent2);">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // AFC EAST
+    const AFC_EAST = [
+      'New England Patriots',
+      'Miami Dolphins',
+      'New York Jets',
+      'Buffalo Bills'
+    ];
+
+    // AFC NORTH
+    const AFC_NORTH = [
+      'Pittsburgh Steelers',
+      'Baltimore Ravens',
+      'Cincinnati Bengals',
+      'Cleveland Browns'
+    ];
+
+    // AFC SOUTH
+    const AFC_SOUTH = [
+      'Houston Texans',
+      'Indianapolis Colts',
+      'Tennessee Titans',
+      'Jacksonville Jaguars'
+    ];
+
+    // AFC WEST
+    const AFC_WEST = [
+      'Kansas City Chiefs',
+      'Los Angeles Chargers',
+      'Denver Broncos',
+      'Las Vegas Raiders'
+    ];
+
+    // NFC EAST
+    const NFC_EAST = [
+      'Dallas Cowboys',
+      'Philadelphia Eagles',
+      'Washington Commanders',
+      'New York Giants'
+    ];
+
+    // NFC NORTH
+    const NFC_NORTH = [
+      'Green Bay Packers',
+      'Chicago Bears',
+      'Detroit Lions',
+      'Minnesota Vikings'
+    ];
+
+    // NFC SOUTH
+    const NFC_SOUTH = [
+      'Tampa Bay Buccaneers',
+      'New Orleans Saints',
+      'Atlanta Falcons',
+      'Carolina Panthers'
+    ];
+
+    // NFC WEST
+    const NFC_WEST = [
+      'San Francisco 49ers',
+      'Seattle Seahawks',
+      'Los Angeles Rams',
+      'Arizona Cardinals'
+    ];
+
+    // Teams with Micro Mosaic cards
+    const MICRO_MOSAIC_TEAMS = new Set([
+      'Tennessee Titans',
+      'Tampa Bay Buccaneers',
+      'San Francisco 49ers',
+      'Pittsburgh Steelers',
+      'Philadelphia Eagles',
+      'New York Giants',
+      'New Orleans Saints',
+      'New England Patriots',
+      'Minnesota Vikings',
+      'Los Angeles Rams',
+      'Los Angeles Chargers',
+      'Las Vegas Raiders',
+      'Kansas City Chiefs',
+      'Jacksonville Jaguars',
+      'Indianapolis Colts',
+      'Houston Texans',
+      'Green Bay Packers',
+      'Detroit Lions',
+      'Denver Broncos',
+      'Cleveland Browns',
+      'Cincinnati Bengals',
+      'Chicago Bears',
+      'Carolina Panthers',
+      'Buffalo Bills',
+      'Baltimore Ravens'
+    ]);
+
+    // Teams with Stained Glass cards
+    const STAINED_GLASS_TEAMS = new Set([
+      'Baltimore Ravens',
+      'Buffalo Bills',
+      'Carolina Panthers',
+      'Chicago Bears',
+      'Cincinnati Bengals',
+      'Cleveland Browns',
+      'Denver Broncos',
+      'Dallas Cowboys',
+      'Green Bay Packers',
+      'Houston Texans',
+      'Jacksonville Jaguars',
+      'Kansas City Chiefs',
+      'Las Vegas Raiders',
+      'Los Angeles Chargers',
+      'Minnesota Vikings',
+      'New England Patriots',
+      'New Orleans Saints',
+      'New York Giants',
+      'Philadelphia Eagles',
+      'Pittsburgh Steelers',
+      'San Francisco 49ers',
+      'Seattle Seahawks',
+      'Tampa Bay Buccaneers',
+      'Tennessee Titans'
+    ]);
+
+    // Teams with Oversized Stained Glass cards
+    const OVERSIZED_STAINED_GLASS_TEAMS = new Set([
+      'Baltimore Ravens',
+      'Buffalo Bills',
+      'Carolina Panthers',
+      'Cincinnati Bengals',
+      'Cleveland Browns',
+      'Dallas Cowboys',
+      'Green Bay Packers',
+      'Jacksonville Jaguars',
+      'Kansas City Chiefs',
+      'Las Vegas Raiders',
+      'Los Angeles Chargers',
+      'Minnesota Vikings',
+      'New England Patriots',
+      'New Orleans Saints',
+      'New York Giants',
+      'Philadelphia Eagles',
+      'Pittsburgh Steelers',
+      'San Francisco 49ers',
+      'Seattle Seahawks',
+      'Tennessee Titans'
+    ]);
+
+    const hits = new Set();
+    let selectedKey = null;
+    const assignments = new Map();
+    const assignedNames = new Set(); // tracks all names entered so datalist and export stay consistent
+    const cardTypes = new Map(); // team name -> Set of card types ('stained-glass')
+
+    function makeTile(label, division, note, teamName) {
+      const div = document.createElement('div');
+      div.className = 'tile';
+      const key = `${division}:${label}`;
+      div.dataset.key = key;
+      if (teamName) {
+        div.dataset.team = teamName;
+      }
+      const h4 = document.createElement('h4');
+      h4.textContent = label;
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = division;
+      div.appendChild(h4);
+      if (note) { const sm = document.createElement('small'); sm.textContent = note; div.appendChild(sm); }
+      div.appendChild(badge);
+      
+      // Add card type badges for teams
+      if (teamName) {
+        const cardTypeContainer = document.createElement('div');
+        cardTypeContainer.className = 'card-types';
+        
+        // Add Stained Glass badge if team has them
+        if (STAINED_GLASS_TEAMS.has(teamName)) {
+          const sgBadge = document.createElement('span');
+          sgBadge.className = 'card-type-badge stained-glass';
+          sgBadge.textContent = 'SG';
+          sgBadge.title = 'Has Stained Glass';
+          // Not clickable - just informational
+          cardTypeContainer.appendChild(sgBadge);
+        }
+        
+        // Add Oversized Stained Glass badge if team has them
+        if (OVERSIZED_STAINED_GLASS_TEAMS.has(teamName)) {
+          const osgBadge = document.createElement('span');
+          osgBadge.className = 'card-type-badge oversized-stained-glass';
+          osgBadge.textContent = 'OSG';
+          osgBadge.title = 'Has Oversized Stained Glass';
+          // Not clickable - just informational
+          cardTypeContainer.appendChild(osgBadge);
+        }
+        
+        // Only add Micro Mosaic badge if team has them
+        if (MICRO_MOSAIC_TEAMS.has(teamName)) {
+          const mmBadge = document.createElement('span');
+          mmBadge.className = 'card-type-badge micro-mosaic';
+          mmBadge.textContent = 'MM';
+          mmBadge.title = 'Has Micro Mosaic';
+          // Not clickable - just informational
+          cardTypeContainer.appendChild(mmBadge);
+        }
+        
+        div.appendChild(cardTypeContainer);
+      }
+      
+      div.addEventListener('click', () => {
+        selectedKey = key;
+        document.querySelectorAll('.tile').forEach(el => el.style.outline = '');
+        div.style.outline = '3px solid var(--accent2)';
+        openAssignModal(key);
+      });
+      return div;
+    }
+
+    function toggleCardType(teamName, cardType, element) {
+      if (!cardTypes.has(teamName)) {
+        cardTypes.set(teamName, new Set());
+      }
+      const types = cardTypes.get(teamName);
+      if (types.has(cardType)) {
+        types.delete(cardType);
+        element.classList.add('inactive');
+      } else {
+        types.add(cardType);
+        element.classList.remove('inactive');
+      }
+      persist();
+    }
+
+    function render() {
+      const divisions = {
+        'afc-east': { teams: AFC_EAST, label: 'AFC East' },
+        'afc-north': { teams: AFC_NORTH, label: 'AFC North' },
+        'afc-south': { teams: AFC_SOUTH, label: 'AFC South' },
+        'afc-west': { teams: AFC_WEST, label: 'AFC West' },
+        'nfc-east': { teams: NFC_EAST, label: 'NFC East' },
+        'nfc-north': { teams: NFC_NORTH, label: 'NFC North' },
+        'nfc-south': { teams: NFC_SOUTH, label: 'NFC South' },
+        'nfc-west': { teams: NFC_WEST, label: 'NFC West' }
+      };
+
+      Object.entries(divisions).forEach(([id, div]) => {
+        const root = document.getElementById(id);
+        root.innerHTML = '';
+        div.teams.forEach(t => root.appendChild(makeTile(t, div.label, 'Team', t)));
+      });
+
+      restore();
+    }
+
+    function persist() {
+      try { localStorage.setItem('nfl_hits', JSON.stringify([...hits])); } catch {}
+      try {
+        const obj = {};
+        assignments.forEach((set, name) => { obj[name] = [...set]; });
+        localStorage.setItem('nfl_assignments', JSON.stringify(obj));
+      } catch {}
+    }
+    function restore() {
+      try {
+        const raw = localStorage.getItem('nfl_hits');
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        arr.forEach(k => hits.add(k));
+        document.querySelectorAll('.tile').forEach(el => {
+          if (hits.has(el.dataset.key)) el.classList.add('struck');
+        });
+      } catch {}
+      try {
+        const rawA = localStorage.getItem('nfl_assignments');
+        if (rawA) {
+          const obj = JSON.parse(rawA);
+          Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
+        }
+        renderPickList();
+        refreshPickerNames();
+      } catch {}
+    }
+
+    document.getElementById('clear').addEventListener('click', () => {
+      hits.clear();
+      document.querySelectorAll('.tile').forEach(el => el.classList.remove('struck'));
+      try { localStorage.removeItem('nfl_hits'); } catch {}
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const exportText = buildPickListExport();
+      navigator.clipboard.writeText(exportText).then(() => {
+        alert('Exported pick list to clipboard.');
+      }).catch(() => {
+        alert('Could not copy pick list to clipboard.');
+      });
+    });
+
+    // Assign modal logic
+    const modal = document.getElementById('assignModal');
+    const assignTarget = document.getElementById('assignTarget');
+    const pickerNameInput = document.getElementById('pickerName');
+    const pickerNamesDL = document.getElementById('pickerNames');
+    function openAssignModal(key) {
+      assignTarget.textContent = 'Selected: ' + key;
+      pickerNameInput.value = '';
+      refreshPickerNames();
+      modal.style.display = 'block';
+      pickerNameInput.focus();
+    }
+    document.getElementById('assignCancel').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    document.getElementById('assignSave').addEventListener('click', () => {
+      const name = (pickerNameInput.value || '').trim();
+      if (!name) { alert('Enter a picker name.'); return; }
+      if (!assignments.has(name)) assignments.set(name, new Set());
+      const set = assignments.get(name);
+      set.add(selectedKey);
+      assignedNames.add(name);
+      const tile = document.querySelector(`.tile[data-key="${CSS.escape(selectedKey)}"]`);
+      if (tile) {
+        hits.add(selectedKey);
+        tile.classList.add('struck');
+        let assignEl = tile.querySelector('.assign');
+        if (!assignEl) { assignEl = document.createElement('span'); assignEl.className = 'assign'; tile.appendChild(assignEl); }
+        assignEl.textContent = name;
+      }
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    function renderPickList() {
+      const root = document.getElementById('picklist');
+      root.innerHTML = '';
+      const names = [...assignments.keys()].sort((a,b)=>a.localeCompare(b));
+      if (names.length === 0) { root.textContent = 'No picks yet.'; return; }
+      names.forEach(name => {
+        const group = document.createElement('div');
+        group.style.marginBottom = '10px';
+        const heading = document.createElement('div');
+        heading.textContent = name;
+        heading.style.fontWeight = '700';
+        heading.style.color = 'var(--accent)';
+        heading.style.marginBottom = '6px';
+        const list = document.createElement('ul');
+        list.style.margin = '0'; list.style.paddingLeft = '18px';
+        [...assignments.get(name)].sort().forEach(k => {
+          const li = document.createElement('li'); li.textContent = k; list.appendChild(li);
+        });
+        group.appendChild(heading);
+        group.appendChild(list);
+        root.appendChild(group);
+      });
+    }
+
+    function buildPickListExport() {
+      const names = [...assignments.keys()].sort((a,b)=>a.localeCompare(b));
+      if (names.length === 0) return 'No picks yet.';
+      const lines = [];
+      names.forEach(name => {
+        const items = [...assignments.get(name)].sort();
+        lines.push(`${name}:`);
+        items.forEach(item => lines.push(`  - ${item}`));
+        lines.push('');
+      });
+      return lines.join('\n');
+    }
+
+    function refreshPickerNames() {
+      pickerNamesDL.innerHTML = '';
+      const names = new Set([...assignments.keys(), ...assignedNames]);
+      names.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        pickerNamesDL.appendChild(opt);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>

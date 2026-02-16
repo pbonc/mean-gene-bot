@@ -1,0 +1,23 @@
+{
+  "prefix": "iamdar",
+  "standard_emotes": [
+    "Lucy", "CrowdR", "CrowdL", "Rays", "Dunk",
+    "Icy", "3", "Bork", "Brrtato", "Nice",
+    "Ant", "D12", "P4", "M4", "Koivu",
+    "Meowdy", "IS2", "Fafo", "NDA", "G"
+  ],
+  "animated_emotes": [
+    "BigE", "Bigerave", "Dance", "BevMAD", "Garyrave",
+    "T1", "Nate", "BMR", "TNDA", "KappaS",
+    "S", "A", "Karnave", "T2", "Kness", "Flap"
+  ],
+  "all_emotes": [
+    "Lucy", "CrowdR", "CrowdL", "Rays", "Dunk",
+    "Icy", "3", "Bork", "Brrtato", "Nice",
+    "Ant", "D12", "P4", "M4", "Koivu",
+    "Meowdy", "IS2", "Fafo", "NDA", "G",
+    "BigE", "Bigerave", "Dance", "BevMAD", "Garyrave",
+    "T1", "Nate", "BMR", "TNDA", "KappaS",
+    "S", "A", "Karnave", "T2", "Kness", "Flap"
+  ]
+}

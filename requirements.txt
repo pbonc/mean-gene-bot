@@ -1,0 +1,14 @@
+twitchio==2.6.0
+aiohttp
+discord.py
+gspread
+google-auth
+python-dotenv
+pillow
+mutagen
+playsound3
+pygame
+yt-dlp
+ffmpeg-python
+imageio-ffmpeg
+pytz

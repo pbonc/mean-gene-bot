@@ -1,0 +1,78 @@
+/.venv
+.venv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# Pytest
+.pytest_cache/
+
+# Logs
+.log
+# Ignore Python bytecode
+*.pyc
+__pycache__/
+
+# Ignore common image file types
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.webp
+
+# Ignore mp3 files
+*.mp3
+
+# Ignore audio cache files
+*.m4a
+*.webm
+*.wav
+*.opus
+*.ogg
+
+# Ignore common audio cache folders
+cache/
+audio_cache/
+assets/audio_cache/
+bot/audio_cache/
+
+# Ignore environment variable files
+.env
+
+# YouTube authentication (contains session tokens - DO NOT COMMIT)
+cookies.txt
+
+#bot data files
+bot/data/*.json
+assets/txt/*.txt
+assets/txt/dah_first.txt
+assets/txt/dah_second.txt
+
+# Ignore Stream Labels files
+bot/data/labels/
+
+# Ignore log files and logs directory
+logs/
+*.log
+
+# Ignore backup folder
+data/backups/
+
+data/quotes.json
+data/raffle_state.json

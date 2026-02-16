@@ -1,0 +1,35 @@
+{
+  "slots": {
+    "deputydawg777": 1
+  },
+  "scores": {
+    "palmarbugle3069": 1,
+    "colonel_dinggus": 1,
+    "hoplon5": 1,
+    "nate048": 1,
+    "livesuieng": 1,
+    "tankahdelphia": 1,
+    "death_all_around": 1,
+    "fal_the_warlock": 1
+  },
+  "last_winner": "fal_the_warlock",
+  "remove_on_win": true,
+  "wheel_locked": true,
+  "last_man_standing": true,
+  "order": [
+    "deputydawg777"
+  ],
+  "colors": {
+    "palmarbugle3069": "#327da8",
+    "colonel_dinggus": "#38bdf8",
+    "nate048": "#1616bb",
+    "fal_the_warlock": "#fc0303",
+    "death_all_around": "#fb7185",
+    "tankahdelphia": "#f59e0b",
+    "hoplon5": "#a3e635",
+    "deputydawg777": "#34d399",
+    "livesuieng": "#b00b13"
+  },
+  "multiplier": 1,
+  "manual_users": []
+}

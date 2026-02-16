@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wheel Overlay</title>
+  <style>
+    :root {
+      --bg: #0a0b10;
+      --panel: rgba(18, 20, 28, 0.75);
+      --accent: #7cf1ff;
+      --accent-2: #7b5cff;
+      --text: #e6f0ff;
+      --muted: #9fb2cc;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at 20% 20%, #14192a 0%, #0a0b10 55%, #06070c 100%);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 2vw;
+      width: 100%;
+      height: 100%;
+      padding: 3vh 3vw;
+      box-sizing: border-box;
+    }
+    .wheel-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .wheel-shell {
+      position: relative;
+      width: min(70vh, 70vw);
+      height: min(70vh, 70vw);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 0 18px rgba(0, 0, 0, 0.45));
+    }
+    #wheel-container {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      transition: transform 800ms cubic-bezier(0.12, 0.75, 0.12, 1);
+    }
+    #wheel {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 50%;
+      box-shadow: 0 0 40px rgba(124, 241, 255, 0.18), inset 0 0 30px rgba(0,0,0,0.5);
+      background: #0f1424;
+    }
+    .pointer {
+      position: absolute;
+      top: -1.4vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 1.8vh solid transparent;
+      border-right: 1.8vh solid transparent;
+      border-top: 3.2vh solid var(--accent);
+      filter: drop-shadow(0 0 10px rgba(124, 241, 255, 0.7));
+      z-index: 3;
+    }
+    .wheel-ring {
+      position: absolute;
+      inset: -1.5vh;
+      border-radius: 50%;
+      border: 3px solid rgba(124, 241, 255, 0.45);
+      box-shadow: 0 0 20px rgba(124, 241, 255, 0.4), inset 0 0 20px rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+    .winner-banner {
+      position: absolute;
+      bottom: -6vh;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 1vh 2.5vh;
+      border-radius: 999px;
+      background: linear-gradient(120deg, rgba(124,241,255,0.2), rgba(123,92,255,0.2));
+      border: 1px solid rgba(124,241,255,0.35);
+      font-weight: 600;
+      text-shadow: 0 0 12px rgba(124, 241, 255, 0.6);
+      letter-spacing: 0.02em;
+      min-width: 30%;
+      text-align: center;
+    }
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 2vh;
+      overflow-y: auto;
+      padding-right: 0.6vw;
+    }
+    .panel {
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 2vh 2vw;
+      border: 1px solid rgba(124, 241, 255, 0.12);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(8px);
+    }
+    .panel h2 {
+      margin: 0 0 1vh 0;
+      font-size: 2.2vh;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 2vh;
+      color: var(--muted);
+      margin-bottom: 1vh;
+    }
+    .list {
+      display: grid;
+      gap: 0.8vh;
+      max-height: 40vh;
+      overflow: hidden;
+    }
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 2.1vh;
+      padding: 0.6vh 0.8vw;
+      border-radius: 12px;
+      background: rgba(12, 15, 24, 0.6);
+      border: 1px solid rgba(124, 241, 255, 0.08);
+    }
+    .list-item strong {
+      color: var(--text);
+    }
+    .status {
+      font-size: 1.9vh;
+      color: var(--muted);
+      margin-top: 0.8vh;
+    }
+    .control-row {
+      display: flex;
+      gap: 0.8vw;
+      align-items: center;
+      margin-top: 1vh;
+    }
+    .control-row input[type="number"] {
+      flex: 1;
+      padding: 0.6vh 0.8vw;
+      border-radius: 8px;
+      border: 1px solid rgba(124, 241, 255, 0.2);
+      background: rgba(10, 12, 20, 0.7);
+      color: var(--text);
+      font-size: 1.8vh;
+    }
+    .control-row button {
+      padding: 0.6vh 1.4vw;
+      border-radius: 8px;
+      border: 1px solid rgba(124, 241, 255, 0.35);
+      background: linear-gradient(120deg, rgba(124,241,255,0.18), rgba(123,92,255,0.18));
+      color: var(--text);
+      font-weight: 600;
+      font-size: 1.8vh;
+      cursor: pointer;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 1vh;
+      font-size: 1.9vh;
+      color: var(--muted);
+    }
+    .command-list {
+      display: grid;
+      gap: 0.6vh;
+      font-size: 1.8vh;
+      color: var(--muted);
+    }
+    .command-list strong {
+      color: var(--text);
+    }
+    .glow {
+      animation: winnerGlow 1.6s ease-in-out infinite;
+    }
+    @keyframes winnerGlow {
+      0%, 100% { filter: drop-shadow(0 0 10px rgba(124, 241, 255, 0.6)); }
+      50% { filter: drop-shadow(0 0 22px rgba(123, 92, 255, 0.9)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="wheel-panel">
+      <div class="wheel-shell">
+        <div class="pointer"></div>
+        <div id="wheel-container">
+          <canvas id="wheel"></canvas>
+        </div>
+        <div class="wheel-ring"></div>
+        <div class="winner-banner" id="winner-banner">Waiting for spin...</div>
+      </div>
+    </div>
+    <div class="side-panel">
+      <div class="panel">
+        <h2>Wheel Status</h2>
+        <div class="stat-row"><span>Total slots</span><span id="total-slots">0</span></div>
+        <div class="stat-row"><span>Players</span><span id="total-players">0</span></div>
+        <div class="stat-row"><span>Last winner</span><span id="last-winner">—</span></div>
+        <div class="status" id="status-text">Connect to the bot to populate the wheel.</div>
+      </div>
+      <div class="panel">
+        <h2>Controls (Mods)</h2>
+        <div class="toggle-row">
+          <span>Remove winner on spin</span>
+          <input type="checkbox" id="toggle-remove" />
+        </div>
+        <div class="control-row">
+          <input type="number" id="multiplier-input" min="1" max="500" placeholder="Multiplier" />
+          <button id="multiplier-btn">Apply</button>
+        </div>
+        <div class="status" id="control-status">Waiting for connection...</div>
+      </div>
+      <div class="panel">
+        <h2>Scores</h2>
+        <div class="list" id="scores-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Entries</h2>
+        <div class="list" id="entries-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Commands</h2>
+        <div class="command-list">
+          <div><strong>!wheeljoin [#hex]</strong> — join the wheel</div>
+          <div><strong>!wheelspin [seconds]</strong> — spin (mod)</div>
+          <div><strong>!wheeladd &lt;user&gt; &lt;count&gt; [#hex]</strong> — add slots (mod)</div>
+          <div><strong>!wheelremove &lt;user&gt;</strong> — remove entry (mod)</div>
+          <div><strong>!wheelmultiplier &lt;count&gt;</strong> — set all counts (mod)</div>
+          <div><strong>!wheelremoveonwin on|off</strong> — toggle removal (mod)</div>
+          <div><strong>!wheelcolor #hex</strong> — set your color</div>
+          <div><strong>!wheelscores</strong> — show top scores</div>
+          <div><strong>!wheelreset</strong> — reset entries and scores (mod)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const wheelCanvas = document.getElementById('wheel');
+    const wheelContainer = document.getElementById('wheel-container');
+    const winnerBanner = document.getElementById('winner-banner');
+    const totalSlotsEl = document.getElementById('total-slots');
+    const totalPlayersEl = document.getElementById('total-players');
+    const lastWinnerEl = document.getElementById('last-winner');
+    const statusTextEl = document.getElementById('status-text');
+    const controlStatusEl = document.getElementById('control-status');
+    const toggleRemoveEl = document.getElementById('toggle-remove');
+    const multiplierInputEl = document.getElementById('multiplier-input');
+    const multiplierBtnEl = document.getElementById('multiplier-btn');
+    const scoresList = document.getElementById('scores-list');
+    const entriesList = document.getElementById('entries-list');
+
+    let currentRotation = 0;
+    let spinning = false;
+    let pendingState = null;
+    let currentSlots = [];
+    let wsRef = null;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playTick() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 680;
+      gain.gain.setValueAtTime(0.07, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.06);
+    }
+
+    function getRotationDegrees() {
+      const style = window.getComputedStyle(wheelContainer);
+      const transform = style.transform || 'none';
+      if (transform === 'none') return 0;
+      const match = transform.match(/matrix\(([^)]+)\)/);
+      if (!match) return 0;
+      const values = match[1].split(',').map(v => parseFloat(v.trim()));
+      const a = values[0];
+      const b = values[1];
+      const angle = Math.atan2(b, a) * (180 / Math.PI);
+      return angle;
+    }
+
+    function rotationToIndex(rotationDeg, total) {
+      const seg = 360 / total;
+      const normalized = ((-rotationDeg % 360) + 360) % 360;
+      return Math.floor(normalized / seg);
+    }
+
+    function resizeCanvas() {
+      const size = wheelContainer.getBoundingClientRect().width;
+      wheelCanvas.width = size * window.devicePixelRatio;
+      wheelCanvas.height = size * window.devicePixelRatio;
+      wheelCanvas.style.width = `${size}px`;
+      wheelCanvas.style.height = `${size}px`;
+      drawWheel(currentSlots);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawWheel(slots) {
+      currentSlots = slots || [];
+      const ctx = wheelCanvas.getContext('2d');
+      const size = wheelCanvas.width;
+      ctx.clearRect(0, 0, size, size);
+
+      const center = size / 2;
+      const radius = size * 0.46;
+
+      if (!slots || slots.length === 0) {
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#111827';
+        ctx.fill();
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = size * 0.01;
+        ctx.stroke();
+        ctx.fillStyle = '#9fb2cc';
+        ctx.font = `${size * 0.04}px Segoe UI`;
+        ctx.textAlign = 'center';
+        ctx.fillText('No entries yet', center, center);
+        return;
+      }
+
+      const segmentAngle = (Math.PI * 2) / slots.length;
+      const palette = [
+        '#2dd4bf', '#38bdf8', '#6366f1', '#f472b6', '#fb7185', '#f59e0b',
+        '#a3e635', '#34d399', '#22d3ee', '#818cf8', '#f97316', '#c084fc'
+      ];
+
+      slots.forEach((entry, i) => {
+        const name = typeof entry === 'string' ? entry : entry.name;
+        const color = typeof entry === 'string' ? null : entry.color;
+        const startAngle = -Math.PI / 2 + i * segmentAngle;
+        const endAngle = startAngle + segmentAngle;
+        ctx.beginPath();
+        ctx.moveTo(center, center);
+        ctx.arc(center, center, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = color || palette[i % palette.length];
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(6, 7, 12, 0.7)';
+        ctx.lineWidth = size * 0.004;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(center, center);
+        ctx.rotate(startAngle + segmentAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#0b1220';
+        ctx.font = `${Math.max(size * 0.018, 14)}px Segoe UI`;
+        ctx.fillText('@' + name, radius * 0.93, 4);
+        ctx.restore();
+      });
+
+      ctx.beginPath();
+      ctx.arc(center, center, radius * 0.18, 0, Math.PI * 2);
+      ctx.fillStyle = '#0b1220';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(124, 241, 255, 0.4)';
+      ctx.lineWidth = size * 0.01;
+      ctx.stroke();
+    }
+
+    function updateLists(state) {
+      const slots = state.slots || [];
+      const totalSlots = state.total_slots || 0;
+      totalSlotsEl.textContent = totalSlots;
+      totalPlayersEl.textContent = slots.length;
+      lastWinnerEl.textContent = state.last_winner ? '@' + state.last_winner : '—';
+      toggleRemoveEl.checked = !!state.remove_on_win;
+
+      scoresList.innerHTML = '';
+      const scores = state.scores || [];
+      if (scores.length === 0) {
+        scoresList.innerHTML = '<div class="status">No scores yet.</div>';
+      } else {
+        scores.slice(0, 10).forEach((entry) => {
+          const row = document.createElement('div');
+          row.className = 'list-item';
+          row.innerHTML = `<strong>@${entry.name}</strong><span>${entry.score}</span>`;
+          scoresList.appendChild(row);
+        });
+      }
+
+      entriesList.innerHTML = '';
+      if (slots.length === 0) {
+        entriesList.innerHTML = '<div class="status">Waiting for viewers to join.</div>';
+      } else {
+        slots.slice(0, 12).forEach((entry) => {
+          const row = document.createElement('div');
+          row.className = 'list-item';
+          const color = entry.color || '#2dd4bf';
+          row.innerHTML = `<strong><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:8px;"></span>@${entry.name}</strong><span>${entry.count} slot${entry.count === 1 ? '' : 's'}</span>`;
+          entriesList.appendChild(row);
+        });
+      }
+    }
+
+    function applyState(state) {
+      updateLists(state);
+      drawWheel(expandSlots(state.slots || []));
+      statusTextEl.textContent = state.total_slots ? 'Wheel ready.' : 'Waiting for entries...';
+    }
+
+    function expandSlots(slots) {
+      const expanded = [];
+      const counts = slots.map(entry => Math.max(1, Number(entry.count || 1)));
+      const maxCount = counts.length ? Math.max(...counts) : 0;
+      for (let i = 0; i < maxCount; i++) {
+        slots.forEach((entry, idx) => {
+          if (i < counts[idx]) {
+            expanded.push({ name: entry.name, color: entry.color });
+          }
+        });
+      }
+      return expanded;
+    }
+
+    function spinWheel(data) {
+      if (!data || !data.slots || data.slots.length === 0) return;
+      spinning = true;
+      winnerBanner.textContent = 'Spinning...';
+      winnerBanner.classList.remove('glow');
+      initAudio();
+
+      const slots = data.slots.map(entry => {
+        if (typeof entry === 'string') return { name: entry, color: null };
+        return entry;
+      });
+      drawWheel(slots);
+
+      const total = slots.length;
+      const segmentAngle = 360 / total;
+      const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+      const targetRotation = 360 - (data.winner_index * segmentAngle + segmentAngle / 2);
+      const delta = (targetRotation - normalizedRotation + 360) % 360;
+
+      const duration = Math.max(3000, Math.min(20000, data.duration_ms || 8000));
+      const extraTurns = Math.max(3, Math.round(duration / 1000));
+      const finalRotation = currentRotation + extraTurns * 360 + delta;
+
+      wheelContainer.style.transition = `transform ${duration}ms cubic-bezier(0.12, 0.8, 0.16, 1)`;
+      wheelContainer.style.transform = `rotate(${finalRotation}deg)`;
+      currentRotation = finalRotation;
+
+      let lastIndex = null;
+      const tickLoop = () => {
+        if (!spinning) return;
+        const rotation = getRotationDegrees();
+        const index = rotationToIndex(rotation, total);
+        if (index !== lastIndex) {
+          playTick();
+          lastIndex = index;
+        }
+        requestAnimationFrame(tickLoop);
+      };
+      requestAnimationFrame(tickLoop);
+
+      setTimeout(() => {
+        spinning = false;
+        winnerBanner.textContent = `Winner: @${data.winner}`;
+        winnerBanner.classList.add('glow');
+        if (pendingState) {
+          applyState(pendingState);
+          pendingState = null;
+        }
+      }, duration + 200);
+    }
+
+    function connectWS() {
+      const wsUrl = `ws://${window.location.hostname}:8080/ws`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        statusTextEl.textContent = 'Connected. Waiting for spin...';
+        controlStatusEl.textContent = 'Controls ready.';
+        ws.send(JSON.stringify({ type: 'request_wheel_state' }));
+      };
+
+      ws.onmessage = (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch (err) { return; }
+        if (msg.type === 'wheel_state') {
+          if (spinning) {
+            pendingState = msg;
+          } else {
+            applyState(msg);
+          }
+          return;
+        }
+        if (msg.type === 'wheel_spin') {
+          spinWheel(msg);
+        }
+      };
+
+      ws.onerror = () => {
+        statusTextEl.textContent = 'WebSocket error.';
+      };
+
+      ws.onclose = () => {
+        statusTextEl.textContent = 'Disconnected. Reconnecting...';
+        controlStatusEl.textContent = 'Disconnected.';
+        setTimeout(connectWS, 2000);
+      };
+      wsRef = ws;
+    }
+
+    toggleRemoveEl.addEventListener('change', () => {
+      if (!wsRef || wsRef.readyState !== 1) return;
+      wsRef.send(JSON.stringify({
+        type: 'wheel_control',
+        action: 'set_remove_on_win',
+        value: toggleRemoveEl.checked
+      }));
+    });
+
+    multiplierBtnEl.addEventListener('click', () => {
+      if (!wsRef || wsRef.readyState !== 1) return;
+      const value = parseInt(multiplierInputEl.value, 10);
+      if (!value || value < 1) return;
+      wsRef.send(JSON.stringify({
+        type: 'wheel_control',
+        action: 'set_multiplier',
+        value
+      }));
+    });
+
+    resizeCanvas();
+    connectWS();
+  </script>
+</body>
+</html>

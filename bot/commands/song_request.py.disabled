@@ -1,0 +1,327 @@
+import os
+import re
+import asyncio
+import logging
+from twitchio.ext import commands
+from typing import Dict, List, Optional, Tuple
+import json
+from datetime import datetime, timedelta
+
+# Optional dependencies - install as needed
+try:
+    import yt_dlp
+    YT_DLP_AVAILABLE = True
+except ImportError:
+    YT_DLP_AVAILABLE = False
+
+try:
+    import pygame
+    PYGAME_AVAILABLE = True
+except ImportError:
+    PYGAME_AVAILABLE = False
+
+try:
+    from bot.google_sheets_sync import read_sheet_data
+    SHEETS_AVAILABLE = True
+except ImportError:
+    SHEETS_AVAILABLE = False
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+QUARTERS_FILE = os.path.join(DATA_DIR, "user_quarters.json")
+PLAYLIST_CACHE_FILE = os.path.join(DATA_DIR, "playlist_cache.json")
+
+class SongRequestManager:
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.user_quarters = self.load_quarters()
+        self.playlist_cache = self.load_playlist_cache()
+        self.current_queue = []  # [(song_info, username, timestamp)]
+        self.is_playing = False
+        self.current_song = None
+        
+        # Configuration
+        self.quarters_per_youtube_request = 1  # Cost for YouTube requests
+        self.max_queue_length = 10
+        self.max_song_duration = 300  # 5 minutes max
+        
+        # Google Sheets config (to be set in bot config)
+        self.playlist_sheet_id = None  # Set this to your Google Doc ID
+        self.playlist_range = "A:C"  # Columns: Number, Title, Artist/Info
+        
+        if PYGAME_AVAILABLE:
+            try:
+                pygame.mixer.init()
+                self.logger.info("🎵 Pygame mixer initialized")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize pygame: {e}")
+
+    def load_quarters(self) -> Dict[str, int]:
+        """Load user quarters from file"""
+        try:
+            if os.path.exists(QUARTERS_FILE):
+                with open(QUARTERS_FILE, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading quarters: {e}")
+        return {}
+
+    def save_quarters(self):
+        """Save user quarters to file"""
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            with open(QUARTERS_FILE, 'w') as f:
+                json.dump(self.user_quarters, f, indent=2)
+        except Exception as e:
+            self.logger.error(f"Error saving quarters: {e}")
+
+    def load_playlist_cache(self) -> List[Dict]:
+        """Load cached playlist from file"""
+        try:
+            if os.path.exists(PLAYLIST_CACHE_FILE):
+                with open(PLAYLIST_CACHE_FILE, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading playlist cache: {e}")
+        return []
+
+    def save_playlist_cache(self):
+        """Save playlist cache to file"""
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            with open(PLAYLIST_CACHE_FILE, 'w') as f:
+                json.dump(self.playlist_cache, f, indent=2)
+        except Exception as e:
+            self.logger.error(f"Error saving playlist cache: {e}")
+
+    async def refresh_playlist_from_sheets(self) -> bool:
+        """Refresh playlist from Google Sheets"""
+        if not SHEETS_AVAILABLE or not self.playlist_sheet_id:
+            self.logger.warning("Google Sheets not available or sheet ID not configured")
+            return False
+        
+        try:
+            # Read from Google Sheets
+            data = await read_sheet_data(self.playlist_sheet_id, self.playlist_range)
+            
+            new_playlist = []
+            for row in data[1:]:  # Skip header row
+                if len(row) >= 2:
+                    song_info = {
+                        'number': int(row[0]) if row[0].isdigit() else len(new_playlist) + 1,
+                        'title': row[1],
+                        'artist': row[2] if len(row) > 2 else "Unknown Artist",
+                        'youtube_url': row[3] if len(row) > 3 else None
+                    }
+                    new_playlist.append(song_info)
+            
+            self.playlist_cache = new_playlist
+            self.save_playlist_cache()
+            self.logger.info(f"📋 Refreshed playlist: {len(new_playlist)} songs")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error refreshing playlist: {e}")
+            return False
+
+    def get_user_quarters(self, username: str) -> int:
+        """Get quarters for a user"""
+        return self.user_quarters.get(username.lower(), 0)
+
+    def spend_quarters(self, username: str, amount: int) -> bool:
+        """Spend quarters if user has enough"""
+        username = username.lower()
+        current = self.user_quarters.get(username, 0)
+        if current >= amount:
+            self.user_quarters[username] = current - amount
+            self.save_quarters()
+            return True
+        return False
+
+    def give_quarters(self, username: str, amount: int):
+        """Give quarters to a user"""
+        username = username.lower()
+        self.user_quarters[username] = self.user_quarters.get(username, 0) + amount
+        self.save_quarters()
+
+    def find_playlist_song(self, number: int) -> Optional[Dict]:
+        """Find song by number in playlist"""
+        for song in self.playlist_cache:
+            if song['number'] == number:
+                return song
+        return None
+
+    async def extract_youtube_info(self, url: str) -> Optional[Dict]:
+        """Extract info from YouTube URL"""
+        if not YT_DLP_AVAILABLE:
+            return None
+        
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'format': 'bestaudio/best',
+                'noplaylist': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                
+                # Check duration limit
+                if info.get('duration', 0) > self.max_song_duration:
+                    return None
+                
+                return {
+                    'title': info.get('title', 'Unknown Title'),
+                    'duration': info.get('duration', 0),
+                    'url': info.get('url'),
+                    'youtube_url': url
+                }
+        except Exception as e:
+            self.logger.error(f"Error extracting YouTube info: {e}")
+            return None
+
+    def is_youtube_url(self, text: str) -> bool:
+        """Check if text is a YouTube URL"""
+        youtube_patterns = [
+            r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})',
+            r'youtube\.com.*[?&]v=([a-zA-Z0-9_-]{11})'
+        ]
+        return any(re.search(pattern, text) for pattern in youtube_patterns)
+
+# Initialize the manager
+song_manager = SongRequestManager()
+
+class SongRequestCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.manager = song_manager
+        self.logger = logging.getLogger(__name__)
+
+    @commands.command(name="srx")
+    async def song_request(self, ctx, *, request: str = None):
+        """Song request command: !srx [number] or !srx [youtube_url]"""
+        if not request:
+            await ctx.send("Usage: !srx [playlist_number] or !srx [youtube_url]")
+            return
+
+        username = ctx.author.name
+        request = request.strip()
+
+        # Check if it's a number (playlist request)
+        if request.isdigit():
+            await self._handle_playlist_request(ctx, int(request), username)
+        elif self.manager.is_youtube_url(request):
+            await self._handle_youtube_request(ctx, request, username)
+        else:
+            await ctx.send("❌ Invalid request. Use a playlist number or YouTube URL.")
+
+    async def _handle_playlist_request(self, ctx, number: int, username: str):
+        """Handle playlist song request"""
+        song = self.manager.find_playlist_song(number)
+        if not song:
+            await ctx.send(f"❌ Song #{number} not found in playlist.")
+            return
+
+        if len(self.manager.current_queue) >= self.manager.max_queue_length:
+            await ctx.send("❌ Queue is full! Try again later.")
+            return
+
+        # Add to queue
+        queue_item = (song, username, datetime.now())
+        self.manager.current_queue.append(queue_item)
+        
+        position = len(self.manager.current_queue)
+        await ctx.send(f"🎵 Added #{number}: {song['title']} by {song['artist']} to queue (Position {position})")
+
+    async def _handle_youtube_request(self, ctx, url: str, username: str):
+        """Handle YouTube song request"""
+        # Check if user has quarters
+        quarters = self.manager.get_user_quarters(username)
+        if quarters < self.manager.quarters_per_youtube_request:
+            needed = self.manager.quarters_per_youtube_request - quarters
+            await ctx.send(f"❌ You need {needed} more quarter(s) to request YouTube songs. You have {quarters}.")
+            return
+
+        if len(self.manager.current_queue) >= self.manager.max_queue_length:
+            await ctx.send("❌ Queue is full! Try again later.")
+            return
+
+        # Extract YouTube info
+        await ctx.send("🔄 Processing YouTube request...")
+        
+        song_info = await self.manager.extract_youtube_info(url)
+        if not song_info:
+            await ctx.send("❌ Could not process YouTube video (may be too long or unavailable).")
+            return
+
+        # Spend quarters
+        if not self.manager.spend_quarters(username, self.manager.quarters_per_youtube_request):
+            await ctx.send("❌ Error spending quarters. Try again.")
+            return
+
+        # Add to queue
+        queue_item = (song_info, username, datetime.now())
+        self.manager.current_queue.append(queue_item)
+        
+        position = len(self.manager.current_queue)
+        duration_str = f"({song_info['duration']//60}:{song_info['duration']%60:02d})" if song_info['duration'] else ""
+        
+        await ctx.send(f"🎵 Added YouTube: {song_info['title']} {duration_str} to queue (Position {position}) [-{self.manager.quarters_per_youtube_request} quarter]")
+
+    @commands.command(name="queue")
+    async def show_queue(self, ctx):
+        """Show current song queue"""
+        if not self.manager.current_queue:
+            await ctx.send("🎵 Queue is empty.")
+            return
+
+        queue_text = "🎵 **Current Queue:**\n"
+        for i, (song, username, timestamp) in enumerate(self.manager.current_queue[:5], 1):
+            title = song.get('title', 'Unknown')
+            queue_text += f"{i}. {title} (requested by {username})\n"
+        
+        if len(self.manager.current_queue) > 5:
+            queue_text += f"... and {len(self.manager.current_queue) - 5} more songs"
+        
+        await ctx.send(queue_text)
+
+    @commands.command(name="quarters")
+    async def check_quarters(self, ctx):
+        """Check user's quarters"""
+        username = ctx.author.name
+        quarters = self.manager.get_user_quarters(username)
+        await ctx.send(f"💰 {username}, you have {quarters} quarter(s).")
+
+    @commands.command(name="playlist")
+    async def refresh_playlist(self, ctx):
+        """Refresh playlist from Google Sheets (Mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("❌ Only mods can refresh the playlist.")
+            return
+
+        await ctx.send("🔄 Refreshing playlist from Google Sheets...")
+        success = await self.manager.refresh_playlist_from_sheets()
+        
+        if success:
+            count = len(self.manager.playlist_cache)
+            await ctx.send(f"✅ Playlist refreshed! {count} songs available.")
+        else:
+            await ctx.send("❌ Failed to refresh playlist.")
+
+    @commands.command(name="givequarter")
+    async def give_quarter(self, ctx, target_user: str = None, amount: int = 1):
+        """Give quarters to a user (Mod only)"""
+        if not ctx.author.is_mod:
+            await ctx.send("❌ Only mods can give quarters.")
+            return
+
+        if not target_user:
+            await ctx.send("Usage: !givequarter [username] [amount]")
+            return
+
+        self.manager.give_quarters(target_user, amount)
+        await ctx.send(f"💰 Gave {amount} quarter(s) to {target_user}.")
+
+def prepare(bot):
+    bot.add_cog(SongRequestCog(bot))

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tetris Card Drop Overlay</title>
+  <style>
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      padding: 0;
+      background: #181818;
+      overflow: hidden;
+    }
+    #tetris-grid {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 720px;
+      height: 540px;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 4px;
+      background: transparent;
+      z-index: 2;
+    }
+    .card-block {
+      position: absolute;
+      transition: top 2.2s cubic-bezier(.4,2,.6,1), left 0.5s, opacity 0.7s;
+      overflow: visible;
+      z-index: 3;
+      opacity: 1;
+      background: none;
+      box-shadow: none;
+      border-radius: 0;
+    }
+    .card-block img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      background: none;
+      border: none;
+      box-shadow: none;
+      border-radius: 0;
+    }
+    .dissolve {
+      animation: dissolve 1.2s forwards;
+    }
+    @keyframes dissolve {
+      0% { opacity: 1; filter: blur(0px); }
+      100% { opacity: 0; filter: blur(16px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="card-anim-area"></div>
+  <script>
+    // Demo/test images
+    const testImages = [
+      '/overlay_cards/test1.jpg',
+      '/overlay_cards/test2.jpg',
+      '/overlay_cards/test3.jpg',
+      '/overlay_cards/test4.jpg',
+      '/overlay_cards/test5.jpg',
+      '/overlay_cards/test6.jpg',
+    ];
+
+    function randomEdgeStartAndEnd() {
+      // Pick a random edge to start and a random edge to end (not the same)
+      const edges = ['top', 'bottom', 'left', 'right'];
+      let start = edges[Math.floor(Math.random() * 4)];
+      let end = edges[Math.floor(Math.random() * 4)];
+      while (end === start) end = edges[Math.floor(Math.random() * 4)];
+      return { start, end };
+    }
+
+    function randomPosition(edge, cardW, cardH) {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      switch (edge) {
+        case 'top': return { x: Math.random() * (vw - cardW), y: -cardH };
+        case 'bottom': return { x: Math.random() * (vw - cardW), y: vh };
+        case 'left': return { x: -cardW, y: Math.random() * (vh - cardH) };
+        case 'right': return { x: vw, y: Math.random() * (vh - cardH) };
+      }
+    }
+
+    function animateCard(imgUrl) {
+      const cardW = 120, cardH = 180;
+      const { start, end } = randomEdgeStartAndEnd();
+      const startPos = randomPosition(start, cardW, cardH);
+      const endPos = randomPosition(end, cardW, cardH);
+      const block = document.createElement('div');
+      block.className = 'card-fly';
+      block.style.width = cardW + 'px';
+      block.style.height = cardH + 'px';
+      block.style.left = startPos.x + 'px';
+      block.style.top = startPos.y + 'px';
+      block.style.transform = `translate(0,0)`;
+      const img = document.createElement('img');
+      img.src = imgUrl;
+      img.onerror = () => { block.remove(); };
+      img.onload = () => {
+        // Optionally rotate for horizontal cards
+        if (img.naturalWidth > img.naturalHeight) {
+          block.style.width = cardH + 'px';
+          block.style.height = cardW + 'px';
+        }
+        document.getElementById('card-anim-area').appendChild(block);
+        block.appendChild(img);
+        setTimeout(() => {
+          block.style.transform = `translate(${endPos.x - startPos.x}px,${endPos.y - startPos.y}px)`;
+          block.style.opacity = 0;
+        }, 50);
+        setTimeout(() => block.remove(), 4000);
+      };
+    }
+
+    let animIdx = 0;
+    function startAnim() {
+      animateCard(testImages[animIdx % testImages.length]);
+      animIdx++;
+      setTimeout(startAnim, 1200 + Math.random() * 1200);
+    }
+    window.onload = startAnim;
+  </script>

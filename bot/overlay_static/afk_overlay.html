@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <!-- Google Fonts + Symbol Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Orbitron:wght@500&family=Fira+Code:wght@400;700&family=Share+Tech+Mono&family=Press+Start+2P&family=Permanent+Marker&family=Russo+One&family=Comic+Neue:wght@700&family=Noto+Sans+Symbols&display=swap" rel="stylesheet">
+  <style>
+    @font-face {
+      font-family: 'Segoe UI Symbol';
+      src: local('Segoe UI Symbol');
+      unicode-range: U+2600-26FF, U+2700-27BF, U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      padding: 0;
+      background: #000;
+      overflow: hidden;
+    }
+  #matrix-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .matrix-row {
+    position: absolute;
+    left: 100vw;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 2.2em;
+    color: #00ff00;
+    opacity: 0.85;
+    white-space: nowrap;
+    filter: blur(0.5px);
+    text-shadow: 0 0 8px #00ff00, 0 0 2px #00ff00;
+    animation: matrix-scroll 24s linear forwards;
+    /* Will be randomized in JS */
+  }
+  @keyframes matrix-scroll {
+    from { left: 100vw; }
+    to { left: -100vw; }
+  }
+  @keyframes matrix-scroll {
+    from { left: 100vw; }
+    to { left: -100vw; }
+  }
+  #center-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 80%;
+    max-height: 80%;
+    display: none;
+    z-index: 10;
+    background: rgba(0,0,0,0.0);
+  }
+  #center-display img {
+    display: block;
+    margin: 0 auto;
+    /* Allow the image to grow to the viewport while preserving aspect ratio. */
+    max-width: 100vw;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  </style>
+</head>
+<body>
+  <div id="matrix-container"></div>
+  <div id="center-display"><img src="" alt="overlay" /></div>
+<script>
+window.onload = () => {
+  const matrixContainer = document.getElementById("matrix-container");
+  const centerDisplay = document.getElementById("center-display");
+  const centerImg = centerDisplay.querySelector("img");
+
+  // folders relative to overlay.html
+  const FOLDERS = {
+    heart: "gifs/heart/",
+    gif: "gifs/",
+  };
+  const IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".webp"];
+  const OVERLAY_DISPLAY_TIME = 2500;
+
+  // Matrix ticker logic
+  function showMatrixMessage(message) {
+    console.log('[AFK OVERLAY] showMatrixMessage called with:', message);
+    // Do NOT clear matrixContainer, just keep adding rows
+    const row = document.createElement("div");
+    row.className = "matrix-row";
+    row.textContent = message;
+    // Randomize vertical position, brightness, font size, font family, and animation duration
+    row.style.top = `${Math.random() * 80 + 10}vh`;
+    row.style.opacity = (Math.random() * 0.3 + 0.7).toFixed(2);
+    row.style.filter = `blur(${Math.random() * 1.2}px)`;
+    row.style.fontSize = `${Math.random() * 1.2 + 1.2}em`;
+    // Google Fonts list
+    const fonts = [
+      'Roboto Mono',           // Tech/monospace
+      'Orbitron',              // Futuristic
+      'Fira Code',             // Monospace
+      'Share Tech Mono',       // Tech/monospace
+      'Press Start 2P',        // Pixel/silly
+      'Permanent Marker',      // Handwritten
+      'Russo One',             // Urban/modern
+      'Comic Neue',            // Silly/comic
+      'Noto Sans Symbols',     // Symbols
+      'Segoe UI Symbol',       // Windows symbols
+      'Consolas',
+      'Courier New',
+      'monospace'
+    ];
+    row.style.fontFamily = fonts[Math.floor(Math.random() * fonts.length)];
+    // Matrix green shades
+    const greens = ["#00ff00", "#39ff14", "#1aff1a", "#00e676", "#00ff33", "#00ff44", "#00ff22", "#00ff55", "#00ff11"];
+    row.style.color = greens[Math.floor(Math.random() * greens.length)];
+    row.style.textShadow = `0 0 8px ${row.style.color}, 0 0 2px ${row.style.color}`;
+    row.style.animationDuration = `${40 + Math.random() * 20}s`;
+    matrixContainer.appendChild(row);
+    // Remove row after animation completes to avoid DOM bloat
+    setTimeout(() => { row.remove(); }, parseFloat(row.style.animationDuration) * 1000);
+    console.log(`[AFK OVERLAY] Rendered matrix message: '${message}' with color:`, row.style.color);
+  }
+
+  // WebSocket logic
+  const ws = new WebSocket("ws://localhost:8080/ws");
+  ws.onopen = () => { console.log("[AFK OVERLAY] ✅ WebSocket connection established."); };
+  ws.onclose = (event) => { console.log("[AFK OVERLAY] ❌ WebSocket connection closed:", event); };
+  ws.onerror = (err) => { console.error("[AFK OVERLAY] ❌ WebSocket error:", err); };
+  ws.onmessage = (event) => {
+    console.log('[AFK OVERLAY] WebSocket message received:', event.data);
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (err) { console.error('[AFK OVERLAY] Failed to parse message as JSON:', err); return; }
+    if (msg.type === "afk_ticker" && typeof msg.message === "string") {
+      showMatrixMessage(msg.message);
+      return;
+    }
+    if (msg.type === "image" && typeof msg.url === "string") {
+      showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME);
+      return;
+    }
+  };
+  function showCenterImage(imgPath, duration) {
+    centerImg.src = imgPath;
+    centerDisplay.style.display = "block";
+    clearTimeout(centerDisplay._hideTimeout);
+    centerDisplay._hideTimeout = setTimeout(() => {
+      centerDisplay.style.display = "none";
+      centerImg.src = "";
+    }, duration);
+  }
+};
+</script>
+</body>
+</html>

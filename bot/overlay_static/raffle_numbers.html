@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Raffle Numbers Display</title>
+  <style>
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
+      overflow: hidden;
+      font-family: 'Arial', sans-serif;
+      color: white;
+    }
+
+    .header {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 1000;
+    }
+
+    .title {
+      font-size: 48px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      margin-bottom: 10px;
+    }
+
+    .stats {
+      font-size: 28px;
+      color: #cccccc;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    }
+
+    .dice-display {
+      position: fixed;
+      top: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 36px;
+      color: #ff4444;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      background: rgba(20,20,20,0.8);
+      padding: 20px 40px;
+      border-radius: 20px;
+      border: 2px solid #ff4444;
+    }
+
+
+
+    .eligible-number {
+      font-size: 32px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      margin-bottom: 10px;
+    }
+
+    .eligible-username {
+      font-size: 16px;
+      color: #cccccc;
+      text-align: center;
+      word-break: break-word;
+      line-height: 1.2;
+    }
+
+    .numbers-grid {
+      position: absolute;
+      top: 220px;
+      left: 20px;
+      right: 20px;
+      bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(40, 1fr);
+      gap: 2px;
+      overflow: hidden;
+      padding: 10px;
+      transition: all 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+
+    .numbers-grid.filtering {
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 20px;
+      justify-content: start;
+      align-content: start;
+      padding: 30px;
+    }
+
+    .numbers-grid.final-stage {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 30px;
+      justify-content: start;
+      align-content: start;
+      padding: 40px;
+    }
+
+    .numbers-grid.mega-stage {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 40px;
+      justify-content: center;
+      align-content: center;
+      padding: 60px;
+    }
+
+    .number-card {
+      background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+      border: 1px solid #555555;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 8px;
+      font-weight: bold;
+      text-align: center;
+      padding: 1px;
+      transition: all 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    .number-card.picked {
+      background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+      border-color: #00aa00;
+      box-shadow: 0 0 12px rgba(0, 170, 0, 0.7);
+    }
+
+    .number-card.possible {
+      background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+      border-color: #00cc00;
+      box-shadow: 0 0 18px rgba(0, 204, 0, 0.8);
+      transform: scale(1);
+      z-index: 10;
+      min-height: 70px;
+      padding: 10px 8px;
+    }
+
+    .number-card.possible.enlarged {
+      min-height: 90px;
+      padding: 15px 12px;
+      z-index: 20;
+      background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+      border-color: #00dd00;
+      box-shadow: 0 0 25px rgba(0, 221, 0, 0.9);
+    }
+
+    .number-card.possible.mega {
+      min-height: 130px;
+      padding: 25px 20px;
+      z-index: 25;
+      background: linear-gradient(45deg, #2a2a2a, #3a3a3a);
+      border-color: #00ff00;
+      box-shadow: 0 0 35px rgba(0, 255, 0, 1);
+    }
+
+    .number-card.possible.final {
+      min-height: 180px;
+      padding: 30px;
+      z-index: 30;
+      background: linear-gradient(45deg, #006600, #00aa00);
+      border-color: #00ff00;
+      box-shadow: 0 0 50px rgba(0,255,0,1);
+      animation: winnerPulse 2s infinite;
+    }
+
+    .number-card.eliminated {
+      background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
+      border-color: #444444;
+      opacity: 0;
+      transform: scale(0.1);
+      pointer-events: none;
+    }
+
+    .number-card.removing {
+      animation: fadeOutShrink 1.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+      pointer-events: none;
+    }
+
+    .number-card.removing.variant-1 {
+      animation: fadeOutShrinkRandom1 1.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+
+    .number-card.removing.variant-2 {
+      animation: fadeOutShrinkRandom2 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+
+    .number-card.removing.variant-3 {
+      animation: fadeOutShrinkRandom3 2.0s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+
+    .number {
+      font-size: 9px;
+      color: #cccccc;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+      margin-bottom: 1px;
+      transition: font-size 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+
+    .username {
+      font-size: 6px;
+      color: #aaaaaa;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.6);
+      word-break: break-all;
+      line-height: 1.1;
+      max-height: 12px;
+      overflow: hidden;
+      transition: font-size 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+
+    .number-card.possible .number {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #ffffff;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+    }
+
+    .number-card.possible .username {
+      font-size: 11px;
+      line-height: 1.2;
+      text-align: center;
+      word-wrap: break-word;
+      max-width: 100%;
+      overflow: visible;
+      white-space: normal;
+      color: #ffffff;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      max-height: 28px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .number-card.possible.enlarged .number {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    }
+
+    .number-card.possible.enlarged .username {
+      font-size: 14px;
+      color: #ffffff;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+      max-height: 35px;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+
+    .number-card.possible.mega .number {
+      font-size: 32px;
+      margin-bottom: 15px;
+      color: #ffffff;
+      text-shadow: 2px 2px 6px rgba(0,0,0,0.9);
+    }
+
+    .number-card.possible.mega .username {
+      font-size: 18px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+      max-height: 45px;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+
+    .number-card.possible.final .number {
+      font-size: 42px;
+      margin-bottom: 20px;
+      color: #ffffff;
+      text-shadow: 0 0 15px rgba(255,255,255,1);
+    }
+
+    .number-card.possible.final .username {
+      font-size: 22px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 0 0 12px rgba(255,255,255,0.8);
+      max-height: 55px;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+
+    .filter-info {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 22px;
+      color: #ffffff;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+      background: rgba(20,20,20,0.9);
+      padding: 15px 30px;
+      border-radius: 15px;
+      border: 2px solid #666666;
+    }
+
+
+
+    .number-input-panel {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      width: 280px;
+      background: rgba(20,20,30,0.95);
+      border: 2px solid #444444;
+      border-radius: 12px;
+      padding: 15px;
+      z-index: 1002;
+      font-family: 'Courier New', monospace;
+    }
+
+    .panel-header {
+      color: #cccccc;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #444444;
+      padding-bottom: 8px;
+    }
+
+    .current-numbers {
+      color: #00ff00;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 15px;
+      background: rgba(0,0,0,0.4);
+      padding: 8px;
+      border-radius: 6px;
+      letter-spacing: 3px;
+    }
+
+    .number-buttons {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+
+    .num-btn {
+      background: rgba(0,100,200,0.8);
+      color: #ffffff;
+      border: 2px solid #0066cc;
+      padding: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+
+    .num-btn:hover {
+      background: rgba(0,120,240,0.9);
+      border-color: #0088ff;
+      transform: scale(1.05);
+    }
+
+    .control-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+
+    .ctrl-btn {
+      background: rgba(150,50,50,0.8);
+      color: #ffffff;
+      border: 2px solid #aa3333;
+      padding: 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+
+    .ctrl-btn:hover {
+      background: rgba(180,70,70,0.9);
+      border-color: #cc5555;
+    }
+
+    .final-results {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(10,10,10,0.95);
+      border: 3px solid #ffffff;
+      border-radius: 20px;
+      padding: 40px;
+      display: none;
+      z-index: 2000;
+      text-align: center;
+      min-width: 600px;
+      max-width: 80%;
+      box-shadow: 0 0 50px rgba(255,255,255,0.3);
+    }
+
+    .final-title {
+      font-size: 36px;
+      font-weight: bold;
+      color: #ffffff;
+      margin-bottom: 30px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    }
+
+    .winner-section {
+      margin-bottom: 30px;
+    }
+
+    .winner-number {
+      font-size: 48px;
+      font-weight: bold;
+      color: #00ff00;
+      text-shadow: 0 0 10px rgba(0,255,0,0.8);
+      margin: 10px 0;
+    }
+
+    .winner-name {
+      font-size: 24px;
+      color: #cccccc;
+      margin: 10px 0;
+    }
+
+    .analysis-section {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #666666;
+    }
+
+    .analysis-title {
+      font-size: 20px;
+      color: #ffffff;
+      margin-bottom: 15px;
+    }
+
+    .bad-beat-item, .closest-item {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .bad-beat-item {
+      background: rgba(170,0,0,0.3);
+      border: 1px solid #ff4444;
+    }
+
+    .closest-item {
+      background: rgba(204,102,0,0.3);
+      border: 1px solid #ff8800;
+    }
+
+    .raffle-status {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(20,20,20,0.9);
+      border: 2px solid #666666;
+      border-radius: 10px;
+      padding: 15px;
+      font-size: 16px;
+      z-index: 1001;
+    }
+
+    .manual-controls {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(20,20,20,0.95);
+      border: 2px solid #666666;
+      border-radius: 10px;
+      padding: 15px;
+      z-index: 1001;
+      display: none;
+    }
+
+    .manual-controls.visible {
+      display: block;
+    }
+
+    .control-button {
+      background: #444444;
+      color: #ffffff;
+      border: 1px solid #666666;
+      border-radius: 5px;
+      padding: 8px 12px;
+      margin: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background-color 0.2s;
+    }
+
+    .control-button:hover {
+      background: #555555;
+    }
+
+    .control-button:active {
+      background: #333333;
+    }
+
+    .control-section {
+      margin-bottom: 10px;
+    }
+
+    .control-section h4 {
+      margin: 0 0 5px 0;
+      color: #cccccc;
+      font-size: 14px;
+    }
+
+    .status-open {
+      border-color: #00aa00;
+      color: #00ff00;
+    }
+
+    .status-closed {
+      border-color: #aa0000;
+      color: #ff4444;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 18px rgba(0, 204, 0, 0.6); }
+      50% { box-shadow: 0 0 35px rgba(0, 255, 0, 1); }
+      100% { box-shadow: 0 0 18px rgba(0, 204, 0, 0.6); }
+    }
+
+    @keyframes fadeOutShrink {
+      0% {
+        opacity: 1;
+        transform: scale(1) translateY(0px);
+      }
+      30% {
+        opacity: 0.7;
+        transform: scale(0.8) translateY(10px) rotateZ(45deg);
+      }
+      70% {
+        opacity: 0.2;
+        transform: scale(0.3) translateY(50px) rotateZ(180deg);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.05) translateY(100px) rotateZ(360deg);
+      }
+    }
+
+    @keyframes fadeOutShrinkRandom1 {
+      0% {
+        opacity: 1;
+        transform: scale(1) translateY(0px) translateX(0px);
+      }
+      30% {
+        opacity: 0.6;
+        transform: scale(0.7) translateY(15px) translateX(-10px) rotateZ(-30deg);
+      }
+      70% {
+        opacity: 0.1;
+        transform: scale(0.2) translateY(80px) translateX(-30px) rotateZ(270deg);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.02) translateY(120px) translateX(-50px) rotateZ(450deg);
+      }
+    }
+
+    @keyframes fadeOutShrinkRandom2 {
+      0% {
+        opacity: 1;
+        transform: scale(1) translateY(0px) translateX(0px);
+      }
+      25% {
+        opacity: 0.8;
+        transform: scale(0.9) translateY(5px) translateX(15px) rotateZ(60deg);
+      }
+      60% {
+        opacity: 0.3;
+        transform: scale(0.4) translateY(60px) translateX(40px) rotateZ(200deg);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.01) translateY(110px) translateX(60px) rotateZ(400deg);
+      }
+    }
+
+    @keyframes fadeOutShrinkRandom3 {
+      0% {
+        opacity: 1;
+        transform: scale(1) translateY(0px) translateX(0px);
+      }
+      40% {
+        opacity: 0.5;
+        transform: scale(0.6) translateY(20px) translateX(5px) rotateZ(-90deg);
+      }
+      80% {
+        opacity: 0.1;
+        transform: scale(0.15) translateY(90px) translateX(20px) rotateZ(300deg);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.01) translateY(130px) translateX(30px) rotateZ(540deg);
+      }
+    }
+
+    @keyframes winnerPulse {
+      0% { 
+        box-shadow: 0 0 20px rgba(0,255,0,0.8);
+        transform: scale(2.5);
+      }
+      50% { 
+        box-shadow: 0 0 40px rgba(0,255,0,1);
+        transform: scale(2.7);
+      }
+      100% { 
+        box-shadow: 0 0 20px rgba(0,255,0,0.8);
+        transform: scale(2.5);
+      }
+    }
+
+    .number-card.possible {
+      animation: pulse 2s infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">🎲 RAFFLE NUMBERS 🎲</div>
+    <div class="stats" id="stats">Loading...</div>
+  </div>
+
+  <div class="number-input-panel">
+    <div class="panel-header">Manual Number Entry</div>
+    <div class="current-numbers" id="currentNumbers">Numbers: [ _ _ _ ]</div>
+    <div class="number-buttons">
+      <button class="num-btn" onclick="addNumber(0)">0</button>
+      <button class="num-btn" onclick="addNumber(1)">1</button>
+      <button class="num-btn" onclick="addNumber(2)">2</button>
+      <button class="num-btn" onclick="addNumber(3)">3</button>
+      <button class="num-btn" onclick="addNumber(4)">4</button>
+      <button class="num-btn" onclick="addNumber(5)">5</button>
+      <button class="num-btn" onclick="addNumber(6)">6</button>
+      <button class="num-btn" onclick="addNumber(7)">7</button>
+      <button class="num-btn" onclick="addNumber(8)">8</button>
+      <button class="num-btn" onclick="addNumber(9)">9</button>
+    </div>
+    <div class="control-buttons">
+      <button class="ctrl-btn" onclick="clearNumbers()">Clear</button>
+      <button class="ctrl-btn" onclick="undoLast()">Undo</button>
+      <button class="ctrl-btn" onclick="testReset()">Reset All</button>
+    </div>
+  </div>
+
+  <div class="raffle-status" id="raffleStatus">
+    Status: Loading...
+  </div>
+
+  <div class="dice-display" id="diceDisplay" style="display: none;">
+    Dice Rolled: <span id="diceNumbers"></span>
+  </div>
+
+  <div class="numbers-grid" id="numbersGrid">
+    <!-- Numbers will be populated by JavaScript -->
+  </div>
+
+  <div class="filter-info" id="filterInfo" style="display: none;">
+    Remaining possibilities: <span id="remainingCount">0</span>
+  </div>
+
+  <div class="final-results" id="finalResults">
+    <div class="final-title">🏆 RAFFLE COMPLETE 🏆</div>
+    <div class="winner-section" id="winnerSection">
+      <!-- Winner info will be populated here -->
+    </div>
+    <div class="analysis-section" id="analysisSection">
+      <!-- Bad beats and closest calls will be shown here -->
+    </div>
+  </div>
+
+  <script>
+    let raffleData = {};
+    let currentFilter = [];
+    let ws = null;
+    let testMode = false;
+    let isAnimating = false;
+
+    // Connect to WebSocket for real-time updates
+    function connectWebSocket() {
+      try {
+        ws = new WebSocket('ws://localhost:8080/ws');
+        
+        ws.onopen = function(event) {
+          console.log('WebSocket connected');
+          loadRaffleData();
+        };
+        
+        ws.onmessage = function(event) {
+          const message = JSON.parse(event.data);
+          console.log('Received WebSocket message:', message);
+          
+          if (message.type === 'raffle_update') {
+            loadRaffleData();
+          } else if (message.type === 'dice_roll') {
+            console.log('Received dice_roll WebSocket message:', message);
+            updateDiceFilter(message.numbers);
+          } else if (message.type === 'reset_filter') {
+            console.log('Received reset_filter WebSocket message');
+            resetFilter();
+          }
+        };
+        
+        ws.onclose = function(event) {
+          console.log('WebSocket disconnected, reconnecting...');
+          setTimeout(connectWebSocket, 3000);
+        };
+        
+        ws.onerror = function(error) {
+          console.error('WebSocket error:', error);
+        };
+      } catch (error) {
+        console.error('WebSocket connection failed:', error);
+        setTimeout(connectWebSocket, 3000);
+      }
+    }
+
+    // Load raffle data from API with real-time updates
+    async function loadRaffleData() {
+      try {
+        const response = await fetch('/api/raffle');
+        const data = await response.json();
+        const previousData = raffleData;
+        raffleData = data;
+        
+        updateDisplay();
+        
+        // Check for new picks and highlight them briefly
+        if (previousData.picks) {
+          highlightNewPicks(previousData.picks, data.picks || {});
+        }
+        
+      } catch (error) {
+        console.error('Failed to load raffle data:', error);
+      }
+    }
+
+    // Highlight newly picked numbers
+    function highlightNewPicks(oldPicks, newPicks) {
+      for (const number in newPicks) {
+        if (!oldPicks[number]) {
+          // This is a new pick
+          const card = document.getElementById(`card-${number}`);
+          if (card) {
+            card.style.animation = 'none';
+            setTimeout(() => {
+              card.style.animation = 'eligiblePulse 1s ease-in-out 3';
+            }, 10);
+          }
+        }
+      }
+    }
+
+    // Get eligible numbers based on current filter (PICKED numbers only)
+    function getEligibleNumbers() {
+      const eligible = [];
+      
+      if (!raffleData.picks) return eligible;
+      
+      for (const [number, username] of Object.entries(raffleData.picks)) {
+        if (currentFilter.length === 0) {
+          // No filter active, all picked numbers are eligible
+          eligible.push({number, username});
+        } else {
+          // Check if picked number matches current filter pattern
+          let matches = true;
+          for (let j = 0; j < currentFilter.length; j++) {
+            if (number[j] !== currentFilter[j].toString()) {
+              matches = false;
+              break;
+            }
+          }
+          if (matches) {
+            eligible.push({number, username});
+          }
+        }
+      }
+      
+      // Sort by number for consistent display
+      return eligible.sort((a, b) => a.number.localeCompare(b.number));
+    }
+
+    // Get numbers to keep visible (ONLY picked numbers that could win)
+    function getNumbersToKeep() {
+      const numbersToKeep = new Set();
+      
+      if (currentFilter.length === 0) {
+        // No filter - keep all picked numbers visible
+        if (raffleData.picks) {
+          Object.keys(raffleData.picks).forEach(number => {
+            numbersToKeep.add(number);
+          });
+        }
+      } else {
+        // Filter active - ONLY keep PICKED numbers that match the pattern
+        if (raffleData.picks) {
+          for (const [number, username] of Object.entries(raffleData.picks)) {
+            // Check if this PICKED number matches the current dice pattern
+            let matches = true;
+            for (let j = 0; j < currentFilter.length; j++) {
+              if (number[j] !== currentFilter[j].toString()) {
+                matches = false;
+                break;
+              }
+            }
+            
+            if (matches) {
+              numbersToKeep.add(number);
+            }
+          }
+        }
+      }
+      
+      return numbersToKeep;
+    }
+
+    // Animate grid transitions based on filter progress
+    async function animateGridTransition() {
+      console.log('=== animateGridTransition called ===');
+      console.log('isAnimating state:', isAnimating);
+      
+      if (isAnimating) {
+        console.log('❌ Animation already in progress, skipping');
+        return;
+      }
+      
+      console.log('✅ Starting new animation');
+      isAnimating = true;
+      
+      const grid = document.getElementById('numbersGrid');
+      const eligibleNumbers = getEligibleNumbers(); // Only picked numbers that match
+      const numbersToKeep = getNumbersToKeep(); // Only picked numbers that match (no unpicked)
+      
+      console.log(`Animating transition: ${eligibleNumbers.length} eligible picked numbers, ${numbersToKeep.size} numbers to keep visible`);
+      console.log('Numbers to keep:', Array.from(numbersToKeep));
+      
+      // Step 1: Collect cards to remove and randomize their removal order
+      const cardsToRemove = [];
+      const cardsToKeep = [];
+      
+      for (let i = 0; i < 1000; i++) {
+        const numberStr = i.toString().padStart(3, '0');
+        const card = document.getElementById(`card-${numberStr}`);
+        
+        if (card) {
+          const shouldKeep = numbersToKeep.has(numberStr);
+          
+          if (!shouldKeep) {
+            cardsToRemove.push({card, numberStr});
+          } else {
+            cardsToKeep.push({card, numberStr});
+            // Prepare kept cards
+            card.classList.remove('eliminated');
+            if (raffleData.picks && raffleData.picks[numberStr]) {
+              card.classList.add('possible');
+            }
+          }
+        }
+      }
+      
+      console.log(`Removing ${cardsToRemove.length} cards, keeping ${cardsToKeep.length} cards`);
+      
+      // Randomize removal order and apply staggered animations
+      const shuffledCards = [...cardsToRemove].sort(() => Math.random() - 0.5);
+      
+      shuffledCards.forEach(({card, numberStr}, index) => {
+        const delay = index * 8; // Slower stagger: 8ms between each removal
+        const animationVariant = Math.floor(Math.random() * 4); // 0-3 for different animation styles
+        
+        setTimeout(() => {
+          card.classList.add('removing');
+          if (animationVariant === 1) card.classList.add('variant-1');
+          else if (animationVariant === 2) card.classList.add('variant-2');
+          else if (animationVariant === 3) card.classList.add('variant-3');
+        }, delay);
+      });
+      
+      // Step 2: Wait for removal animations, then reconfigure grid
+      const maxRemovalTime = shuffledCards.length * 8 + 3000; // Longer buffer to ensure completion
+      
+      console.log(`Waiting ${maxRemovalTime}ms for ${shuffledCards.length} cards to animate out`);
+      
+      setTimeout(() => {
+        console.log('Starting DOM cleanup and grid reconfiguration');
+        
+        // Remove eliminated cards from DOM
+        let removedCount = 0;
+        shuffledCards.forEach(({card}) => {
+          if (card.parentNode) {
+            card.remove();
+            removedCount++;
+          }
+        });
+        
+        console.log(`Removed ${removedCount} cards from DOM`);
+        
+        // Adjust grid layout based on remaining count for maximum drama
+        grid.classList.remove('filtering', 'final-stage', 'mega-stage');
+        
+        if (eligibleNumbers.length === 1) {
+          grid.classList.add('mega-stage');
+        } else if (eligibleNumbers.length <= 5) {
+          grid.classList.add('final-stage');
+        } else if (eligibleNumbers.length <= 20) {
+          grid.classList.add('final-stage');
+        } else {
+          grid.classList.add('filtering');
+        }
+        
+        console.log(`Grid reconfigured for ${eligibleNumbers.length} remaining cards`);
+        
+        // Update the filter info display
+        updateFilterDisplay();
+        
+        // Step 3: Enlarge and enhance remaining cards with dramatic staggered timing
+        setTimeout(() => {
+          console.log('Starting card enlargement phase');
+          
+          eligibleNumbers.forEach(({number}, index) => {
+            const card = document.getElementById(`card-${number}`);
+            if (card) {
+              // Add enlargement with staggered timing for suspense
+              setTimeout(() => {
+                card.classList.remove('enlarged', 'mega', 'final'); // Reset classes
+                
+                if (eligibleNumbers.length === 1) {
+                  // Final winner - MASSIVE
+                  card.classList.add('final');
+                  setTimeout(() => showFinalResults({number, username: raffleData.picks[number]}), 2000);
+                } else if (eligibleNumbers.length === 0) {
+                  // No winner - show analysis anyway
+                  setTimeout(() => showFinalResults(null), 1000);
+                } else if (eligibleNumbers.length <= 3) {
+                  // Down to the final few - MEGA size
+                  card.classList.add('mega');
+                } else if (eligibleNumbers.length <= 10) {
+                  // Getting close - enlarged
+                  card.classList.add('enlarged');
+                }
+                
+                // Add pulsing effect to build tension
+                if (eligibleNumbers.length <= 5) {
+                  card.style.animation = 'pulse 1.5s infinite';
+                } else if (eligibleNumbers.length <= 10) {
+                  card.style.animation = 'pulse 2s infinite';
+                }
+              }, index * 150); // Slower stagger for more drama
+            }
+          });
+          
+          // Animation complete
+          setTimeout(() => {
+            console.log('🎉 Animation sequence complete');
+            console.log('Setting isAnimating = false');
+            
+            // Check if we should show final results (no winner case)
+            if (currentFilter.length === 3 && eligibleNumbers.length === 0) {
+              setTimeout(() => showFinalResults(null), 500);
+            }
+            
+            isAnimating = false;
+            console.log('✅ isAnimating now set to:', isAnimating);
+          }, Math.min(eligibleNumbers.length * 150 + 300, 2000)); // Cap at 2 seconds max
+          
+        }, 500); // Reduced delay for faster response
+        
+      }, maxRemovalTime);
+
+      // Helper function to update filter display
+      function updateFilterDisplay() {
+        const filterInfo = document.getElementById('filterInfo');
+        const possibleCount = eligibleNumbers.length;
+        
+        let message = '';
+        if (possibleCount === 1) {
+          message = `🏆 WINNER: ${possibleCount} survivor!`;
+        } else if (possibleCount <= 3) {
+          message = `⚡ FINAL ${possibleCount}: Who will survive?`;
+        } else if (possibleCount <= 10) {
+          message = `🎯 ${possibleCount} remain: The tension builds...`;
+        } else if (possibleCount <= 20) {
+          message = `🔥 ${possibleCount} possibilities: Getting closer...`;
+        } else {
+          message = `🎲 ${possibleCount} potential winners remain`;
+        }
+        filterInfo.innerHTML = message;
+        filterInfo.style.display = 'block';
+      }
+    }
+
+    // Show final results with winner and analysis (or no winner analysis)
+    function showFinalResults(winner) {
+      const finalResults = document.getElementById('finalResults');
+      const winnerSection = document.getElementById('winnerSection');
+      const analysisSection = document.getElementById('analysisSection');
+      
+      if (winner) {
+        // Display winner
+        winnerSection.innerHTML = `
+          <div class="winner-number">${winner.number}</div>
+          <div class="winner-name">🎉 ${winner.username} 🎉</div>
+        `;
+      } else {
+        // No winner - show the drawn number
+        const drawnNumber = currentFilter.join('');
+        winnerSection.innerHTML = `
+          <div class="winner-number">${drawnNumber}</div>
+          <div class="winner-name" style="color: #ff6666;">💔 No Winner! 💔</div>
+        `;
+      }
+      
+      // Analyze bad beats and closest calls
+      const drawnNumber = winner ? winner.number : currentFilter.join('');
+      const analysis = analyzeBadBeats(drawnNumber);
+      
+      let analysisHTML = '';
+      
+      if (analysis.badBeats.length > 0) {
+        const uniqueUsers = [...new Set(analysis.badBeats.map(bb => bb.username))];
+        const jackpotText = analysis.jackpotPerPerson > 0 
+          ? `(+${analysis.jackpotPerPerson} entries each from jackpot!)` 
+          : '';
+        
+        analysisHTML += `
+          <div class="analysis-title">💔 Bad Beats - Off by 1! ${jackpotText}</div>
+        `;
+        analysis.badBeats.forEach(item => {
+          analysisHTML += `
+            <div class="bad-beat-item">
+              <span>${item.number} - ${item.username}</span>
+              <span>±1 from winner</span>
+            </div>
+          `;
+        });
+        
+        if (analysis.jackpotPerPerson > 0) {
+          analysisHTML += `
+            <div style="text-align: center; margin-top: 10px; font-size: 14px; color: #ffd700;">
+              💰 Jackpot: ${analysis.totalJackpot} entries → ${analysis.jackpotPerPerson} each to ${uniqueUsers.length} user${uniqueUsers.length > 1 ? 's' : ''}
+            </div>
+          `;
+        }
+      }
+      
+      if (analysis.closest.length > 0) {
+        analysisHTML += `
+          <div class="analysis-title">🎯 Other Close Calls</div>
+        `;
+        analysis.closest.forEach(item => {
+          analysisHTML += `
+            <div class="closest-item">
+              <span>${item.number} - ${item.username}</span>
+              <span>Off by ${item.difference}</span>
+            </div>
+          `;
+        });
+      }
+      
+      analysisSection.innerHTML = analysisHTML;
+      finalResults.style.display = 'block';
+      
+      // Hide after 15 seconds
+      setTimeout(() => {
+        finalResults.style.display = 'none';
+      }, 15000);
+    }
+
+    // Analyze bad beats and closest calls
+    function analyzeBadBeats(winningNumber) {
+      const badBeats = [];
+      const closest = [];
+      const winningNum = parseInt(winningNumber);
+      
+      if (!raffleData.picks) return { badBeats, closest, jackpotPerPerson: 0 };
+      
+      // Find all numbers that were close to the winning number
+      for (const [number, username] of Object.entries(raffleData.picks)) {
+        const num = parseInt(number);
+        const difference = Math.abs(winningNum - num);
+        
+        if (number !== winningNumber) {
+          if (difference === 1) {
+            // Bad beat - exactly 1 away from winning number (354 or 356 if winner is 355)
+            badBeats.push({ number, username, difference: 1 });
+          } else if (difference <= 10) {
+            // Closest call - numerically close but not a bad beat
+            closest.push({ number, username, difference });
+          }
+        }
+      }
+      
+      // Calculate jackpot distribution for bad beats
+      let jackpotPerPerson = 0;
+      const badBeatJackpot = raffleData.bad_beat_jackpot || 25;
+      
+      if (badBeats.length > 0) {
+        // Divide jackpot by number of bad beat users, rounded up
+        const uniqueBadBeatUsers = [...new Set(badBeats.map(bb => bb.username))];
+        jackpotPerPerson = Math.ceil(badBeatJackpot / uniqueBadBeatUsers.length);
+      }
+      
+      // Sort by number for consistent display
+      badBeats.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+      closest.sort((a, b) => a.difference - b.difference);
+      
+      return { 
+        badBeats,
+        closest: closest.slice(0, 5), // Top 5 closest (excluding bad beats)
+        jackpotPerPerson,
+        totalJackpot: badBeatJackpot
+      };
+    }
+
+    // Update the main grid display
+    function updateDisplay() {
+      // Don't update display if animation is in progress
+      if (isAnimating) {
+        console.log('Skipping display update - animation in progress');
+        return;
+      }
+      
+      const grid = document.getElementById('numbersGrid');
+      const stats = document.getElementById('stats');
+      const statusDiv = document.getElementById('raffleStatus');
+      
+      // Update raffle status
+      const isOpen = raffleData.is_open !== false; // Default to true if not specified
+      statusDiv.textContent = `Raffle: ${isOpen ? 'OPEN' : 'CLOSED'}`;
+      statusDiv.className = `raffle-status ${isOpen ? 'status-open' : 'status-closed'}`;
+      
+      // Update stats
+      const totalPicked = Object.keys(raffleData.picks || {}).length;
+      const giveawayAmount = raffleData.giveaway_amount || 0;
+      stats.textContent = `${totalPicked}/1000 Numbers Picked | Prize: $${giveawayAmount.toFixed(2)}`;
+      
+      console.log('Updating display - current filter length:', currentFilter.length);
+      
+      // Clear existing grid only if no filter is active
+      if (currentFilter.length === 0) {
+        grid.innerHTML = '';
+        grid.classList.remove('filtering', 'final-stage', 'mega-stage');
+        
+        // Create all 1000 number cards (000-999)
+        for (let i = 0; i < 1000; i++) {
+          const numberStr = i.toString().padStart(3, '0');
+          const card = document.createElement('div');
+          card.className = 'number-card';
+          card.id = `card-${numberStr}`;
+          
+          const numberDiv = document.createElement('div');
+          numberDiv.className = 'number';
+          numberDiv.textContent = numberStr;
+          
+          const usernameDiv = document.createElement('div');
+          usernameDiv.className = 'username';
+          
+          // Check if this number is picked
+          if (raffleData.picks && raffleData.picks[numberStr]) {
+            card.classList.add('picked');
+            usernameDiv.textContent = raffleData.picks[numberStr];
+          } else {
+            usernameDiv.textContent = '';
+          }
+          
+          card.appendChild(numberDiv);
+          card.appendChild(usernameDiv);
+          grid.appendChild(card);
+        }
+      } else {
+        console.log('Filter active, not rebuilding grid');
+      }
+    }
+
+    // Update dice filter based on rolled numbers
+    function updateDiceFilter(numbers) {
+      console.log('=== updateDiceFilter called ===');
+      console.log('Numbers:', numbers);
+      console.log('Current isAnimating:', isAnimating);
+      console.log('Current testMode:', testMode);
+      
+      // Check if raffle is closed and not in test mode
+      if (!testMode && raffleData.is_open === false) {
+        console.log('Cannot perform draw - raffle is closed');
+        return;
+      }
+      
+      currentFilter = numbers;
+      
+      // Update dice display
+      const diceDisplay = document.getElementById('diceDisplay');
+      const diceNumbers = document.getElementById('diceNumbers');
+      diceNumbers.textContent = numbers.join(' - ') + (testMode ? ' (TEST)' : '');
+      diceDisplay.style.display = 'block';
+      
+      console.log('Updated currentFilter to:', currentFilter);
+      
+      // Don't call applyFilter - go straight to animation
+      console.log('Starting dice animation for filter:', numbers);
+      
+      // Trigger grid animation immediately
+      animateGridTransition();
+    }
+
+    // Number input system
+    let manualNumbers = [];
+    
+    function updateNumbersDisplay() {
+      const display = document.getElementById('currentNumbers');
+      const displayArray = [...manualNumbers];
+      while (displayArray.length < 3) {
+        displayArray.push('_');
+      }
+      display.textContent = `Numbers: [ ${displayArray.join(' ')} ]`;
+    }
+    
+    function addNumber(digit) {
+      console.log('=== addNumber called ===');
+      console.log('Adding digit:', digit);
+      console.log('Current manualNumbers:', manualNumbers);
+      console.log('Current isAnimating:', isAnimating);
+      
+      if (manualNumbers.length >= 3) {
+        alert('Already have 3 numbers! Use Clear or Undo to modify.');
+        return;
+      }
+      
+      if (!raffleData.picks || Object.keys(raffleData.picks).length === 0) {
+        alert('No raffle entries available for testing');
+        return;
+      }
+      
+      // Force reset animation state if it's been stuck for too long
+      if (isAnimating) {
+        console.log('⚠️ Forcing animation reset - was stuck');
+        isAnimating = false;
+      }
+      
+      manualNumbers.push(digit);
+      updateNumbersDisplay();
+      
+      console.log('New manualNumbers:', manualNumbers);
+      
+      // Trigger animation with current numbers
+      testMode = true;
+      updateDiceFilter([...manualNumbers]);
+    }
+    
+    function clearNumbers() {
+      manualNumbers = [];
+      updateNumbersDisplay();
+      testMode = false;
+      resetFilter();
+    }
+    
+    function undoLast() {
+      if (manualNumbers.length === 0) {
+        return;
+      }
+      
+      manualNumbers.pop();
+      updateNumbersDisplay();
+      
+      if (manualNumbers.length === 0) {
+        testMode = false;
+        resetFilter();
+      } else {
+        testMode = true;
+        updateDiceFilter([...manualNumbers]);
+      }
+    }
+
+    // Test mode functions (kept for compatibility)
+    function testFirstDice() {
+      if (!raffleData.picks || Object.keys(raffleData.picks).length === 0) {
+        alert('No raffle entries available for testing');
+        return;
+      }
+      
+      testMode = true;
+      const randomDie = Math.floor(Math.random() * 10);
+      updateDiceFilter([randomDie]);
+    }
+
+    function testSecondDice() {
+      if (currentFilter.length !== 1) {
+        alert('Please roll the first die first');
+        return;
+      }
+      
+      testMode = true;
+      const randomDie = Math.floor(Math.random() * 10);
+      updateDiceFilter([...currentFilter, randomDie]);
+    }
+
+    function testThirdDice() {
+      if (currentFilter.length !== 2) {
+        alert('Please roll the first two dice first');
+        return;
+      }
+      
+      testMode = true;
+      const randomDie = Math.floor(Math.random() * 10);
+      updateDiceFilter([...currentFilter, randomDie]);
+    }
+
+    function testReset() {
+      testMode = false;
+      resetFilter();
+    }
+
+    // Apply the current filter to highlight possible numbers
+    function applyFilter() {
+      if (currentFilter.length === 0) {
+        resetFilter();
+        return;
+      }
+      
+      let possibleCount = 0;
+      
+      // Check each number (both picked and unpicked)
+      for (let i = 0; i < 1000; i++) {
+        const numberStr = i.toString().padStart(3, '0');
+        const card = document.getElementById(`card-${numberStr}`);
+        
+        if (card) {
+          // Check if this number matches the current dice pattern
+          let matches = true;
+          for (let j = 0; j < currentFilter.length; j++) {
+            if (numberStr[j] !== currentFilter[j].toString()) {
+              matches = false;
+              break;
+            }
+          }
+          
+          if (matches && card.classList.contains('picked')) {
+            // This is a picked number that matches the pattern
+            card.classList.add('possible');
+            card.classList.remove('eliminated');
+            possibleCount++;
+          } else if (!matches) {
+            // This number doesn't match the pattern at all
+            card.classList.add('eliminated');
+            card.classList.remove('possible');
+          } else {
+            // Unpicked number that matches pattern - keep it visible but dim
+            card.classList.remove('possible', 'eliminated');
+          }
+        }
+      }
+      
+      // Update filter info with dramatic messaging
+      const filterInfo = document.getElementById('filterInfo');
+      const remainingCount = document.getElementById('remainingCount');
+      remainingCount.textContent = possibleCount;
+      
+      // Add tyrannical messaging based on remaining count
+      if (currentFilter.length > 0) {
+        let message = '';
+        if (possibleCount === 1) {
+          message = `🏆 WINNER: ${possibleCount} survivor!`;
+        } else if (possibleCount <= 3) {
+          message = `⚡ FINAL ${possibleCount}: Who will survive?`;
+        } else if (possibleCount <= 10) {
+          message = `🎯 ${possibleCount} remain: The tension builds...`;
+        } else if (possibleCount <= 20) {
+          message = `🔥 ${possibleCount} possibilities: Getting closer...`;
+        } else {
+          message = `🎲 ${possibleCount} potential winners remain`;
+        }
+        filterInfo.innerHTML = message;
+      } else {
+        filterInfo.innerHTML = `Remaining possibilities: <span id="remainingCount">${possibleCount}</span>`;
+      }
+      
+      filterInfo.style.display = 'block';
+    }
+
+    // Reset filter to show all numbers
+    function resetFilter() {
+      currentFilter = [];
+      
+      // Hide dice display and filter info
+      document.getElementById('diceDisplay').style.display = 'none';
+      document.getElementById('filterInfo').style.display = 'none';
+      
+      // Reset grid layout
+      const grid = document.getElementById('numbersGrid');
+      grid.classList.remove('filtering', 'final-stage');
+      
+      // Reset all cards
+      const cards = document.querySelectorAll('.number-card');
+      cards.forEach(card => {
+        card.classList.remove('possible', 'eliminated', 'enlarged', 'final', 'removing');
+      });
+      
+      // Rebuild the full grid
+      updateDisplay();
+    }
+
+    // Toggle number input panel with 'T' key
+    document.addEventListener('keydown', function(event) {
+      if (event.key.toLowerCase() === 't') {
+        const panel = document.querySelector('.number-input-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+
+    // Initialize when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      connectWebSocket();
+      updateNumbersDisplay(); // Initialize number input display
+      
+      // Refresh data every 5 seconds as backup
+      setInterval(loadRaffleData, 5000);
+    });
+  </script>
+</body>
+</html>
