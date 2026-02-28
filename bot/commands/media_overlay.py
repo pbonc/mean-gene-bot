@@ -7,6 +7,7 @@ import subprocess
 from twitchio.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
+from bot.command_routing import get_media_trigger_set, refresh_media_trigger_set
 from PIL import Image
 from typing import List, Dict
 import wave
@@ -25,6 +26,83 @@ IMAGE_EXTS = [".gif", ".jpg", ".jpeg", ".png", ".webp"]
 AUDIO_EXTS = [".mp3", ".wav", ".ogg"]
 SCAN_INTERVAL = 3  # seconds
 MODS_FOLDER = "mods"
+RESERVED_RPG_COMMANDS = {
+    "ascend",
+    "blessing",
+    "bottle",
+    "bonk",
+    "brew",
+    "classchange",
+    "coin",
+    "strike",
+    "backstab",
+    "bolt",
+    "smite",
+    "heal",
+    "ohm",
+    "taunt",
+    "reap",
+    "harvest",
+    "summon",
+    "stream_heal",
+    "totem",
+    "rez",
+    "gamba",
+    "corruption",
+    "doom",
+    "passrevenant",
+    "resolvereferral",
+    "sb",
+    "summon_imp",
+    "dragon",
+    "sap",
+    "deagle",
+    "c4",
+    "greenarrow",
+    "tazer",
+    "goldrpg",
+    "taze",
+    "teargass",
+    "donut",
+    "tommygun",
+    "takeoff",
+    "kid",
+    "franklin",
+    "jdam",
+    "nuke",
+    "scratch",
+    "hairball",
+    "meow",
+    "pray",
+    "touch",
+    "expel",
+    "judgement",
+    "crack",
+    "gun",
+    "fight",
+    "join",
+    "embark",
+    "stats",
+    "skills",
+    "ascend",
+    "guard",
+    "pickpocket",
+    "transmute",
+    "restore",
+    "edict",
+    "spawn",
+    "stats",
+    "skills",
+    "transform",
+    "gacha",
+    "loottable",
+    "rpgreset",
+    "resetcog",
+    "resetrpg",
+    "refreshrpg",
+    "newstream",
+    "resetdailies",
+}
 
 # Audio system with volume control
 from bot.main import audio_manager
@@ -175,9 +253,41 @@ class MediaOverlayCog(commands.Cog):
         # Note: SFX queue removed - audio_manager now handles queuing internally
         bot.loop.create_task(self._watch_media_folders()) 
 
+    def _is_generated_media_command(self, cmd: str) -> bool:
+        existing = self.bot.get_command(cmd)
+        if not existing:
+            return False
+        callback = getattr(existing, "callback", None) or getattr(existing, "_callback", None)
+        callback_name = getattr(callback, "__name__", "") if callback else ""
+        return callback_name.startswith("media_cmd_")
+
+    def _should_skip_registration(self, cmd: str) -> bool:
+        routing = get_media_trigger_set()
+        return cmd in RESERVED_RPG_COMMANDS or cmd in routing
+
+    def _cleanup_reserved_command_conflicts(self):
+        for cmd in RESERVED_RPG_COMMANDS:
+            if self._is_generated_media_command(cmd):
+                try:
+                    self.bot.remove_command(cmd)
+                    self.logger.info("Cleaned up generated media command !%s to preserve reserved RPG names", cmd)
+                except Exception:
+                    pass
+                self._registered.discard(cmd)
+
+    def cog_unload(self):
+        for cmd in list(self._registered):
+            self._unregister_media_command(cmd)
+        self._cleanup_reserved_command_conflicts()
+        try:
+            self.executor.shutdown(wait=False)
+        except Exception:
+            pass
+
 
     async def _watch_media_folders(self):
         await self.bot.wait_for_ready()
+        self._cleanup_reserved_command_conflicts()
         # initial scan in executor to avoid blocking event loop
         loop = asyncio.get_event_loop()
         snapshot = await loop.run_in_executor(self.executor, self._scan_media_commands)
@@ -318,6 +428,13 @@ class MediaOverlayCog(commands.Cog):
     def _register_media_command(self, cmd, entry):
         if cmd in self._registered:
             return
+        existing = self.bot.get_command(cmd)
+        if existing:
+            callback = getattr(existing, "callback", None) or getattr(existing, "_callback", None)
+            callback_name = getattr(callback, "__name__", "") if callback else ""
+            if not callback_name.startswith("media_cmd_"):
+                self.logger.debug(f"Skipping media command !{cmd}; command already exists and is not media-generated")
+                return
         async def media_player(ctx):
             # SFX permissions and selection logic
             if "sfx" in entry:
@@ -367,13 +484,50 @@ class MediaOverlayCog(commands.Cog):
                     except Exception:
                         pass
         media_player.__name__ = f"media_cmd_{cmd}"
+        # For reserved RPG/overlap names, keep the entry but do not register a bot command
+        # (RPG cog or dispatcher will invoke play_media_command directly).
+        if self._should_skip_registration(cmd):
+            self.media_commands[cmd] = entry
+            self._registered.discard(cmd)
+            self.logger.info("Skipped registration for overlapping command: !%s", cmd)
+            return
+
         try:
             self.bot.remove_command(cmd)
         except Exception:
             pass
+        self._registered.discard(cmd)
         self.bot.add_command(commands.Command(name=cmd, func=media_player))
         self._registered.add(cmd)
         self.logger.info(f"Registered media overlay command: !{cmd}")
+
+    async def play_media_command(self, cmd: str, ctx) -> bool:
+        entry = self.media_commands.get(cmd)
+        if not entry:
+            return False
+        if "sfx" in entry:
+            path_or_paths, sfx_type, extra = entry["sfx"]
+            is_mod_command = sfx_type in ("modfolderfile", "modfile")
+            if is_mod_command and not (ctx.author.is_mod or ctx.author.is_broadcaster):
+                return False
+            if sfx_type == "folder":
+                chosen_path = random.choice(path_or_paths)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, audio_manager.play_sfx, chosen_path)
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, audio_manager.play_sfx, path_or_paths)
+        if "image" in entry:
+            path, rel_fname = entry["image"]
+            ext = os.path.splitext(rel_fname)[1].lower()
+            url = f"/gifs/{rel_fname}"
+            duration = get_gif_duration_ms(path) if ext == ".gif" else 5000
+            await broadcast_overlay_message({
+                "type": "image",
+                "url": url,
+                "duration": duration
+            })
+        return True
 
     def get_registered_media_command_rows(self) -> List[Dict]:
         """For a public-facing sheet we only expose two columns:
@@ -613,6 +767,36 @@ class MediaOverlayCog(commands.Cog):
         # Update SFX volume in audio_manager
         audio_manager.set_sfx_volume(level / 100.0)
         await ctx.send(f"🔊 SFX volume set to {level}%")
+
+    @commands.command(name="play")
+    async def play_media_dispatch(self, ctx, name: str = None):
+        if not name:
+            await ctx.send("Usage: !play <command>")
+            return
+        cmd = name.strip().lower()
+        played = await self.play_media_command(cmd, ctx)
+        if not played:
+            await ctx.send(f"No media found for !{cmd}")
+
+    @commands.command(name="mediascan")
+    async def mediascan(self, ctx):
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send("Only mods can rescan media.")
+            return
+        loop = asyncio.get_event_loop()
+        snapshot = await loop.run_in_executor(self.executor, self._scan_media_commands)
+        prev = set(self.media_commands.keys())
+        new = set(snapshot.keys())
+        added = new - prev
+        removed = prev - new
+        for cmd in snapshot:
+            self._register_media_command(cmd, snapshot[cmd])
+        for cmd in list(self._registered):
+            if cmd not in snapshot:
+                self._unregister_media_command(cmd)
+        self.media_commands = snapshot
+        refresh_media_trigger_set()
+        await ctx.send(f"Media scan complete. Added {len(added)}, removed {len(removed)}.")
 
 
 def prepare(bot):

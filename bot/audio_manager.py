@@ -33,6 +33,9 @@ class AudioManager:
         self.sfx_queue = queue.Queue()
         self.sfx_lock = threading.Lock()
         self.sfx_worker_thread = None
+        # Deduplication: track SFX played/queued recently (path -> timestamp)
+        self._recent_sfx = {}
+        self._dedup_window_sec = 1.0  # Only allow same SFX once per second
         self._init_pygame()
         self._start_sfx_worker()
 
@@ -112,7 +115,18 @@ class AudioManager:
         # No stop for playsound3 fallback
 
     def play_sfx(self, path):
-        """Queue an SFX for playback. Returns immediately without blocking."""
+        """Queue an SFX for playback, deduplicating within a short window."""
+        now = time.monotonic()
+        with self.sfx_lock:
+            # Clean up old entries
+            expired = [p for p, t in self._recent_sfx.items() if now - t > self._dedup_window_sec]
+            for p in expired:
+                del self._recent_sfx[p]
+            # Deduplicate
+            if path in self._recent_sfx:
+                print(f"[AudioManager] Deduped SFX: {os.path.basename(path)} (already queued/played in last {self._dedup_window_sec}s)")
+                return
+            self._recent_sfx[path] = now
         print(f"[AudioManager] Queueing SFX: {os.path.basename(path)}")
         self.sfx_queue.put(path)
 

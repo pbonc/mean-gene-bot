@@ -1,0 +1,13 @@
+{
+  "media_triggers": [
+    "bonk",
+    "strike",
+    "cleave",
+    "fight",
+    "gun",
+    "skills",
+    "stats",
+    "spawn",
+    "shout"
+  ]
+}

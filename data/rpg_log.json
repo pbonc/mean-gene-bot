@@ -1,0 +1,1424 @@
+{
+  "daily_reset_ts": 1772245321,
+  "daily_log": [
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Default action: @billyman26 bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Default action: @fal_the_warlock bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Monster down: skeletank defeated by @iamdar."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Gamba: @iamdar hit 1/5 enemies for 66 each and took 19 backfire damage."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Bottle: @livesuieng dealt 6 total damage. CRIT! 2 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Pray: @karnave gained 2 power (5 total) and healed 0 HP."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "JDAM: @nate048 dealt 79 to primary + splash 39 to 2 targets (157 total)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Bleed: shaman takes 6 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "shaman is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Monster down: shaman defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Bleed: trickster takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Deagle: @hoplon5 landed a HEAVY shot!"
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Action: @hoplon5 used deagle for 130 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Monster down: trickster defeated by @hoplon5."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Action: @fal_the_warlock used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:02:25Z",
+      "text": "Monster: skeletank attacks @iamdar for 10."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:02:55Z",
+      "text": "Default action: @hoplon5 auto-used deagle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Default action: @billyman26 bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Default action: @fal_the_warlock bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Action: @iamdar healed the party for 48 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Bottle: @livesuieng dealt 46 total damage. CRIT! 1 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Touch: @karnave gained 1 power (6 total)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "JDAM: @nate048 dealt 27 to primary + splash 39 to 0 targets (27 total)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Top DPS: nate048 (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Top Healing: iamdar (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @iamdar earned 2 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @billyman26 earned 1 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @livesuieng earned 1 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @karnave earned 1 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @nate048 earned 2 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @deputydawg777 earned 1 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @fal_the_warlock earned 2 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:03:55Z",
+      "text": "Loot: @hoplon5 earned 2 gacha tokens, 1004 XP."
+    },
+    {
+      "ts": "2026-02-28T05:04:35Z",
+      "text": "Battle start: pack (shaman x4, summoner x3, squirrel x3) level 10."
+    },
+    {
+      "ts": "2026-02-28T05:04:37Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:42Z",
+      "text": "Join: @livesuieng entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:46Z",
+      "text": "Join: @karnave entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:54Z",
+      "text": "Join: @nate048 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:05:14Z",
+      "text": "Gacha draw: @deputydawg777 drew 3x for +75 XP (0 rare, 3 common) | bonus: +0 gacha, +0 entries."
+    },
+    {
+      "ts": "2026-02-28T05:05:39Z",
+      "text": "Join: @deputydawg777 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:11Z",
+      "text": "Salary: @snipah201z +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-02-28T05:06:11Z",
+      "text": "Join: @snipah201z entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:31Z",
+      "text": "Join: @fal_the_warlock entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:35Z",
+      "text": "Action window opened."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @karnave auto-used pray (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:13Z",
+      "text": "Join: @billyman26 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @iamdar bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @snipah201z bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @fal_the_warlock bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Bottle: @livesuieng dealt 3 total damage. CRIT! 2 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Pray: @karnave gained 2 power (2 total) and healed 0 HP."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "JDAM: @nate048 dealt 1 to primary + splash 39 to 2 targets (79 total)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "squirrel is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster down: squirrel defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @iamdar used bonk for 65 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @snipah201z used bonk for 11 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster down: shaman defeated by @snipah201z."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @fal_the_warlock used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: shaman attacks @nate048 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Shaman heal: shaman restored 11 HP to summoner"
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @iamdar for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @deputydawg777 for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Default action: @fal_the_warlock auto-used reap (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @iamdar healed the party for 58 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Bottle: @livesuieng dealt 45 total damage. CRIT! Bleed applied!"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Touch: @karnave gained 1 power (3 total)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster down: skeletank defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Bleed: shaman takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "shaman is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster down: shaman defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @fal_the_warlock used reap for 30 total damage (2 hits)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Shaman heal: shaman restored 11 HP to summoner"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @karnave for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:43Z",
+      "text": "Salary: @tankahdelphia +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-02-28T05:09:43Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @karnave auto-used pray (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 8 HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @iamdar healed the party for 43 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Bottle: @livesuieng dealt 45 total damage. CRIT!"
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Pray: @karnave gained 2 power (5 total) and healed 0 HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "skeletank is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster down: skeletank defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @fal_the_warlock used harvest for 5 damage."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @tankahdelphia used gun for 60 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: shaman attacks @nate048 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @tankahdelphia for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @snipah201z for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @fal_the_warlock auto-used reap (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 10 HP."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @iamdar healed the party for 60 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bottle: @livesuieng dealt 6 total damage. CRIT! 1 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Touch: @karnave gained 1 power (6 total)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: skeletank defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "skeletank is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: skeletank defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @fal_the_warlock used reap for 30 total damage (2 hits)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @tankahdelphia used gun for 60 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: summoner defeated by @tankahdelphia."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: shaman attacks @livesuieng for 19."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @iamdar auto-used gamba (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 4 HP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: skeletank defeated by @iamdar."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Gamba: @iamdar hit 4/5 enemies for 66 each."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Bottle: @livesuieng dealt 29 total damage. CRIT!"
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Touch: @karnave gained 1 power (7 total)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: summoner defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 1 targets (84 total)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "summoner is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Top DPS: nate048 (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Top Healing: iamdar (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @iamdar earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @livesuieng earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @karnave earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @nate048 earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @deputydawg777 earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @snipah201z earned 2 gacha tokens, 1803 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @fal_the_warlock earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @billyman26 earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @tankahdelphia earned 2 gacha tokens, 1804 XP."
+    }
+  ],
+  "battle_log": [
+    {
+      "ts": "2026-02-28T05:04:35Z",
+      "text": "Battle start: pack (shaman x4, summoner x3, squirrel x3) level 10."
+    },
+    {
+      "ts": "2026-02-28T05:04:37Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:42Z",
+      "text": "Join: @livesuieng entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:46Z",
+      "text": "Join: @karnave entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:04:54Z",
+      "text": "Join: @nate048 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:05:39Z",
+      "text": "Join: @deputydawg777 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:11Z",
+      "text": "Join: @snipah201z entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:31Z",
+      "text": "Join: @fal_the_warlock entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:06:35Z",
+      "text": "Action window opened."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @karnave auto-used pray (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:07:13Z",
+      "text": "Join: @billyman26 entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @iamdar bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @snipah201z bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Default action: @fal_the_warlock bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Bottle: @livesuieng dealt 3 total damage. CRIT! 2 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Pray: @karnave gained 2 power (2 total) and healed 0 HP."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "JDAM: @nate048 dealt 1 to primary + splash 39 to 2 targets (79 total)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "squirrel is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster down: squirrel defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @iamdar used bonk for 65 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @snipah201z used bonk for 11 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster down: shaman defeated by @snipah201z."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Action: @fal_the_warlock used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: shaman attacks @nate048 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Shaman heal: shaman restored 11 HP to summoner"
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @iamdar for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:05Z",
+      "text": "Monster: skeletank attacks @deputydawg777 for 10."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:08:35Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Default action: @fal_the_warlock auto-used reap (join auto)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @iamdar healed the party for 58 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Bottle: @livesuieng dealt 45 total damage. CRIT! Bleed applied!"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Touch: @karnave gained 1 power (3 total)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster down: skeletank defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Bleed: shaman takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "shaman is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster down: shaman defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Action: @fal_the_warlock used reap for 30 total damage (2 hits)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Shaman heal: shaman restored 11 HP to summoner"
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @karnave for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:09:43Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @karnave auto-used pray (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:10:05Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 8 HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @iamdar healed the party for 43 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Bottle: @livesuieng dealt 45 total damage. CRIT!"
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Pray: @karnave gained 2 power (5 total) and healed 0 HP."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "skeletank is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster down: skeletank defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @fal_the_warlock used harvest for 5 damage."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Action: @tankahdelphia used gun for 60 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: shaman attacks @nate048 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: shaman attacks @deputydawg777 for 19."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @tankahdelphia for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @fal_the_warlock for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:05Z",
+      "text": "Monster: skeletank attacks @snipah201z for 10."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @iamdar auto-used stream_heal (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @fal_the_warlock auto-used reap (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:11:35Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 10 HP."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @iamdar healed the party for 60 total HP."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bottle: @livesuieng dealt 6 total damage. CRIT! 1 shard bleed hit(s)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Touch: @karnave gained 1 power (6 total)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: skeletank defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 2 targets (123 total)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "skeletank is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: skeletank defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @fal_the_warlock used reap for 30 total damage (2 hits)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @billyman26 used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Action: @tankahdelphia used gun for 60 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster down: summoner defeated by @tankahdelphia."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: shaman attacks @livesuieng for 19."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Summoner: summoner summoned skeletank (1/1)."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:12:35Z",
+      "text": "Monster: skeletank attacks @livesuieng for 10."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @iamdar auto-used gamba (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @livesuieng auto-used bottle (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @karnave auto-used touch (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @nate048 auto-used jdam (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @deputydawg777 auto-used tazer (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @billyman26 auto-used bonk (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:13:05Z",
+      "text": "Default action: @tankahdelphia auto-used gun (join auto timer)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 4 HP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: skeletank defeated by @iamdar."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Gamba: @iamdar hit 4/5 enemies for 66 each."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Bottle: @livesuieng dealt 29 total damage. CRIT!"
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Touch: @karnave gained 1 power (7 total)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Bleed: summoner takes 2 damage from bleed."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Action: @karnave used touch for 58 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: summoner defeated by @karnave."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "JDAM: @nate048 dealt 45 to primary + splash 39 to 1 targets (84 total)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "summoner is stunned by deputydawg777's tazer!"
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Action: @deputydawg777 used tazer for 68 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Top DPS: nate048 (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Top Healing: iamdar (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @iamdar earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @livesuieng earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @karnave earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @nate048 earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @deputydawg777 earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @snipah201z earned 2 gacha tokens, 1803 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @fal_the_warlock earned 1 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @billyman26 earned 2 gacha tokens, 1804 XP."
+    },
+    {
+      "ts": "2026-02-28T05:14:05Z",
+      "text": "Loot: @tankahdelphia earned 2 gacha tokens, 1804 XP."
+    }
+  ],
+  "battle_id": "battle_1772255075"
+}

@@ -28,6 +28,7 @@ except ImportError:
 from bot.overlay_server import start_overlay_server, broadcast_overlay_message
 from bot.weather_utils import fetch_weather, save_weather_message, get_random_weather_messages, get_any_weather_message
 from bot.oauth_refresh import auto_refresh_if_needed
+from bot.telemetry import log_event, tail_events, telemetry_file_path
 
 # Auto-install dependencies on startup
 try:
@@ -377,6 +378,35 @@ class Bot(commands.Bot):
     async def event_message(self, message):
         author_name = message.author.name if message.author else "Unknown"
         print(f"Message from {author_name}: {message.content}")
+        try:
+            content = message.content or ""
+            is_command = bool(content.startswith("!"))
+            log_event(
+                "chat_message",
+                {
+                    "author": author_name,
+                    "channel": getattr(getattr(message, "channel", None), "name", None),
+                    "content": content,
+                    "is_command": is_command,
+                    "is_echo": bool(getattr(message, "echo", False)),
+                },
+            )
+            if is_command:
+                parts = content.split()
+                command_name = parts[0][1:].lower() if parts else ""
+                command_args = parts[1:] if len(parts) > 1 else []
+                log_event(
+                    "command_issued",
+                    {
+                        "author": author_name,
+                        "channel": getattr(getattr(message, "channel", None), "name", None),
+                        "command": command_name,
+                        "args": command_args,
+                        "raw": content,
+                    },
+                )
+        except Exception as exc:
+            logging.error(f"[TELEMETRY] Failed to log event_message: {exc}")
         # AI chat and pirate list logic
         if message.author and message.content:
             import logging
@@ -391,9 +421,80 @@ class Bot(commands.Bot):
         if message.author:
             await self.handle_commands(message)
 
+    async def event_command(self, ctx):
+        try:
+            if ctx and ctx.command:
+                log_event(
+                    "command_executed",
+                    {
+                        "author": getattr(getattr(ctx, "author", None), "name", None),
+                        "channel": getattr(getattr(ctx, "channel", None), "name", None),
+                        "command": getattr(ctx.command, "name", None),
+                        "message": getattr(getattr(ctx, "message", None), "content", None),
+                    },
+                )
+        except Exception as exc:
+            logging.error(f"[TELEMETRY] Failed to log event_command: {exc}")
+
+    async def event_command_error(self, ctx, error):
+        try:
+            log_event(
+                "command_error",
+                {
+                    "author": getattr(getattr(ctx, "author", None), "name", None),
+                    "channel": getattr(getattr(ctx, "channel", None), "name", None),
+                    "command": getattr(getattr(ctx, "command", None), "name", None),
+                    "message": getattr(getattr(ctx, "message", None), "content", None),
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                },
+            )
+        except Exception as exc:
+            logging.error(f"[TELEMETRY] Failed to log event_command_error: {exc}")
+
     @commands.command(name='hello')
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
+
+    @commands.command(name='reviewlog', aliases=('latestlog',))
+    async def reviewlog(self, ctx, count: str = "20", event_type: str = None):
+        if not ctx.author.is_mod:
+            await ctx.send("Only mods can use this command.")
+            return
+
+        try:
+            limit = max(1, min(50, int(count)))
+        except Exception:
+            await ctx.send("Usage: !reviewlog [count 1-50] [event_type]")
+            return
+
+        events = tail_events(limit=limit, event_type=event_type)
+        if not events:
+            await ctx.send(
+                f"No telemetry events found. File: {os.path.basename(telemetry_file_path())}"
+            )
+            return
+
+        preview = events[-8:]
+        lines = []
+        for item in preview:
+            ts = item.get("ts", "?")
+            et = item.get("event_type", "?")
+            author = item.get("author")
+            command = item.get("command")
+            phase = item.get("phase")
+            if command:
+                lines.append(f"{ts} {et} @{author} !{command}")
+            elif phase:
+                lines.append(f"{ts} {et} phase={phase}")
+            else:
+                lines.append(f"{ts} {et}")
+
+        message = " | ".join(lines)
+        if len(message) > 460:
+            message = message[:457] + "..."
+
+        await ctx.send(message)
 
     # Example overlay command for you to adjust
     @commands.command(name='overlaytest')
@@ -401,6 +502,71 @@ class Bot(commands.Bot):
         # This will display the test image on the overlay
         await broadcast_overlay_message({"image": "/gifs/darheart2.jpg"})
         await ctx.send("Overlay image triggered!")
+
+    @commands.command(name='reloadrpg')
+    async def reloadrpg(self, ctx):
+        if not ctx.author.is_mod:
+            await ctx.send("Only mods can use this command.")
+            return
+        try:
+            import sys
+            try:
+                from bot.commands.media_overlay import RESERVED_RPG_COMMANDS
+            except Exception:
+                RESERVED_RPG_COMMANDS = set()
+
+            rpg_cog_command_names = {
+                name
+                for name, command_obj in list(self.commands.items())
+                if getattr(command_obj, "cog", None)
+                and getattr(command_obj.cog, "__class__", type(None)).__name__ == "RpgCog"
+            }
+            for command_name in rpg_cog_command_names:
+                try:
+                    self.remove_command(command_name)
+                except Exception:
+                    pass
+
+            if self.get_cog("RpgCog"):
+                try:
+                    self.remove_cog("RpgCog")
+                except Exception:
+                    pass
+
+            # Remove any stale commands that may have been dynamically registered
+            # (e.g., media overlay command collisions like !crack).
+            for command_name in RESERVED_RPG_COMMANDS:
+                try:
+                    self.remove_command(command_name)
+                except Exception:
+                    pass
+
+            if "bot.commands.rpg_cog" in sys.modules:
+                del sys.modules["bot.commands.rpg_cog"]
+            module = importlib.import_module("bot.commands.rpg_cog")
+            if hasattr(module, "prepare"):
+                module.prepare(self)
+            reload_logger = logging.getLogger("reloadrpg")
+            command_names = sorted(self.commands.keys())
+            reserved_present = sorted(
+                name for name in RESERVED_RPG_COMMANDS if name in self.commands
+            )
+            rpg_cog_commands = sorted(
+                name
+                for name, command_obj in self.commands.items()
+                if getattr(command_obj, "cog", None)
+                and getattr(command_obj.cog, "__class__", type(None)).__name__ == "RpgCog"
+            )
+            reload_logger.info(
+                "RPG reload complete: %d commands registered, reserved present=%s",
+                len(command_names),
+                reserved_present,
+            )
+            reload_logger.info("RPG cog commands after reload: %s", rpg_cog_commands)
+            reload_logger.debug("All bot commands after reload: %s", command_names)
+            await ctx.send("RPG cog reloaded.")
+        except Exception as exc:
+            await ctx.send(f"RPG reload failed: {type(exc).__name__}: {exc}")
 
 if DISCORD_AVAILABLE:
     class DiscordBot(discord_commands.Bot):
