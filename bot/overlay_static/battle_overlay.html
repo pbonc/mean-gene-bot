@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Battle Log</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Code+Pro:wght@400;600&display=swap');
+    :root {
+      --bg-1: #0b0a12;
+      --bg-2: #1a1325;
+      --ink: #f5efe6;
+      --muted: #b8a58b;
+      --accent: #d4af37;
+      --accent-2: #8b2d2d;
+      --panel: rgba(16, 12, 20, 0.85);
+      --panel-border: rgba(212, 175, 55, 0.3);
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #2a1b3d 0%, var(--bg-2) 45%, var(--bg-1) 100%);
+      color: var(--ink);
+      font-family: "Source Code Pro", "Courier New", monospace;
+      overflow: hidden;
+    }
+    body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 6px;
+      opacity: 0.25;
+      pointer-events: none;
+    }
+    .frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      padding: 3vh 4vw;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 2vh;
+    }
+    .title {
+      font-family: "Cinzel", serif;
+      font-size: clamp(28px, 4vw, 56px);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
+    }
+    .status-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 1.5vw;
+    }
+    .pill {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 1.2vh 1.2vw;
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.4);
+    }
+    .pill h3 {
+      margin: 0 0 0.6vh 0;
+      font-family: "Cinzel", serif;
+      font-size: 1.2rem;
+      color: var(--accent);
+    }
+    .pill p {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--muted);
+    }
+    .pill.timer-pill {
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .pill.timer-pill.timer-active-join {
+      border-color: rgba(80, 255, 120, 0.9);
+      box-shadow: 0 0 26px rgba(80, 255, 120, 0.45);
+    }
+    .pill.timer-pill.timer-active-action {
+      border-color: rgba(255, 70, 70, 0.9);
+      box-shadow: 0 0 26px rgba(255, 70, 70, 0.45);
+    }
+    .timer-value {
+      font-family: "Cinzel", serif;
+      font-size: clamp(1.15rem, 2.2vw, 2rem);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      line-height: 1.1;
+    }
+    .timer-value.timer-join-active {
+      color: #63ff9b;
+      font-weight: 800;
+      text-shadow: 0 0 12px rgba(99, 255, 155, 0.7);
+    }
+    .timer-value.timer-action-active {
+      color: #ff4a4a;
+      font-weight: 800;
+      text-shadow: 0 0 12px rgba(255, 74, 74, 0.75);
+    }
+    .log-panel {
+      display: grid;
+      grid-template-columns: 1.4fr 0.8fr 0.8fr;
+      gap: 2vw;
+      height: 100%;
+      align-items: stretch;
+      min-width: 0;
+    }
+    .log {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      padding: 2vh 2vw;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 26px rgba(0, 0, 0, 0.45);
+      min-width: 0;
+    }
+    .log h2 {
+      margin: 0 0 1.2vh 0;
+      font-family: "Cinzel", serif;
+      font-size: 1.4rem;
+      color: var(--accent);
+    }
+    .log-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8vh;
+      overflow: hidden;
+      font-size: 0.98rem;
+      color: var(--ink);
+    }
+    #battle-log {
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-size: 1.16rem;
+      line-height: 1.35;
+      padding-right: 0.25vw;
+    }
+    .log-item {
+      padding: 0.6vh 0.6vw;
+      border-left: 3px solid var(--accent-2);
+      background: rgba(10, 8, 14, 0.65);
+      border-radius: 8px;
+    }
+    .crit-text {
+      color: #ff3b30;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(255, 59, 48, 0.5);
+    }
+    .damage-num {
+      color: #ff4a4a;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(255, 74, 74, 0.5);
+    }
+    .heal-num {
+      color: #63ff9b;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(99, 255, 155, 0.5);
+    }
+    .log-item span {
+      color: var(--muted);
+      margin-right: 0.6vw;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .party-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-size: 1rem;
+      max-height: 100%;
+      width: 100%;
+      min-width: 0;
+    }
+    .party-list li {
+      min-width: 0;
+    }
+    .party-card {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1.15fr) minmax(0, 0.85fr) minmax(0, 96px);
+      gap: 0.45vw;
+      align-items: center;
+      padding: 0.4vh 0.7vw;
+      border-radius: 8px;
+      background: rgba(10, 8, 14, 0.65);
+      border: 1px solid rgba(212, 175, 55, 0.2);
+      min-height: 2.5vh;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .party-card > * {
+      min-width: 0;
+    }
+    .party-card strong {
+      font-size: 0.95rem;
+    }
+    .party-name,
+    .party-class {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .party-name {
+      display: block;
+    }
+    .party-status {
+      margin-left: 0.25rem;
+      font-size: 0.95rem;
+      vertical-align: middle;
+      filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.7));
+    }
+    .party-class {
+      display: block;
+      text-align: left;
+    }
+    .party-card.totem {
+      background: rgba(20, 80, 60, 0.5);
+      border-color: rgba(100, 200, 150, 0.4);
+    }
+    .party-card.undead {
+      background: rgba(20, 80, 60, 0.5);
+      border-color: rgba(100, 200, 150, 0.4);
+    }
+    .party-card.imp {
+      background: rgba(80, 20, 20, 0.5);
+      border-color: rgba(200, 100, 100, 0.4);
+    }
+    .party-card.spirit-well {
+      background: var(--panel);
+      border-color: var(--accent-2);
+    }
+    .party-card.active strong {
+      color: #00ff00;
+      text-shadow: 0 0 10px rgba(0, 255, 0, 0.6);
+    }
+    .party-card.gold-ready {
+      border-color: rgba(255, 215, 0, 0.9);
+      box-shadow: 0 0 12px rgba(255, 215, 0, 0.45);
+    }
+    .party-card.dead strong {
+      color: #ff0000;
+      text-shadow: 0 0 10px rgba(255, 0, 0, 0.6);
+    }
+    .party-tag {
+      display: inline-block;
+      background: rgba(212, 175, 55, 0.3);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 0.2vh 0.5vw;
+      font-family: "Cinzel", serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      min-width: 0;
+      width: 100%;
+      max-width: 44px;
+      text-align: center;
+    }
+    .monster-card {
+      display: grid;
+      grid-template-columns: 0.5fr 1.5fr auto;
+      gap: 0.8vw;
+      align-items: center;
+      padding: 0.4vh 0.7vw;
+      border-radius: 8px;
+      background: rgba(10, 8, 14, 0.65);
+      border: 1px solid rgba(212, 175, 55, 0.2);
+      position: relative;
+      min-height: 2.5vh;
+    }
+    .monster-card.dead {
+      text-decoration: line-through;
+      color: #ff0000;
+      text-shadow: 0 0 10px rgba(255, 0, 0, 0.6);
+    }
+    .monster-card.bleeding {
+      border-color: rgba(255, 0, 0, 0.6);
+      box-shadow: 0 0 10px rgba(255, 0, 0, 0.4);
+    }
+    .monster-card.stunned {
+      border-color: rgba(100, 100, 255, 0.6);
+      box-shadow: 0 0 10px rgba(100, 100, 255, 0.4);
+    }
+    .monster-card.poisoned {
+      border-color: rgba(99, 255, 155, 0.65);
+      box-shadow: 0 0 10px rgba(99, 255, 155, 0.35);
+    }
+    .monster-card.goldrpg-bleed {
+      border-color: rgba(255, 215, 0, 0.8);
+      box-shadow: 0 0 12px rgba(255, 215, 0, 0.45);
+    }
+    .monster-card.berzerk {
+      border-color: rgba(255, 120, 40, 0.85);
+      box-shadow: 0 0 12px rgba(255, 120, 40, 0.45);
+    }
+    .monster-statuses {
+      position: absolute;
+      top: -7px;
+      right: -7px;
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+      pointer-events: none;
+    }
+    .monster-status {
+      font-size: 1.05rem;
+      filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+      line-height: 1;
+    }
+    .monster-status.poisoned {
+      color: #63ff9b;
+      text-shadow: 0 0 8px rgba(99, 255, 155, 0.75);
+    }
+    .monster-status.goldrpg {
+      color: #ffd700;
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.9);
+    }
+    .monster-status.berzerk {
+      color: #ff9a3c;
+      text-shadow: 0 0 10px rgba(255, 154, 60, 0.9);
+    }
+    .monster-tag {
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .loot-goblin-name {
+      color: #ffd700;
+      font-weight: 700;
+      text-shadow: 0 0 15px rgba(255, 215, 0, 0.9),
+                   0 0 25px rgba(255, 215, 0, 0.6),
+                   0 0 35px rgba(255, 215, 0, 0.4);
+      animation: golden-pulse 2s ease-in-out infinite;
+    }
+    @keyframes golden-pulse {
+      0%, 100% {
+        text-shadow: 0 0 15px rgba(255, 215, 0, 0.9),
+                     0 0 25px rgba(255, 215, 0, 0.6),
+                     0 0 35px rgba(255, 215, 0, 0.4);
+      }
+      50% {
+        text-shadow: 0 0 20px rgba(255, 215, 0, 1.0),
+                     0 0 35px rgba(255, 215, 0, 0.8),
+                     0 0 50px rgba(255, 215, 0, 0.6);
+      }
+    }
+    .hp-pill {
+      padding: 0.15vh 0.6vw;
+      border-radius: 999px;
+      border: 1px solid rgba(212, 175, 55, 0.35);
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.85rem;
+      white-space: nowrap;
+      justify-self: end;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+      text-align: center;
+    }
+    .flyout {
+      position: absolute;
+      right: -34vw;
+      top: 12vh;
+      width: 32vw;
+      height: 70vh;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px 0 0 16px;
+      box-shadow: 0 0 28px rgba(0, 0, 0, 0.5);
+      transition: transform 0.35s ease;
+      transform: translateX(0);
+      padding: 2vh 2vw;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 1vh;
+    }
+    .flyout:hover {
+      transform: translateX(-32vw);
+    }
+    .flyout-tab {
+      position: absolute;
+      left: -8.5vw;
+      top: 6vh;
+      background: var(--accent-2);
+      color: var(--ink);
+      padding: 1vh 1vw;
+      border-radius: 12px 0 0 12px;
+      font-family: "Cinzel", serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.95rem;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+    }
+    .flyout h2 {
+      margin: 0;
+      font-family: "Cinzel", serif;
+      color: var(--accent);
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+      z-index: 1000;
+    }
+    .modal-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal {
+      background: var(--panel);
+      border: 2px solid var(--accent);
+      border-radius: 20px;
+      padding: 4vh 4vw;
+      box-shadow: 0 0 40px rgba(212, 175, 55, 0.4);
+      max-width: 70vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp {
+      from {
+        transform: translateY(60px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    .modal h1 {
+      margin: 0 0 2vh 0;
+      font-family: "Cinzel", serif;
+      font-size: clamp(24px, 3vw, 40px);
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-align: center;
+    }
+    .loot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2vw;
+      margin-bottom: 2vh;
+      display: none;
+    }
+    .loot-card {
+      background: rgba(10, 8, 14, 0.8);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 2vh 2vw;
+      text-align: center;
+    }
+    .loot-card .player-name {
+      font-family: "Cinzel", serif;
+      font-size: 1.2rem;
+      color: var(--accent);
+      margin-bottom: 1.2vh;
+      font-weight: 700;
+    }
+    .loot-card.compact .player-name {
+      font-size: 1rem;
+      margin-bottom: 0.6vh;
+    }
+    .loot-card.compact {
+      border-color: rgba(212, 175, 55, 0.5);
+      padding: 1.2vh 1.4vw;
+    }
+    .loot-item {
+      color: var(--ink);
+      margin: 0.6vh 0;
+      font-size: 0.95rem;
+    }
+    .loot-item.compact {
+      font-size: 0.85rem;
+      margin: 0.3vh 0;
+    }
+    .loot-item.empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+    .loot-summary {
+      margin: 0 0 2vh 0;
+      max-height: 22vh;
+      overflow: hidden;
+    }
+    .summary-tiles {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.8vw;
+    }
+    .summary-tile {
+      background: rgba(10, 8, 14, 0.8);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 1vh 1vw;
+      color: var(--ink);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      min-height: 15vh;
+      text-align: left;
+    }
+    .summary-tile h3 {
+      margin: 0 0 0.7vh 0;
+      color: var(--accent);
+      font-family: "Cinzel", serif;
+      letter-spacing: 0.05em;
+      font-size: 1rem;
+    }
+    .summary-tile p {
+      margin: 0.35vh 0;
+    }
+    .summary-tile ol,
+    .summary-tile ul {
+      margin: 0.35vh 0 0;
+      padding-left: 1.1em;
+    }
+    .summary-tile li {
+      margin: 0.25vh 0;
+    }
+    .summary-tile.loot-tile .loot-scroll {
+      max-height: 14vh;
+      overflow-y: auto;
+      padding-right: 0.25vw;
+    }
+    .loot-summary strong {
+      color: var(--accent);
+      font-family: "Cinzel", serif;
+      letter-spacing: 0.05em;
+    }
+    .ascend-progress {
+      background: rgba(10, 8, 14, 0.8);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 1.5vh 2vw;
+      margin-bottom: 2vh;
+      text-align: center;
+      color: var(--ink);
+    }
+    .ascend-progress .label {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 0.6vh;
+    }
+    .ascend-progress .progress-value {
+      font-family: "Cinzel", serif;
+      font-size: 1.3rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 24px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 0.8vh;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+      transition: width 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      color: var(--bg-1);
+      font-weight: 700;
+    }
+    .modal-close {
+      display: block;
+      margin: 2vh auto 0;
+      background: var(--accent);
+      color: var(--bg-1);
+      border: none;
+      border-radius: 8px;
+      padding: 0.8vh 1.6vw;
+      font-family: "Cinzel", serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .modal-close:hover {
+      background: var(--accent-2);
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="title">PROJECT FLEA</div>
+    <div class="status-panel">
+      <div class="pill">
+        <h3>Status</h3>
+        <p id="battle-status">Waiting for battle...</p>
+      </div>
+      <div class="pill">
+        <h3>Turn</h3>
+        <p id="turn-number">0</p>
+      </div>
+      <div class="pill timer-pill" id="join-window-pill">
+        <h3>Join Window</h3>
+        <p id="join-window" class="timer-value">--</p>
+      </div>
+      <div class="pill timer-pill" id="action-window-pill">
+        <h3>Action Window</h3>
+        <p id="action-window" class="timer-value">--</p>
+      </div>
+    </div>
+    <div class="log-panel">
+      <div class="log">
+        <h2>Battle Log</h2>
+        <ul id="battle-log" class="log-list"></ul>
+      </div>
+      <div class="log">
+        <h2>Party</h2>
+        <ul id="party-list" class="party-list"></ul>
+      </div>
+      <div class="log">
+        <h2>Enemies</h2>
+        <ul id="monster-list" class="party-list"></ul>
+      </div>
+    </div>
+    <div class="flyout">
+      <div class="flyout-tab">Daily Log</div>
+      <h2>Daily RPG Log</h2>
+      <ul id="daily-log" class="log-list"></ul>
+    </div>
+  </div>
+
+  <!-- Loot Summary Modal -->
+  <div id="loot-modal" class="modal-overlay">
+    <div class="modal">
+      <h1>BATTLE REWARDS</h1>
+      <div id="ascend-progress-container"></div>
+      <div id="loot-summary" class="loot-summary"></div>
+      <button class="modal-close" onclick="closeLootModal()">DISMISS</button>
+    </div>
+  </div>
+
+  <script>
+    const battleStatus = document.getElementById("battle-status");
+    const turnNumber = document.getElementById("turn-number");
+    const joinWindowPill = document.getElementById("join-window-pill");
+    const actionWindowPill = document.getElementById("action-window-pill");
+    const joinWindow = document.getElementById("join-window");
+    const actionWindow = document.getElementById("action-window");
+    const battleLogList = document.getElementById("battle-log");
+    const dailyLogList = document.getElementById("daily-log");
+    const partyList = document.getElementById("party-list");
+    const monsterList = document.getElementById("monster-list");
+    let battleLogScrollFrame = null;
+    let lastRenderedTurn = null;
+
+    function formatCountdown(targetTs) {
+      if (!targetTs) return "--";
+      const now = Math.floor(Date.now() / 1000);
+      const diff = Math.max(0, targetTs - now);
+      const minutes = Math.floor(diff / 60);
+      const seconds = diff % 60;
+      return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    }
+
+    function renderWindowTimers(state) {
+      const joinCountdown = formatCountdown(state.join_window_end);
+      const actionCountdown = formatCountdown(state.action_window_end);
+      const now = Math.floor(Date.now() / 1000);
+      const isJoinActive = state.phase === "join" && Number(state.join_window_end || 0) > now;
+      const isActionActive = state.phase === "action" && Number(state.action_window_end || 0) > now;
+
+      joinWindow.textContent = isJoinActive ? `Join now! ${joinCountdown}` : joinCountdown;
+      actionWindow.textContent = isActionActive ? `Act now! ${actionCountdown}` : actionCountdown;
+
+      joinWindowPill.classList.toggle("timer-active-join", isJoinActive);
+      actionWindowPill.classList.toggle("timer-active-action", isActionActive);
+      joinWindow.classList.toggle("timer-join-active", isJoinActive);
+      actionWindow.classList.toggle("timer-action-active", isActionActive);
+    }
+
+    function sanitizeBattleLogText(text) {
+      const raw = String(text || "");
+      return raw.replace(/^\s*[A-Za-z][A-Za-z\s_-]{1,24}:\s*/, "");
+    }
+
+    function escapeHtml(text) {
+      return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function styleBattleLogText(rawText, options = {}) {
+      let styled = escapeHtml(rawText || "");
+
+      if (options.highlightCrit) {
+        styled = styled.replace(/CRIT!/g, '<span class="crit-text">CRIT!</span>');
+      }
+
+      if (options.highlightNumbers) {
+        styled = styled.replace(/(for\s+)(\d+)(\s+damage\b)/gi, `$1<span class="damage-num">$2</span>$3`);
+        styled = styled.replace(/(takes\s+)(\d+)(\s+damage\b)/gi, `$1<span class="damage-num">$2</span>$3`);
+        styled = styled.replace(/(dealt\s+)(\d+)(\b)/gi, `$1<span class="damage-num">$2</span>$3`);
+        styled = styled.replace(/(healed\s+)(\d+)(\s*HP\b)/gi, `$1<span class="heal-num">$2</span>$3`);
+        styled = styled.replace(/(healed\s+for\s+)(\d+)(\b)/gi, `$1<span class="heal-num">$2</span>$3`);
+        styled = styled.replace(/(restored\s+)(\d+)(\s+HP\b)/gi, `$1<span class="heal-num">$2</span>$3`);
+      }
+
+      return styled;
+    }
+
+    function renderLog(listEl, items, emptyText, options = {}) {
+      listEl.innerHTML = "";
+      if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.className = "log-item muted";
+        li.textContent = emptyText;
+        listEl.appendChild(li);
+        return;
+      }
+      const slice = items.slice(-18);
+      slice.forEach((item) => {
+        const li = document.createElement("li");
+        li.className = "log-item";
+        const rawText = item && item.text ? item.text : "";
+        const text = options.stripPrefix ? sanitizeBattleLogText(rawText) : rawText;
+        if (!options.hideTimestamp) {
+          const ts = document.createElement("span");
+          ts.textContent = item.ts ? item.ts.replace("T", " ").replace("Z", "") : "";
+          li.appendChild(ts);
+        }
+        li.innerHTML += styleBattleLogText(text, options);
+        listEl.appendChild(li);
+      });
+    }
+
+    function runBattleLogTurnEndScroll() {
+      if (battleLogScrollFrame) {
+        cancelAnimationFrame(battleLogScrollFrame);
+        battleLogScrollFrame = null;
+      }
+
+      battleLogList.scrollTop = 0;
+      const overflow = battleLogList.scrollHeight - battleLogList.clientHeight;
+      if (overflow <= 0) {
+        return;
+      }
+
+      const duration = Math.max(5000, Math.min(10000, overflow * 18));
+      const start = performance.now();
+      const ease = (t) => 0.5 - Math.cos(Math.PI * t) / 2;
+
+      const step = (now) => {
+        const progress = Math.min(1, (now - start) / duration);
+        battleLogList.scrollTop = overflow * ease(progress);
+        if (progress < 1) {
+          battleLogScrollFrame = requestAnimationFrame(step);
+        } else {
+          battleLogScrollFrame = null;
+        }
+      };
+
+      battleLogScrollFrame = requestAnimationFrame(step);
+    }
+
+    function renderParty(listEl, items, activePlayersSet) {
+      listEl.innerHTML = "";
+      if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.className = "log-item muted";
+        li.textContent = "No party members yet.";
+        listEl.appendChild(li);
+        return;
+      }
+      items.forEach((member) => {
+        const li = document.createElement("li");
+        li.className = "party-card";
+        const isSpiritWell = Boolean(member.spirit_well_id)
+          || String(member.class || "").toLowerCase() === "spirit well";
+        
+        // Add special styling for totems and imps
+        if (member.is_totem) {
+          li.classList.add("totem");
+        } else if (isSpiritWell) {
+          li.classList.add("spirit-well");
+        } else if (member.is_undead) {
+          li.classList.add("undead");
+        } else if (member.is_imp) {
+          li.classList.add("imp");
+        } else if (member.is_pet) {
+          li.classList.add("undead");
+        }
+        if (member.goldrpg_ready || member.special_ready) {
+          li.classList.add("gold-ready");
+        }
+        
+        // Add active class if player has a queued action
+        if (activePlayersSet && activePlayersSet.has(member.name)) {
+          li.classList.add("active");
+        }
+        // Add dead class if HP <= 0
+        if (member.hp <= 0) {
+          li.classList.add("dead");
+        }
+        const tag = document.createElement("span");
+        tag.className = "party-tag";
+        if (member.is_totem) {
+          tag.textContent = "TOT";
+        } else if (isSpiritWell) {
+          tag.textContent = "WELL";
+        } else if (member.is_pet) {
+          tag.textContent = "PET";
+        } else if (member.is_imp) {
+          tag.textContent = "IMP";
+        } else if (member.is_undead) {
+          tag.textContent = "PET";
+        } else if (member.number === null || member.number === undefined) {
+          tag.textContent = "SUM";
+        } else {
+          const number = member.number ?? "?";
+          tag.textContent = String(number);
+        }
+        const name = document.createElement("strong");
+        name.textContent = member.name || "unknown";
+        name.className = "party-name";
+        if (member.donut_buff_active) {
+          const donut = document.createElement("span");
+          donut.className = "party-status";
+          donut.textContent = "🍩";
+          donut.title = "Donut buff active (+10% effectiveness)";
+          name.appendChild(donut);
+        }
+        if (isSpiritWell) {
+          const spirit = document.createElement("span");
+          spirit.className = "party-status";
+          spirit.textContent = "💧";
+          spirit.title = "Spirit Well";
+          name.appendChild(spirit);
+        }
+        if (member.special_icon) {
+          const special = document.createElement("span");
+          special.className = "party-status";
+          special.textContent = String(member.special_icon);
+          special.title = "Special skill ready";
+          name.appendChild(special);
+        }
+        const className = document.createElement("span");
+        const baseClass = member.class || "Unknown";
+        className.textContent = member.is_totem && member.totem_label
+          ? `${baseClass} • ${member.totem_label}`
+          : baseClass;
+        className.className = "muted party-class";
+        const hp = document.createElement("span");
+        const hpCurrent = Number.isFinite(member.hp) ? member.hp : 0;
+        const hpMax = Number.isFinite(member.hp_max) ? member.hp_max : 0;
+        hp.className = "hp-pill";
+        hp.textContent = hpMax > 0 ? `HP ${hpCurrent}/${hpMax}` : "HP --";
+        li.appendChild(tag);
+        li.appendChild(name);
+        li.appendChild(className);
+        li.appendChild(hp);
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderMonsters(listEl, items) {
+      listEl.innerHTML = "";
+      if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.className = "log-item muted";
+        li.textContent = "No monsters yet.";
+        listEl.appendChild(li);
+        return;
+      }
+      const orderedMonsters = [...items].sort((a, b) => {
+        const aAlive = Number((a?.hp ?? 0) > 0);
+        const bAlive = Number((b?.hp ?? 0) > 0);
+        if (aAlive !== bAlive) {
+          return bAlive - aAlive;
+        }
+        const aIndex = Number(a?.index ?? 999999);
+        const bIndex = Number(b?.index ?? 999999);
+        return aIndex - bIndex;
+      });
+
+      orderedMonsters.forEach((monster) => {
+        const li = document.createElement("li");
+        li.className = "monster-card";
+        if (monster.hp <= 0) {
+          li.classList.add("dead");
+        }
+        // Add visual cues for status effects
+        if (monster.bleed_stacks > 0 || monster.bleed_rounds_remaining > 0) {
+          li.classList.add("bleeding");
+        }
+        if (monster.stun_turns_remaining > 0) {
+          li.classList.add("stunned");
+        }
+        if (monster.ghoul_poison_damage > 0 || monster.ghoul_poison_rounds_remaining > 0) {
+          li.classList.add("poisoned");
+        }
+        if (monster.goldrpg_bleed_damage > 0 || monster.goldrpg_bleed_rounds_remaining > 0) {
+          li.classList.add("goldrpg-bleed");
+        }
+        if (monster.berzerk_turns_remaining > 0) {
+          li.classList.add("berzerk");
+        }
+        
+        const tag = document.createElement("span");
+        tag.className = "monster-tag";
+        const index = monster.index ?? "?";
+        tag.textContent = `#${index}`;
+        const name = document.createElement("span");
+        name.textContent = monster.name || "Unknown";
+        if (monster.is_loot_goblin) {
+          name.className = "loot-goblin-name";
+        }
+        const hp = document.createElement("span");
+        hp.className = "hp-pill";
+        const hpCurrent = monster.hp ?? "--";
+        const hpMax = monster.max_hp ?? "--";
+        hp.textContent = `HP ${hpCurrent}/${hpMax}`;
+        
+        li.appendChild(tag);
+        li.appendChild(name);
+        li.appendChild(hp);
+
+        const statuses = document.createElement("div");
+        statuses.className = "monster-statuses";
+        let hasAnyStatus = false;
+        
+        // Add status effect emoji indicators
+        if (monster.bleed_stacks > 0 || monster.bleed_rounds_remaining > 0) {
+          const status = document.createElement("span");
+          status.className = "monster-status";
+          status.textContent = "🩸";
+          status.title = "Bleeding";
+          statuses.appendChild(status);
+          hasAnyStatus = true;
+        }
+        if (monster.stun_turns_remaining > 0) {
+          const status = document.createElement("span");
+          status.className = "monster-status";
+          status.textContent = "💫";
+          status.title = "Stunned";
+          statuses.appendChild(status);
+          hasAnyStatus = true;
+        }
+        if (monster.ghoul_poison_damage > 0 || monster.ghoul_poison_rounds_remaining > 0) {
+          const status = document.createElement("span");
+          status.className = "monster-status poisoned";
+          status.textContent = "☣";
+          status.title = "Poisoned";
+          statuses.appendChild(status);
+          hasAnyStatus = true;
+        }
+        if (monster.goldrpg_bleed_damage > 0 || monster.goldrpg_bleed_rounds_remaining > 0) {
+          const status = document.createElement("span");
+          status.className = "monster-status";
+          status.textContent = "🩸";
+          status.title = "GoldRPG Bleed";
+          statuses.appendChild(status);
+          hasAnyStatus = true;
+        }
+        if (monster.berzerk_turns_remaining > 0) {
+          const status = document.createElement("span");
+          status.className = "monster-status berzerk";
+          status.textContent = "🔥";
+          status.title = "Berzerk";
+          statuses.appendChild(status);
+          hasAnyStatus = true;
+        }
+
+        if (hasAnyStatus) {
+          li.appendChild(statuses);
+        }
+        
+        listEl.appendChild(li);
+      });
+    }
+
+    let latestState = null;
+
+    function updateUI(state) {
+      latestState = state;
+      const active = state.battle_active;
+      battleStatus.textContent = active ? "Battle active" : "No active battle";
+      turnNumber.textContent = state.turn_number || 0;
+      renderWindowTimers(state);
+      renderLog(battleLogList, state.battle_log || [], "No battle events yet.", {
+        hideTimestamp: true,
+        stripPrefix: true,
+        highlightCrit: true,
+        highlightNumbers: true,
+      });
+      // Create a Set of active player names for quick lookup
+      const activePlayersSet = state.active_players ? new Set(state.active_players) : new Set();
+
+      // Fallback: if party payload is empty but participants exist, render basic rows so joins still show.
+      const partyItems = Array.isArray(state.party) ? state.party : [];
+      const fallbackItems = (!partyItems.length && Array.isArray(state.participants))
+        ? state.participants.map((name, idx) => ({
+            number: idx + 1,
+            name,
+            class: "Unknown",
+            hp: 1,
+            hp_max: 1,
+            is_totem: false,
+            is_imp: false,
+            is_undead: false,
+            is_pet: false,
+            goldrpg_ready: false,
+            special_ready: false,
+            donut_buff_active: false,
+          }))
+        : [];
+
+      renderParty(partyList, partyItems.length ? partyItems : fallbackItems, activePlayersSet);
+      renderMonsters(monsterList, state.monsters || []);
+      renderLog(dailyLogList, state.daily_log || [], "No daily RPG activity yet.");
+
+      const currentTurn = Number(state.turn_number || 0);
+      if (lastRenderedTurn !== null && currentTurn > lastRenderedTurn) {
+        runBattleLogTurnEndScroll();
+      }
+      lastRenderedTurn = currentTurn;
+    }
+
+    let lootModalCloseTimer = null;
+    let lootSummaryScrollFrame = null;
+
+    function clearLootModalTimers() {
+      if (lootModalCloseTimer) {
+        clearTimeout(lootModalCloseTimer);
+        lootModalCloseTimer = null;
+      }
+      if (lootSummaryScrollFrame) {
+        cancelAnimationFrame(lootSummaryScrollFrame);
+        lootSummaryScrollFrame = null;
+      }
+    }
+
+    function scheduleLootModalClose(delayMs) {
+      clearLootModalTimers();
+      lootModalCloseTimer = setTimeout(() => {
+        console.log("Auto-closing loot modal");
+        closeLootModal();
+      }, delayMs);
+    }
+
+    function runSummaryScrollThenClose(lootSummary) {
+      const lootScroll = lootSummary.querySelector(".loot-scroll");
+      if (!lootScroll) {
+        scheduleLootModalClose(15000);
+        return;
+      }
+
+      lootScroll.scrollTop = 0;
+      const overflow = lootScroll.scrollHeight - lootScroll.clientHeight;
+
+      if (overflow <= 0) {
+        scheduleLootModalClose(15000);
+        return;
+      }
+
+      const scrollDuration = Math.max(2500, Math.min(7000, overflow * 12));
+      const start = performance.now();
+
+      const easeInOut = (t) => 0.5 - Math.cos(Math.PI * t) / 2;
+
+      const step = (now) => {
+        const elapsed = now - start;
+        const progress = Math.min(1, elapsed / scrollDuration);
+        lootScroll.scrollTop = overflow * easeInOut(progress);
+
+        if (progress < 1) {
+          lootSummaryScrollFrame = requestAnimationFrame(step);
+          return;
+        }
+
+        lootSummaryScrollFrame = null;
+        scheduleLootModalClose(15000);
+      };
+
+      lootSummaryScrollFrame = requestAnimationFrame(step);
+    }
+
+    function showLootModal(lootData) {
+      console.log("showLootModal called with:", lootData);
+      const modal = document.getElementById("loot-modal");
+      const progressContainer = document.getElementById("ascend-progress-container");
+      const lootSummary = document.getElementById("loot-summary");
+
+      if (!modal || !progressContainer || !lootSummary) {
+        console.error("Modal elements not found:", { modal, progressContainer, lootSummary });
+        return;
+      }
+
+      progressContainer.innerHTML = "";
+      lootSummary.innerHTML = "";
+      clearLootModalTimers();
+      lootSummary.scrollTop = 0;
+
+      // Show ascend progress if any player has it
+      if (lootData.ascend_progress && lootData.ascend_progress.length > 0) {
+        console.log("Rendering ascend progress:", lootData.ascend_progress);
+        const progressHtml = lootData.ascend_progress.map(item => `
+          <div class="ascend-progress">
+            <div class="label">${item.name} - Ascend Progress</div>
+            <div class="progress-value">${item.current}/${item.threshold} Lifetime Damage</div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width: ${(item.current / item.threshold) * 100}%">
+                ${Math.round((item.current / item.threshold) * 100)}%
+              </div>
+            </div>
+          </div>
+        `).join("");
+        progressContainer.innerHTML = progressHtml;
+      }
+
+      if (lootData.loot && lootData.loot.length > 0) {
+        console.log("Rendering loot cards:", lootData.loot);
+        const fields = [
+          { key: "gacha_tokens", label: "Gacha Token", plural: "Gacha Tokens" },
+          { key: "tokens", label: "Class Change Token", plural: "Class Change Tokens" },
+          { key: "entries", label: "Raffle Entry", plural: "Raffle Entries" },
+          { key: "ultra_entries", label: "Ultra Entry", plural: "Ultra Entries" },
+          { key: "quarters", label: "Quarter", plural: "Quarters" },
+          { key: "xp", label: "XP", plural: "XP" },
+        ];
+
+        const getValue = (player, key) => Number(player[key] ?? 0);
+        const getCommonValue = (key) => {
+          const first = getValue(lootData.loot[0], key);
+          for (const player of lootData.loot) {
+            if (getValue(player, key) !== first) {
+              return null;
+            }
+          }
+          return first;
+        };
+
+        const commonValues = {};
+        fields.forEach((field) => {
+          commonValues[field.key] = getCommonValue(field.key);
+        });
+
+        const summaryItems = fields
+          .filter((field) => Number(commonValues[field.key] ?? 0) > 0)
+          .map((field) => {
+            const value = Number(commonValues[field.key]);
+            const label = value === 1 ? field.label : field.plural;
+            return `+${value} ${label}`;
+          });
+
+        const partyTotalXp = Number(lootData.party_total_xp ?? 0)
+          || lootData.loot.reduce((sum, player) => sum + Number(player.xp ?? 0), 0);
+
+        const lootSummaryLines = [`<p><strong>The party got</strong> ${partyTotalXp} XP.</p>`];
+        if (summaryItems.length > 0) {
+          lootSummaryLines.push(`<p><strong>Everyone got</strong>: ${summaryItems.join(" | ")}</p>`);
+        }
+
+        const dropNotes = [];
+        lootData.loot.forEach(player => {
+          const diffs = fields.filter((field) => {
+            const common = commonValues[field.key];
+            if (common === null) {
+              return getValue(player, field.key) > 0;
+            }
+            return getValue(player, field.key) !== common;
+          });
+
+          if (diffs.length === 0) {
+            return;
+          }
+
+          const noteParts = [];
+          const tokenDrops = getValue(player, "tokens");
+          const entryDrops = getValue(player, "entries");
+          const ultraDrops = getValue(player, "ultra_entries");
+          const commonGacha = Number(commonValues.gacha_tokens ?? 0);
+          const totalGacha = getValue(player, "gacha_tokens");
+          const bonusGacha = commonValues.gacha_tokens === null ? totalGacha : Math.max(0, totalGacha - commonGacha);
+          if (bonusGacha > 0) noteParts.push(`+${bonusGacha} bonus gacha`);
+          if (tokenDrops > 0) noteParts.push(`+${tokenDrops} class-change token${tokenDrops === 1 ? "" : "s"}`);
+          if (entryDrops > 0) noteParts.push(`+${entryDrops} raffle entr${entryDrops === 1 ? "y" : "ies"}`);
+          if (ultraDrops > 0) noteParts.push(`+${ultraDrops} ultra entr${ultraDrops === 1 ? "y" : "ies"}`);
+          if (noteParts.length > 0) {
+            dropNotes.push(`<li><strong>${player.name}</strong>: ${noteParts.join(", ")}</li>`);
+          }
+
+          return;
+        });
+
+        if (dropNotes.length > 0) {
+          lootSummaryLines.push(`<p><strong>Drop notes</strong></p><ul>${dropNotes.join("")}</ul>`);
+        } else {
+          lootSummaryLines.push("<p>No notable individual drops this battle.</p>");
+        }
+
+        const topDpsRows = Array.isArray(lootData.top_dps_rankings)
+          ? lootData.top_dps_rankings
+          : [];
+        const topHealRows = Array.isArray(lootData.top_heal_rankings)
+          ? lootData.top_heal_rankings
+          : [];
+
+        const renderRankingRows = (rows, key, emptyText) => {
+          const filtered = rows.filter((row) => Number(row?.[key] ?? 0) > 0).slice(0, 3);
+          const items = [];
+
+          for (let idx = 0; idx < 3; idx += 1) {
+            const row = filtered[idx];
+            if (row) {
+              const value = Number(row[key] ?? 0);
+              const safeName = row.name || "Unknown";
+              items.push(`<li>#${idx + 1} <strong>${safeName}</strong> — ${value}</li>`);
+            } else {
+              items.push(`<li>#${idx + 1} <span class="muted">—</span></li>`);
+            }
+          }
+
+          const emptyNote = filtered.length === 0 ? `<p>${emptyText}</p>` : "";
+          return `${emptyNote}<ol>${items.join("")}</ol>`;
+        };
+
+        const tilesHtml = [
+          `<section class="summary-tile loot-tile"><h3>Loot</h3><div class="loot-scroll">${lootSummaryLines.join("")}</div></section>`,
+          `<section class="summary-tile"><h3>Top 3 DPS</h3>${renderRankingRows(topDpsRows, "damage", "No DPS recorded.")}</section>`,
+          `<section class="summary-tile"><h3>Top 3 Healing</h3>${renderRankingRows(topHealRows, "healing", "No healing recorded.")}</section>`,
+        ].join("");
+
+        lootSummary.innerHTML = `<div class="summary-tiles">${tilesHtml}</div>`;
+      }
+
+      console.log("Adding show class to modal");
+      modal.classList.add("show");
+      console.log("Modal show status:", modal.classList.contains("show"));
+
+      runSummaryScrollThenClose(lootSummary);
+    }
+
+    function closeLootModal() {
+      const modal = document.getElementById("loot-modal");
+      clearLootModalTimers();
+      if (modal) {
+        modal.classList.remove("show");
+        console.log("Modal closed");
+      }
+      const lootSummary = document.getElementById("loot-summary");
+      if (lootSummary) {
+        lootSummary.scrollTop = 0;
+      }
+    }
+
+    function tick() {
+      if (latestState) {
+        renderWindowTimers(latestState);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    tick();
+
+    let ws = null;
+    let backoff = 1000;
+
+    function connect() {
+      const wsUrl = `ws://${window.location.hostname}:8080/ws`;
+      console.log("Attempting WebSocket connection to:", wsUrl);
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        console.log("WebSocket connected");
+        backoff = 1000;
+        ws.send(JSON.stringify({ type: "request_rpg_state" }));
+        // Periodically ask for fresh state in case pushes were missed
+        if (window.rpgStatePoll) {
+          clearInterval(window.rpgStatePoll);
+        }
+        window.rpgStatePoll = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "request_rpg_state" }));
+          }
+        }, 3000);
+      };
+      ws.onmessage = (event) => {
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch (err) {
+          console.error("Failed to parse message:", err, event.data);
+          return;
+        }
+        console.log("Received message type:", msg.type);
+        if (msg.type === "rpg_state") {
+          updateUI(msg);
+        } else if (msg.type === "rpg_loot_summary") {
+          console.log("Loot summary message received, showing modal");
+          showLootModal(msg);
+        }
+      };
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+      ws.onclose = () => {
+        console.log("WebSocket closed, reconnecting in", backoff, "ms");
+        if (window.rpgStatePoll) {
+          clearInterval(window.rpgStatePoll);
+          window.rpgStatePoll = null;
+        }
+        setTimeout(() => {
+          backoff = Math.min(30000, backoff * 2);
+          connect();
+        }, backoff);
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>

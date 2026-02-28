@@ -13,6 +13,8 @@ _runner = None
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "overlay_static")
 WHEEL_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "wheel_state.json")
+RPG_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_state.json")
+RPG_LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_log.json")
 
 def _load_wheel_state_file():
     if os.path.exists(WHEEL_STATE_FILE):
@@ -60,6 +62,45 @@ def _wheel_payload_from_file():
         "last_man_standing": bool(data.get("last_man_standing", False)),
     }
 
+def _load_rpg_payload_from_files():
+    try:
+        if not os.path.exists(RPG_STATE_FILE) or not os.path.exists(RPG_LOG_FILE):
+            return None
+        with open(RPG_STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        with open(RPG_LOG_FILE, "r", encoding="utf-8") as f:
+            log = json.load(f)
+        session = state.get("session", {})
+        users = state.get("users", {})
+        party = []
+        for username in session.get("participants", []):
+            user = users.get(username, {})
+            class_name = user.get("class_name", "Derp Clone")
+            if user.get("is_revenant"):
+                class_name = "Revenant"
+            party.append({
+                "name": username,
+                "class": class_name,
+                "hp": user.get("hp_current", 10),
+                "hp_max": user.get("hp_max", 10),
+            })
+        return {
+            "type": "rpg_state",
+            "battle_active": bool(session.get("battle_active")),
+            "battle_id": session.get("battle_id"),
+            "turn_number": session.get("turn_number"),
+            "phase": session.get("phase"),
+            "action_window_end": session.get("action_window_end"),
+            "join_window_end": session.get("join_window_end"),
+            "participants": session.get("participants", []),
+            "monsters": session.get("monsters", []),
+            "party": party,
+            "daily_log": log.get("daily_log", []),
+            "battle_log": log.get("battle_log", []),
+        }
+    except Exception:
+        return None
+
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
@@ -85,6 +126,13 @@ async def websocket_handler(request):
                                 pass
                     if data.get('type') == 'request_wheel_state':
                         payload = latest_wheel_state or _wheel_payload_from_file()
+                        if payload:
+                            try:
+                                await ws.send_json(payload)
+                            except Exception:
+                                pass
+                    if data.get('type') == 'request_rpg_state':
+                        payload = latest_rpg_state or _load_rpg_payload_from_files()
                         if payload:
                             try:
                                 await ws.send_json(payload)
@@ -145,6 +193,9 @@ async def nfl_break_overlay(request):
 
 async def wheel_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "wheel_overlay.html"))
+
+async def battle_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "battle_overlay.html"))
 
 async def get_raffle_data(request):
     """API endpoint to return current raffle state"""
@@ -319,6 +370,22 @@ async def shutdown():
 # receive a welcome/default ticker on connect.
 latest_ticker_message = ""
 latest_wheel_state = None
+latest_rpg_state = None
+
+
+async def rpg_state_task(interval: float = 2.0):
+    """Periodic safety broadcast of the latest RPG state to keep battle overlays in sync."""
+    global latest_rpg_state
+    while True:
+        try:
+            payload = latest_rpg_state or _load_rpg_payload_from_files()
+            if payload and payload.get("type") == "rpg_state":
+                # Only broadcast if there is an active/ongoing context to reduce noise.
+                if payload.get("battle_active") or payload.get("participants") or payload.get("monsters"):
+                    await broadcast_overlay_message(payload)
+        except Exception:
+            logging.warning("[OVERLAY] rpg_state_task failed", exc_info=True)
+        await asyncio.sleep(max(0.5, interval))
 
 async def as_overlay_task():
     logging.basicConfig(level=logging.INFO)
@@ -346,16 +413,27 @@ async def as_overlay_task():
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
-    global latest_ticker_message, latest_wheel_state
+    global latest_ticker_message, latest_wheel_state, latest_rpg_state
     if message.get("type") == "ticker" and "text" in message:
         latest_ticker_message = message["text"]
     if message.get("type") == "wheel_state":
         latest_wheel_state = message
+    if message.get("type") == "rpg_state":
+        latest_rpg_state = message
+    
+    msg_type = message.get("type", "unknown")
+    logging.info(f"Broadcasting {msg_type} message to {len(overlay_clients)} overlay clients")
+
     for ws in list(overlay_clients):
-        if not ws.closed:
-            await ws.send_json(message)
-        else:
+        if ws.closed:
             overlay_clients.discard(ws)
+            continue
+        try:
+            await ws.send_json(message)
+        except Exception:
+            # Drop clients that error so future broadcasts succeed without refreshes
+            overlay_clients.discard(ws)
+            logging.warning("[OVERLAY] Dropped overlay client due to send failure", exc_info=True)
 
 async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     """Start the aiohttp overlay server and ticker broadcast task."""
@@ -370,6 +448,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/ag", allen_ginter_overlay)
     app.router.add_get("/nfl", nfl_break_overlay)
     app.router.add_get("/wheel", wheel_overlay)
+    app.router.add_get("/battle", battle_overlay)
 
     # Tetris card drop overlay
     app.router.add_get("/tetris", tetris_cards_overlay)
@@ -393,6 +472,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     logging.info(f"[OVERLAY] Server started at http://{host}:{port}")
     # Start ticker broadcast task
     asyncio.create_task(as_overlay_task())
+    asyncio.create_task(rpg_state_task())
     # Keep running forever
     while True:
         await asyncio.sleep(3600)
