@@ -94,6 +94,200 @@
     height: auto;
     object-fit: contain;
   }
+
+  #emote-shower {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+    overflow: hidden;
+  }
+
+  .emote-drop {
+    position: absolute;
+    top: -80px;
+    white-space: nowrap;
+    font-family: sans-serif;
+    font-weight: 800;
+    color: #ffffff;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85), 0 0 14px rgba(255, 255, 255, 0.35);
+    opacity: 0;
+    will-change: transform, opacity;
+    animation-name: emoteFall;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+
+  @keyframes emoteFall {
+    0% {
+      opacity: 0;
+      transform: translateY(-70px) rotate(0deg) scale(0.9);
+    }
+    6% {
+      opacity: 1;
+    }
+    86% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) rotate(14deg) scale(1.12);
+    }
+  }
+
+  @keyframes emoteFallLeft {
+    0% {
+      opacity: 0;
+      transform: translateY(-70px) translateX(0) rotate(0deg) scale(0.9);
+    }
+    7% {
+      opacity: 1;
+    }
+    86% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) translateX(-760px) rotate(-28deg) scale(1.2);
+    }
+  }
+
+  @keyframes emoteFallRight {
+    0% {
+      opacity: 0;
+      transform: translateY(-70px) translateX(0) rotate(0deg) scale(0.9);
+    }
+    7% {
+      opacity: 1;
+    }
+    86% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) translateX(760px) rotate(28deg) scale(1.2);
+    }
+  }
+
+  @keyframes emoteRiseBlast {
+    0% {
+      opacity: 0;
+      transform: translateY(120px) translateX(0) rotate(0deg) scale(0.7);
+    }
+    8% {
+      opacity: 1;
+    }
+    84% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-1320px) translateX(380px) rotate(34deg) scale(1.3);
+    }
+  }
+
+  @keyframes emoteZigZag {
+    0% {
+      opacity: 0;
+      transform: translateY(-80px) translateX(0) rotate(0deg) scale(0.8);
+    }
+    8% {
+      opacity: 1;
+    }
+    25% {
+      transform: translateY(260px) translateX(-180px) rotate(-12deg) scale(1.02);
+    }
+    50% {
+      transform: translateY(620px) translateX(220px) rotate(16deg) scale(1.08);
+    }
+    75% {
+      transform: translateY(940px) translateX(-160px) rotate(-20deg) scale(1.1);
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) translateX(140px) rotate(24deg) scale(1.18);
+    }
+  }
+
+  @keyframes emoteSpinDrop {
+    0% {
+      opacity: 0;
+      transform: translateY(-90px) rotate(0deg) scale(0.75);
+    }
+    7% {
+      opacity: 1;
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) rotate(540deg) scale(1.35);
+    }
+  }
+
+  @keyframes emoteFromLeft {
+    0% {
+      opacity: 0;
+      transform: translateX(-140px) translateY(0) rotate(0deg) scale(0.82);
+    }
+    8% {
+      opacity: 1;
+    }
+    86% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(2300px) translateY(420px) rotate(360deg) scale(1.26);
+    }
+  }
+
+  @keyframes emoteFromRight {
+    0% {
+      opacity: 0;
+      transform: translateX(140px) translateY(0) rotate(0deg) scale(0.82);
+    }
+    8% {
+      opacity: 1;
+    }
+    86% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-2300px) translateY(420px) rotate(-360deg) scale(1.26);
+    }
+  }
+
+  @keyframes emoteWhiplash {
+    0% {
+      opacity: 0;
+      transform: translateY(-100px) translateX(0) rotate(0deg) scale(0.75);
+    }
+    7% {
+      opacity: 1;
+    }
+    25% {
+      transform: translateY(260px) translateX(320px) rotate(30deg) scale(1.02);
+    }
+    48% {
+      transform: translateY(540px) translateX(-260px) rotate(-28deg) scale(1.08);
+    }
+    72% {
+      transform: translateY(820px) translateX(280px) rotate(24deg) scale(1.15);
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(1320px) translateX(-200px) rotate(-18deg) scale(1.22);
+    }
+  }
   </style>
 </head>
 <body>
@@ -102,6 +296,7 @@
     <div id="ticker-text">Welcome to the Darmunist News Network.</div>
   </div>
   <div id="center-display"><img src="" alt="overlay" /></div>
+  <div id="emote-shower" aria-hidden="true"></div>
 
 <script>
 window.onload = () => {
@@ -114,6 +309,8 @@ window.onload = () => {
   const logo = document.getElementById("logo");
   const centerDisplay = document.getElementById("center-display");
   const centerImg = centerDisplay.querySelector("img");
+  const emoteShower = document.getElementById("emote-shower");
+  let emoteShowerTimeout = null;
   const FOLDERS = { heart: "gifs/heart/", gif: "gifs/" };
   const IMAGE_EXTENSIONS = [".gif", ".jpg", ".jpeg", ".png", ".webp"];
   const OVERLAY_DISPLAY_TIME = 2500;
@@ -217,6 +414,12 @@ window.onload = () => {
 
     if (msg.type === "image" && typeof msg.url === "string") {
       showCenterImage(msg.url, msg.duration || OVERLAY_DISPLAY_TIME);
+      return;
+    }
+
+    if (msg.type === "emote_shower") {
+      const emotes = Array.isArray(msg.emotes) ? msg.emotes : [];
+      showEmoteShower(emotes, Number(msg.duration) || 12000, Number(msg.count) || null);
       return;
     }
 
@@ -400,6 +603,74 @@ window.onload = () => {
       centerDisplay.style.display = 'none';
       centerImg.src = '';
     }, duration);
+  }
+
+  function showEmoteShower(emotes, durationMs, desiredCount) {
+    if (!emoteShower || !Array.isArray(emotes) || emotes.length === 0) {
+      return;
+    }
+    emoteShower.innerHTML = "";
+    if (emoteShowerTimeout) {
+      clearTimeout(emoteShowerTimeout);
+      emoteShowerTimeout = null;
+    }
+
+    const width = window.innerWidth || 1920;
+    const height = window.innerHeight || 1080;
+    const baseCount = Number.isFinite(desiredCount) ? desiredCount : emotes.length;
+    const count = Math.min(3000, Math.max(360, baseCount));
+    const effects = [
+      "emoteFall",
+      "emoteFallLeft",
+      "emoteFallRight",
+      "emoteRiseBlast",
+      "emoteZigZag",
+      "emoteSpinDrop",
+      "emoteFromLeft",
+      "emoteFromRight",
+      "emoteWhiplash"
+    ];
+    const easings = [
+      "linear",
+      "cubic-bezier(0.18, 0.7, 0.18, 1)",
+      "cubic-bezier(0.24, 0.01, 0.2, 1)",
+      "cubic-bezier(0.11, 0.84, 0.23, 0.99)",
+      "cubic-bezier(0.42, 0, 0.58, 1)"
+    ];
+    const durationSec = Math.max(8, (Number(durationMs) || 15000) / 1000);
+    const spawnWindow = Math.max(4.5, durationSec * 0.9);
+    for (let i = 0; i < count; i += 1) {
+      const token = emotes[i % emotes.length];
+      const span = document.createElement("span");
+      const effect = effects[Math.floor(Math.random() * effects.length)];
+      const easing = easings[Math.floor(Math.random() * easings.length)];
+      span.className = "emote-drop";
+      span.textContent = token;
+      span.style.animationName = effect;
+      span.style.animationTimingFunction = easing;
+      if (effect === "emoteFromLeft") {
+        span.style.left = "-160px";
+        span.style.top = `${Math.random() * Math.max(0, height - 140)}px`;
+      } else if (effect === "emoteFromRight") {
+        span.style.left = `${width + 80}px`;
+        span.style.top = `${Math.random() * Math.max(0, height - 140)}px`;
+      } else if (effect === "emoteRiseBlast") {
+        span.style.left = `${Math.random() * Math.max(0, width - 220)}px`;
+        span.style.top = `${height + 40}px`;
+      } else {
+        span.style.left = `${Math.random() * Math.max(0, width - 220)}px`;
+        span.style.top = "-120px";
+      }
+      const microStagger = (i % 13) * 0.025;
+      span.style.animationDelay = `${Math.random() * spawnWindow + microStagger}s`;
+      span.style.animationDuration = `${5.8 + Math.random() * 6.8}s`;
+      span.style.fontSize = `${48 + Math.floor(Math.random() * 50)}px`;
+      emoteShower.appendChild(span);
+    }
+
+    emoteShowerTimeout = setTimeout(() => {
+      emoteShower.innerHTML = "";
+    }, Math.max(10000, durationSec * 1000 + 13000));
   }
 }
 </script>

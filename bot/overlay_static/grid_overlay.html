@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grid Reveal</title>
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #020617, #0b1f43 65%, #0d1f2e);
+      --surface: rgba(12, 18, 40, 0.9);
+      --surface-light: rgba(255, 255, 255, 0.04);
+      --accent-tier-1: #4ade80;
+      --accent-tier-2: #38bdf8;
+      --accent-tier-3: #f472b6;
+      --glow: 0 0 20px rgba(255, 255, 255, 0.12);
+      --font: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+      --reveal-spin-duration: 2.8s;
+      --suspense-pulse-duration: 1.15s;
+      --confetti-duration: 1.8s;
+      --flash-duration: 0.9s;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: #fff;
+      background: var(--bg);
+      background-size: 180% 180%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: backdropDrift 24s ease-in-out infinite;
+    }
+
+    #meta {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      backdrop-filter: blur(20px);
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    #meta-title {
+      margin: 0;
+      width: 100%;
+      text-align: center;
+      font-size: clamp(1.4rem, 3.1vw, 2.4rem);
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.95);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.1;
+    }
+
+    .pill {
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      letter-spacing: 0.08em;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #hits-flair {
+      background: linear-gradient(120deg, rgba(38, 198, 249, 0.25), rgba(244, 114, 182, 0.35));
+      border-color: rgba(244, 114, 182, 0.4);
+      color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 6px 18px rgba(4, 10, 22, 0.8);
+    }
+
+    #layout {
+      display: flex;
+      gap: 1rem;
+      padding: 1rem 1.25rem 2rem;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #grid-wrapper {
+      flex: 0 1 65%;
+      min-width: 0;
+      max-width: 70vw;
+      position: relative;
+      overflow: auto;
+    }
+
+    #grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(10, minmax(55px, 1fr));
+      grid-auto-rows: minmax(70px, auto);
+      gap: 0.5rem;
+      transition: grid-template-columns 0.5s ease;
+      overflow: visible;
+      max-height: calc(100vh - 7rem);
+        position: relative;
+        z-index: 1;
+    }
+
+
+    .tile {
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.02);
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      min-height: 0;
+      padding: 0.65rem 0.5rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      text-align: center;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+
+    #prize-column {
+      flex: 0 0 30%;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 16px;
+      padding: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 30px rgba(1, 3, 6, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      min-height: calc(100vh - 7rem);
+      max-height: calc(100vh - 7rem);
+      overflow: hidden;
+    }
+
+    #remaining-prizes {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    #remaining-prizes li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.85);
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+      padding: 0.55rem 0 0.35rem;
+      gap: 0.75rem;
+      line-height: 1.4;
+      border-radius: 10px;
+      padding-left: 0.55rem;
+      padding-right: 0.55rem;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    #remaining-prizes li span {
+      flex: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 1.15rem;
+      letter-spacing: 0.2em;
+    }
+
+    #remaining-prizes li small {
+      display: inline-flex;
+      align-items: center;
+      font-size: 1.15rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.65);
+      white-space: nowrap;
+    }
+
+    #remaining-prizes li small::before {
+      content: " - ";
+      margin-right: 0.25rem;
+      letter-spacing: 0.1em;
+    }
+
+    #remaining-prizes li.tier-1 {
+      border-color: rgba(74, 222, 128, 0.35);
+      background: radial-gradient(circle at 22% 2%, rgba(74, 222, 128, 0.16), rgba(2, 6, 23, 0.9));
+    }
+
+    #remaining-prizes li.tier-2 {
+      border-color: rgba(56, 189, 248, 0.55);
+      background:
+        radial-gradient(circle at 80% 12%, rgba(34, 211, 238, 0.22), rgba(34, 211, 238, 0) 42%),
+        radial-gradient(circle at 18% 78%, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0) 40%),
+        linear-gradient(150deg, rgba(7, 40, 83, 0.86), rgba(3, 12, 36, 0.92));
+    }
+
+    #remaining-prizes li.tier-3 {
+      border-color: rgba(255, 228, 132, 0.72);
+      background:
+        radial-gradient(circle at 18% 16%, rgba(255, 243, 186, 0.5), rgba(255, 243, 186, 0) 34%),
+        linear-gradient(135deg, rgba(252, 211, 77, 0.82) 0%, rgba(234, 179, 8, 0.86) 60%, rgba(202, 138, 4, 0.82) 100%);
+      box-shadow: 0 0 18px rgba(234, 179, 8, 0.35);
+    }
+
+    #remaining-prizes li.tier-3 span,
+    #remaining-prizes li.tier-3 small {
+      color: #101010;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+
+
+    .column-title {
+      margin: 0;
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .tile-ratio {
+      font-size: 1rem;
+      letter-spacing: 0.3em;
+      color: rgba(255, 255, 255, 0.85);
+      text-transform: uppercase;
+      margin-top: 0.35rem;
+      padding: 0.2rem 0.8rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.05);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tile .tile-label {
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      width: 100%;
+    }
+
+    .tile.hidden .tile-label {
+      font-size: 2.65rem;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      color: rgba(255, 255, 255, 0.85);
+      line-height: 1;
+    }
+
+    .tile.hidden .tile-flair-tag {
+      letter-spacing: 0.35em;
+      opacity: 0.7;
+    }
+
+    .tile.revealed {
+      padding: 0.65rem 0.45rem;
+      line-height: 1.3;
+    }
+
+    .tile.revealed .tile-label {
+      font-weight: 600;
+    }
+
+    .tile.revealed .tile-flair-tag {
+      margin-top: 0.2rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.52rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(3, 8, 22, 0.42);
+    }
+
+    .tile.revealed.tier-3 {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      border-color: rgba(255, 221, 87, 0.95);
+      background:
+        radial-gradient(circle at 18% 16%, rgba(255, 235, 125, 0.55), rgba(255, 235, 125, 0) 34%),
+        linear-gradient(135deg, #ff4f9b 0%, #ff7a18 35%, #ffd93d 58%, #6cf2ff 78%, #8b5cf6 100%);
+      background-size: 240% 240%;
+      box-shadow: 0 0 28px rgba(255, 124, 62, 0.62), 0 0 58px rgba(139, 92, 246, 0.48);
+      animation: legendaryPrismShift 6s ease-in-out infinite;
+    }
+
+    .tile.revealed.tier-3::before {
+      content: "";
+      position: absolute;
+      inset: -38%;
+      pointer-events: none;
+      background: conic-gradient(
+        from 0deg,
+        rgba(255, 255, 255, 0.48) 0deg,
+        rgba(255, 255, 255, 0.08) 72deg,
+        rgba(255, 245, 173, 0.55) 158deg,
+        rgba(255, 255, 255, 0.08) 248deg,
+        rgba(255, 163, 72, 0.5) 320deg,
+        rgba(255, 255, 255, 0.48) 360deg
+      );
+      mix-blend-mode: screen;
+      opacity: 0.48;
+      transform-origin: 50% 50%;
+      animation: legendaryHaloSpin 8s linear infinite;
+      z-index: 0;
+    }
+
+    .tile.revealed.tier-3::after {
+      content: "";
+      position: absolute;
+      inset: -20% -30%;
+      pointer-events: none;
+      background: linear-gradient(110deg, rgba(255, 255, 255, 0) 25%, rgba(255, 255, 255, 0.55) 50%, rgba(255, 255, 255, 0) 75%);
+      opacity: 0.44;
+      transform: translateX(-140%) rotate(10deg);
+      animation: legendarySweep 2.8s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .tile.revealed.tier-3 > * {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 0 7px rgba(12, 16, 35, 0.68);
+    }
+
+    .tile.flair-common {
+      border-color: rgba(74, 222, 128, 0.45);
+      background: radial-gradient(circle at 22% 2%, rgba(74, 222, 128, 0.2), rgba(2, 6, 23, 0.94));
+    }
+
+    .tile.flair-uncommon {
+      border-color: rgba(56, 189, 248, 0.88);
+      background:
+        radial-gradient(circle at 80% 12%, rgba(34, 211, 238, 0.35), rgba(34, 211, 238, 0) 42%),
+        radial-gradient(circle at 18% 78%, rgba(56, 189, 248, 0.28), rgba(56, 189, 248, 0) 40%),
+        linear-gradient(150deg, rgba(7, 40, 83, 0.95), rgba(3, 12, 36, 0.98));
+      background-size: 160% 160%;
+      box-shadow: 0 0 18px rgba(14, 165, 233, 0.55), inset 0 0 16px rgba(34, 211, 238, 0.14);
+      animation: uncommonShimmer 6.5s ease-in-out infinite;
+    }
+
+    .tile.revealed.flair-legendary {
+      border-color: rgba(255, 243, 176, 0.95);
+      box-shadow: 0 0 40px rgba(255, 130, 78, 0.8), 0 0 92px rgba(110, 68, 255, 0.65);
+      animation: legendaryPrismShift 4.8s ease-in-out infinite, legendaryWildSurge 1.35s ease-in-out infinite;
+    }
+
+    .tile.revealed.flair-legendary .tile-flair-tag {
+      background: linear-gradient(120deg, rgba(255, 89, 166, 0.72), rgba(255, 187, 66, 0.82));
+      border-color: rgba(255, 255, 255, 0.58);
+      color: #101010;
+      box-shadow: 0 0 14px rgba(255, 203, 107, 0.7);
+      animation: legendaryTagSpark 1.6s ease-in-out infinite;
+    }
+
+    .tile.revealed.tier-3 {
+      box-shadow:
+        0 0 28px rgba(255, 124, 62, 0.62),
+        0 0 58px rgba(139, 92, 246, 0.48),
+        inset 0 1px 0 rgba(255, 255, 255, 0.44),
+        inset 0 -10px 24px rgba(255, 154, 58, 0.2);
+    }
+
+    .tile.revealed.tier-3 .tile-label,
+    .tile.revealed.tier-3 .tile-awarded,
+    .tile.revealed.tier-3 .tile-flair-tag {
+      color: #0f0f0f;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 6px rgba(255, 255, 255, 0.22);
+    }
+
+    .tile.flair-hit {
+      border-color: rgba(244, 114, 182, 0.9);
+      background: radial-gradient(circle at 30% 5%, rgba(244, 114, 182, 0.3), rgba(2, 5, 20, 0.97));
+      box-shadow: 0 0 25px rgba(244, 114, 182, 0.6);
+      animation: auroraPulse 4.5s ease-in-out infinite;
+    }
+
+    .tile.revealed .tile-awarded {
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      opacity: 0.7;
+      margin-top: 0.25rem;
+    }
+
+    .tile.selected {
+      box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+      transform: translateY(-2px);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .tile.tier-1,
+    .tile.tier-2,
+    .tile.tier-3 {
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .tile.reveal-flare {
+      animation: pulse 1.2s ease-out;
+      box-shadow: 0 0 25px rgba(250, 250, 250, 0.6), 0 0 50px rgba(244, 114, 182, 0.6);
+      transform: scale(1.08);
+    }
+
+    .tile.flair-hit.reveal-flare {
+      animation: cosmicBurst 1.6s ease-out forwards;
+      box-shadow: 0 0 45px rgba(244, 114, 182, 0.8), 0 0 90px rgba(59, 130, 246, 0.8);
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        filter: hue-rotate(0deg);
+      }
+      50% {
+        transform: scale(1.1);
+        filter: hue-rotate(15deg);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @keyframes auroraPulse {
+      0% {
+        box-shadow: 0 0 10px rgba(244, 114, 182, 0.4);
+        transform: translateY(0);
+      }
+      50% {
+        box-shadow: 0 0 30px rgba(244, 114, 182, 0.65);
+        transform: translateY(-2px) scale(1.01);
+      }
+      100% {
+        box-shadow: 0 0 10px rgba(244, 114, 182, 0.4);
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes legendaryPrismShift {
+      0% {
+        background-position: 0% 45%;
+        filter: saturate(1.1) brightness(1.02);
+      }
+      50% {
+        background-position: 100% 55%;
+        filter: saturate(1.35) brightness(1.14);
+      }
+      100% {
+        background-position: 0% 45%;
+        filter: saturate(1.1) brightness(1.02);
+      }
+    }
+
+    @keyframes legendaryHaloSpin {
+      0% {
+        transform: rotate(0deg) scale(1);
+      }
+      50% {
+        transform: rotate(180deg) scale(1.08);
+      }
+      100% {
+        transform: rotate(360deg) scale(1);
+      }
+    }
+
+    @keyframes legendarySweep {
+      0% {
+        transform: translateX(-140%) rotate(10deg);
+      }
+      55% {
+        transform: translateX(0%) rotate(10deg);
+      }
+      100% {
+        transform: translateX(140%) rotate(10deg);
+      }
+    }
+
+    @keyframes legendaryWildSurge {
+      0% {
+        transform: translateY(0) scale(1);
+        filter: hue-rotate(0deg) saturate(1.25);
+      }
+      50% {
+        transform: translateY(-3px) scale(1.04);
+        filter: hue-rotate(16deg) saturate(1.45);
+      }
+      100% {
+        transform: translateY(0) scale(1);
+        filter: hue-rotate(0deg) saturate(1.25);
+      }
+    }
+
+    @keyframes legendaryTagSpark {
+      0% {
+        transform: scale(1);
+        opacity: 0.92;
+      }
+      50% {
+        transform: scale(1.09);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 0.92;
+      }
+    }
+
+    @keyframes uncommonShimmer {
+      0% {
+        background-position: 0% 45%;
+        box-shadow: 0 0 14px rgba(14, 165, 233, 0.45), inset 0 0 12px rgba(34, 211, 238, 0.1);
+      }
+      50% {
+        background-position: 100% 55%;
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.65), inset 0 0 18px rgba(34, 211, 238, 0.18);
+      }
+      100% {
+        background-position: 0% 45%;
+        box-shadow: 0 0 14px rgba(14, 165, 233, 0.45), inset 0 0 12px rgba(34, 211, 238, 0.1);
+      }
+    }
+
+    @keyframes cosmicBurst {
+      0% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 10px rgba(244, 114, 182, 0.5));
+      }
+      50% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 40px rgba(59, 130, 246, 0.8));
+      }
+      100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 20px rgba(244, 114, 182, 0.5));
+      }
+    }
+
+    @keyframes suspensePulse {
+      0% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+      }
+      50% {
+        transform: translateY(-6px) scale(1.02);
+        box-shadow: 0 15px 40px rgba(14, 165, 233, 0.4);
+      }
+      100% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+      }
+    }
+
+    @keyframes modalFlash {
+      0% {
+        opacity: 0;
+        transform: scale(0.7);
+      }
+      60% {
+        opacity: 0.85;
+        transform: scale(1.1);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.35);
+      }
+    }
+
+    @keyframes confettiFall {
+      0% {
+        transform: translateY(0) rotate(var(--confetti-rotation, 0deg));
+        opacity: 1;
+      }
+      80% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(120px) rotate(calc(var(--confetti-rotation, 0deg) + 720deg));
+        opacity: 0;
+      }
+    }
+
+    .text-spark {
+      animation: hitTextSpark 1.3s ease-out forwards;
+    }
+
+    .text-sweep {
+      animation: progressiveChanceSweep 1.45s ease-out forwards;
+    }
+
+    @keyframes hitTextSpark {
+      0% {
+        transform: scale(1);
+        text-shadow: none;
+      }
+      40% {
+        transform: scale(1.18);
+        text-shadow: 0 0 18px rgba(59, 130, 246, 0.9);
+      }
+      70% {
+        transform: scale(1.05);
+      }
+      100% {
+        transform: scale(1);
+        text-shadow: none;
+      }
+    }
+
+    @keyframes progressiveChanceSweep {
+      0% {
+        transform: translateY(0);
+        opacity: 0.7;
+        filter: blur(0);
+      }
+      45% {
+        transform: translateY(-3px) scale(1.03);
+        opacity: 1;
+        text-shadow: 0 0 10px rgba(244, 114, 182, 0.8);
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 0.9;
+        filter: blur(0);
+      }
+    }
+
+    @keyframes importRowIn {
+      0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.99);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes importAuraSpin {
+      0% {
+        transform: rotate(0deg) scale(1);
+      }
+      50% {
+        transform: rotate(180deg) scale(1.06);
+      }
+      100% {
+        transform: rotate(360deg) scale(1);
+      }
+    }
+
+    @keyframes importTitlePulse {
+      0% {
+        text-shadow: 0 0 0 rgba(255, 233, 161, 0);
+      }
+      50% {
+        text-shadow: 0 0 18px rgba(255, 233, 161, 0.38);
+      }
+      100% {
+        text-shadow: 0 0 0 rgba(255, 233, 161, 0);
+      }
+    }
+
+    @keyframes continuePromptPulse {
+      0% {
+        box-shadow: 0 0 0 rgba(255, 194, 73, 0);
+      }
+      50% {
+        box-shadow: 0 0 26px rgba(255, 194, 73, 0.45);
+      }
+      100% {
+        box-shadow: 0 0 0 rgba(255, 194, 73, 0);
+      }
+    }
+
+    @keyframes leftGlowDrift {
+      0% {
+        transform: translateX(0) scale(1);
+        opacity: 0.65;
+      }
+      50% {
+        transform: translateX(-8px) scale(1.03);
+        opacity: 0.85;
+      }
+      100% {
+        transform: translateX(0) scale(1);
+        opacity: 0.7;
+      }
+    }
+
+    @keyframes backdropDrift {
+      0% {
+        background-position: 0% 45%;
+        filter: saturate(1);
+      }
+      50% {
+        background-position: 100% 55%;
+        filter: saturate(1.06);
+      }
+      100% {
+        background-position: 0% 45%;
+        filter: saturate(1);
+      }
+    }
+
+    #reveal-banner {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      padding: 0.9rem 1.8rem;
+      background: rgba(12, 18, 40, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 35px rgba(3, 2, 5, 0.65);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      backdrop-filter: blur(20px);
+    }
+
+    #reveal-banner.active {
+      opacity: 1;
+    }
+
+    #reveal-banner p {
+      margin: 0;
+      font-size: 0.9rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.4);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+
+    #reveal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 5, 15, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 20;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+      pointer-events: none;
+    }
+
+    #reveal-backdrop.visible {
+      visibility: visible;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #import-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 18;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      background:
+        radial-gradient(circle at 50% 22%, rgba(255, 196, 88, 0.16), rgba(255, 196, 88, 0) 38%),
+        radial-gradient(circle at 16% 82%, rgba(56, 189, 248, 0.15), rgba(56, 189, 248, 0) 36%),
+        rgba(3, 8, 20, 0.92);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      backdrop-filter: blur(7px);
+    }
+
+    #import-backdrop.visible {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    #import-modal {
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+      border: none;
+      background: linear-gradient(160deg, rgba(10, 18, 44, 0.96), rgba(8, 14, 34, 0.95));
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 2.2rem 2.6rem 1.8rem;
+      position: relative;
+    }
+
+    #import-modal::before {
+      content: "";
+      position: absolute;
+      inset: -20% -10%;
+      pointer-events: none;
+      background: conic-gradient(from 0deg, rgba(255, 221, 87, 0.22), rgba(56, 189, 248, 0.14), rgba(244, 114, 182, 0.2), rgba(255, 221, 87, 0.22));
+      filter: blur(60px);
+      opacity: 0.42;
+      animation: importAuraSpin 22s linear infinite;
+    }
+
+    #import-modal h3 {
+      margin: 0;
+      padding: 0;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      font-size: clamp(1.1rem, 2vw, 1.7rem);
+      color: rgba(255, 255, 255, 0.92);
+      text-align: center;
+      position: relative;
+      z-index: 1;
+      animation: importTitlePulse 2.6s ease-in-out infinite;
+    }
+
+    #import-status {
+      margin: 0;
+      padding: 0.55rem 0 1rem;
+      font-size: clamp(0.76rem, 1.25vw, 1rem);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    #import-list {
+      margin: 0;
+      padding: 0.55rem 0.2rem 1rem;
+      list-style: none;
+      overflow: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 0.7rem;
+      align-content: start;
+      position: relative;
+      z-index: 1;
+    }
+
+    #import-list li {
+      opacity: 0;
+      transform: translateY(8px) scale(0.99);
+      animation: importRowIn 0.32s ease forwards;
+      border-radius: 10px;
+      padding: 0.75rem 0.8rem;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-direction: column;
+      gap: 0.55rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: clamp(0.92rem, 1.25vw, 1.15rem);
+      backdrop-filter: blur(6px);
+      aspect-ratio: 1 / 1;
+      min-height: 0;
+    }
+
+    #import-list li .name {
+      width: 100%;
+      color: rgba(255, 255, 255, 0.92);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: normal;
+      line-height: 1.22;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      font-size: clamp(1rem, 1.35vw, 1.25rem);
+      text-align: center;
+    }
+
+    #import-list li .rarity {
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      font-size: clamp(0.72rem, 1.02vw, 0.92rem);
+      letter-spacing: 0.15em;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.08);
+      font-weight: 800;
+    }
+
+    #import-list li.rarity-common {
+      background: rgba(74, 222, 128, 0.13);
+    }
+
+    #import-list li.rarity-uncommon {
+      background: rgba(56, 189, 248, 0.18);
+    }
+
+    #import-list li.rarity-legendary {
+      background: linear-gradient(120deg, rgba(255, 195, 76, 0.38), rgba(255, 122, 24, 0.22));
+      box-shadow: inset 0 0 0 1px rgba(255, 228, 155, 0.35);
+    }
+
+    #import-continue {
+      align-self: center;
+      margin-top: auto;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background: linear-gradient(120deg, rgba(255, 194, 73, 0.24), rgba(255, 124, 62, 0.24));
+      color: rgba(255, 255, 255, 0.96);
+      border-radius: 999px;
+      padding: 0.7rem 1.45rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px) scale(0.98);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      position: relative;
+      z-index: 1;
+    }
+
+    #import-continue.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+      animation: continuePromptPulse 1.7s ease-in-out infinite;
+    }
+
+    #reveal-modal {
+      background: rgba(8, 15, 36, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 24px;
+      padding: 2rem 2.5rem;
+      width: min(90vw, 420px);
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65);
+      position: relative;
+      overflow: visible;
+    }
+
+    #reveal-modal::after {
+      content: "";
+      position: absolute;
+      inset: -35%;
+      border-radius: inherit;
+      background: radial-gradient(circle, rgba(244, 114, 182, 0.9), transparent 60%);
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.6);
+    }
+
+    #reveal-modal.flash::after {
+      animation: modalFlash var(--flash-duration) ease-out forwards;
+    }
+
+    #reveal-modal h2 {
+      margin: 0;
+      font-size: 2rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+    }
+
+    .modal-subtitle {
+      margin: 0.3rem 0 1rem;
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 0.9rem;
+    }
+
+    .flip-card {
+      --flip-card-size: min(220px, 64vw);
+      width: var(--flip-card-size);
+      height: var(--flip-card-size);
+      margin: 0 auto 0.8rem;
+      perspective: 1000px;
+      flex: 0 0 auto;
+      position: relative;
+    }
+
+    .flip-card.anticipation {
+      animation: suspensePulse var(--suspense-pulse-duration) ease-in-out infinite;
+    }
+
+    .flip-card-inner {
+      position: relative;
+      width: var(--flip-card-size);
+      height: var(--flip-card-size);
+      transition: transform var(--reveal-spin-duration) cubic-bezier(0.24, 0.01, 0.12, 1);
+      transform-style: preserve-3d;
+    }
+
+    .flip-card-inner.flipped {
+      transform: rotateY(180deg);
+    }
+
+    .flip-card-face {
+      position: absolute;
+      inset: 0;
+      width: var(--flip-card-size);
+      height: var(--flip-card-size);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      backface-visibility: hidden;
+      padding: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .flip-card-front {
+      background: radial-gradient(circle at 30% 20%, rgba(59, 130, 246, 0.35), rgba(11, 13, 30, 0.95));
+      color: #fff;
+    }
+
+    .flip-card-back {
+      background: radial-gradient(circle at 70% 10%, rgba(244, 114, 182, 0.5), rgba(2, 6, 23, 0.95));
+      transform: rotateY(180deg);
+      color: #fff;
+    }
+
+    .flip-card-back.legendary {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      border-color: rgba(255, 221, 87, 0.95);
+      background:
+        radial-gradient(circle at 18% 16%, rgba(255, 235, 125, 0.55), rgba(255, 235, 125, 0) 34%),
+        linear-gradient(135deg, #ff4f9b 0%, #ff7a18 35%, #ffd93d 58%, #6cf2ff 78%, #8b5cf6 100%);
+      background-size: 240% 240%;
+      box-shadow: 0 0 28px rgba(255, 124, 62, 0.62), 0 0 58px rgba(139, 92, 246, 0.48);
+      animation: legendaryPrismShift 6s ease-in-out infinite;
+    }
+
+    .flip-card-back.legendary::before {
+      content: "";
+      position: absolute;
+      inset: -38%;
+      pointer-events: none;
+      background: conic-gradient(
+        from 0deg,
+        rgba(255, 255, 255, 0.48) 0deg,
+        rgba(255, 255, 255, 0.08) 72deg,
+        rgba(255, 245, 173, 0.55) 158deg,
+        rgba(255, 255, 255, 0.08) 248deg,
+        rgba(255, 163, 72, 0.5) 320deg,
+        rgba(255, 255, 255, 0.48) 360deg
+      );
+      mix-blend-mode: screen;
+      opacity: 0.48;
+      transform-origin: 50% 50%;
+      animation: legendaryHaloSpin 8s linear infinite;
+      z-index: 0;
+    }
+
+    .flip-card-back.legendary::after {
+      content: "";
+      position: absolute;
+      inset: -20% -30%;
+      pointer-events: none;
+      background: linear-gradient(110deg, rgba(255, 255, 255, 0) 25%, rgba(255, 255, 255, 0.55) 50%, rgba(255, 255, 255, 0) 75%);
+      opacity: 0.44;
+      transform: translateX(-140%) rotate(10deg);
+      animation: legendarySweep 2.8s ease-in-out infinite;
+      z-index: 0;
+    }
+
+    .flip-card-back.legendary > * {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 0 7px rgba(12, 16, 35, 0.68);
+    }
+
+    #modal-prize-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    #modal-tier {
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .modal-message {
+      margin: 0.75rem 0 1rem;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+
+    .modal-actions button {
+      border-radius: 999px;
+      border: none;
+      padding: 0.65rem 1.4rem;
+      font-size: 0.95rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      font-family: inherit;
+      width: min(260px, 100%);
+    }
+
+    .modal-actions button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .modal-actions button#reveal-action {
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      color: #fff;
+    }
+
+    .modal-actions button#modal-great-btn {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .modal-actions button#modal-great-btn.ready {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #reveal-confetti {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: visible;
+      mix-blend-mode: screen;
+    }
+
+    #reveal-confetti span {
+      position: absolute;
+      width: 6px;
+      height: 12px;
+      border-radius: 3px;
+      opacity: 0;
+      animation-name: confettiFall;
+      animation-fill-mode: forwards;
+      animation-timing-function: ease-out;
+      animation-iteration-count: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="meta">
+    <h1 id="meta-title">April Grid</h1>
+  </div>
+  <div id="layout">
+    <div id="grid-wrapper">
+      <div id="grid"></div>
+    </div>
+    <aside id="prize-column">
+      <p class="column-title">Unrevealed Prize Pool</p>
+      <small id="tile-ratio" class="tile-ratio">0/0</small>
+      <ul id="remaining-prizes"></ul>
+    </aside>
+  </div>
+  <div id="reveal-banner">
+    <p id="reveal-text">Awaiting reveal...</p>
+  </div>
+  <div id="import-backdrop" aria-live="polite">
+    <div id="import-modal">
+      <h3>Importing Prize Pool</h3>
+      <p id="import-status">Waiting for import...</p>
+      <ul id="import-list"></ul>
+      <button type="button" id="import-continue">Click to Continue</button>
+    </div>
+  </div>
+  <div id="reveal-backdrop" aria-live="polite">
+    <div id="reveal-modal">
+      <p class="modal-subtitle" id="modal-owner">Grid reveal incoming</p>
+      <h2 id="modal-title">Reveal #0</h2>
+      <div class="flip-card">
+        <div class="flip-card-inner" id="modal-card-inner">
+          <div class="flip-card-face flip-card-front">
+            <span class="modal-subtitle" id="modal-callout">Click below to flip</span>
+          </div>
+          <div class="flip-card-face flip-card-back">
+            <span id="modal-prize-name">Prize name</span>
+            <span id="modal-tier">Tier 1</span>
+          </div>
+        </div>
+      </div>
+      <p class="modal-message" id="modal-message">Reveal to see the prize.</p>
+      <div class="modal-actions">
+        <button type="button" id="reveal-action">Click to reveal</button>
+        <button type="button" id="modal-great-btn" disabled>Great!</button>
+      </div>
+      <div id="reveal-confetti" aria-hidden="true"></div>
+    </div>
+  </div>
+  <script>
+    const gridEl = document.getElementById("grid");
+    const lockIndicator = document.getElementById("lock-indicator");
+    const hitsIndicator = document.getElementById("hits-indicator");
+    const hitsFlair = document.getElementById("hits-flair");
+    const tilesIndicator = document.getElementById("tiles-indicator");
+    const remainingList = document.getElementById("remaining-prizes");
+    const revealText = document.getElementById("reveal-text");
+    const revealBanner = document.getElementById("reveal-banner");
+    const importBackdrop = document.getElementById("import-backdrop");
+    const importStatus = document.getElementById("import-status");
+    const importList = document.getElementById("import-list");
+    const importContinueButton = document.getElementById("import-continue");
+    const revealModal = document.getElementById("reveal-modal");
+    const flipCard = document.querySelector(".flip-card");
+    const confettiContainer = document.getElementById("reveal-confetti");
+    const revealSpinDuration = 2800;
+    const suspenseDelay = 900;
+    const flashDurationMs = 950;
+    const tileRatio = document.getElementById("tile-ratio");
+    let prizePoolLocked = false;
+    let queuedPrizeState = null;
+    let bannerTimeout = null;
+    let flashTimeout = null;
+    let confettiTimeout = null;
+    const revealBackdrop = document.getElementById("reveal-backdrop");
+    const modalTitle = document.getElementById("modal-title");
+    const modalOwner = document.getElementById("modal-owner");
+    const modalCallout = document.getElementById("modal-callout");
+    const modalPrizeName = document.getElementById("modal-prize-name");
+    const modalTier = document.getElementById("modal-tier");
+    const modalMessage = document.getElementById("modal-message");
+    const modalCardInner = document.getElementById("modal-card-inner");
+    const modalCardBack = document.querySelector(".flip-card-back");
+    const revealActionButton = document.getElementById("reveal-action");
+    const greatButton = document.getElementById("modal-great-btn");
+    let lastRevealKey = null;
+    let currentReveal = null;
+    let tilesCache = [];
+    let pendingRevealId = null;
+    let pendingRevealMessage = "";
+    let revealBlocked = false;
+    let lastSelectedTileId = null;
+    let importAnimationActive = false;
+    let importAnimationId = 0;
+    const defaultModalOwner = modalOwner.textContent;
+    const defaultModalCallout = modalCallout.textContent;
+    const defaultModalMessage = modalMessage.textContent;
+    const defaultModalTitle = modalTitle.textContent;
+
+    function getRarityLabel(details) {
+      const flair = String(details?.flair || "").toLowerCase().trim();
+      if (flair === "common" || flair === "uncommon" || flair === "legendary") {
+        return flair.toUpperCase();
+      }
+      const tier = Number(details?.tier);
+      if (tier === 1) {
+        return "COMMON";
+      }
+      if (tier === 2) {
+        return "UNCOMMON";
+      }
+      if (tier === 3) {
+        return "LEGENDARY";
+      }
+      return "";
+    }
+
+    function normalizeColumns(count) {
+      if (!count) {
+        return 10;
+      }
+      return count >= 10 ? 10 : Math.max(1, count);
+    }
+
+    function renderGrid(tiles) {
+      tilesCache = Array.isArray(tiles) ? tiles : [];
+      gridEl.innerHTML = "";
+      if (!tiles || tiles.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = "Grid not ready. Run !grid set.";
+        gridEl.appendChild(empty);
+        gridEl.style.gridTemplateColumns = `repeat(1, minmax(80px, 1fr))`;
+        return;
+      }
+      const columns = normalizeColumns(tiles.length);
+      gridEl.style.gridTemplateColumns = `repeat(${columns}, minmax(65px, 1fr))`;
+      tiles.forEach((tile) => {
+        const cell = document.createElement("div");
+        const tier = tile.tier || 1;
+        const isPendingReveal = tile.id === pendingRevealId && revealBlocked;
+        const isRevealed = tile.revealed && !isPendingReveal;
+        const baseClass = isRevealed ? "revealed" : "hidden";
+        const classes = [`tile`, `tier-${tier}`, baseClass];
+        if (lastSelectedTileId === tile.id && !revealBlocked) {
+          classes.push("selected");
+        }
+        cell.className = classes.join(" ");
+        cell.dataset.tile = tile.id;
+        const label = document.createElement("div");
+        label.className = "tile-label";
+        label.textContent = isRevealed ? tile.name : `#${tile.number}`;
+        cell.appendChild(label);
+        if (isRevealed && tile.flair) {
+          const flair = String(tile.flair).toLowerCase();
+          cell.classList.add(`flair-${flair}`);
+          const flairTag = document.createElement("div");
+          flairTag.className = "tile-flair-tag";
+          flairTag.textContent = flair.toUpperCase();
+          cell.appendChild(flairTag);
+        }
+        if (isRevealed && tile.awarded_to) {
+          const sub = document.createElement("div");
+          sub.className = "tile-awarded";
+          sub.textContent = `@${tile.awarded_to}`;
+          cell.appendChild(sub);
+        }
+        gridEl.appendChild(cell);
+      });
+    }
+
+    function getHitFlairText(hits) {
+      if (!hits) {
+        return "No hits left – sweepstakes closed";
+      }
+      if (hits === 1) {
+        return "Final hit rattling the vault";
+      }
+      if (hits <= 3) {
+        return `Only ${hits} hits remain – keep the hype burning`;
+      }
+      return `${hits} hits waiting like lightning in a bottle`;
+    }
+
+    function updateStatus(payload) {
+      if (lockIndicator) {
+        lockIndicator.textContent = payload.locked ? "Locked" : "Unlocked";
+      }
+      if (hitsIndicator) {
+        hitsIndicator.textContent = `Hits: ${payload.hits_remaining || 0}`;
+      }
+      if (tilesIndicator) {
+        tilesIndicator.textContent = `Tiles: ${payload.available_tiles}/${payload.total_tiles}`;
+      }
+      if (hitsFlair) {
+        hitsFlair.textContent = getHitFlairText(payload.hits_remaining || 0);
+      }
+    }
+
+    function renderRemainingPrizes(state) {
+      const tiles = Array.isArray(state.tiles) ? state.tiles : [];
+      const inventorySummary = Array.isArray(state.inventorySummary) ? state.inventorySummary : [];
+      const hasTiles = tiles.length > 0;
+      let entries = [];
+      let poolSize = 0;
+      if (hasTiles) {
+        const counts = tiles.reduce((acc, tile) => {
+          if (tile.revealed) {
+            return acc;
+          }
+          const key = tile.prize_name || tile.name || `Prize #${tile.number}`;
+          if (!acc[key]) {
+            acc[key] = { qty: 0, tier: Number(tile.tier) || 1 };
+          }
+          acc[key].qty += 1;
+          acc[key].tier = Math.max(acc[key].tier, Number(tile.tier) || 1);
+          return acc;
+        }, {});
+        entries = Object.entries(counts)
+          .map(([name, info]) => ({ name, qty: info.qty, tier: info.tier }))
+          .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
+        if (Number.isFinite(state.availableTiles) && state.availableTiles > 0) {
+          poolSize = state.availableTiles;
+        } else if (entries.length) {
+          poolSize = entries.reduce((acc, entry) => acc + entry.qty, 0);
+        }
+      } else if (inventorySummary.length) {
+        entries = inventorySummary
+          .map((entry) => ({
+            name: entry.name || "Prize",
+            qty: Number.isFinite(entry.count) ? entry.count : Number(entry.count) || 0,
+            tier: Number(entry.tier) || 1,
+          }))
+          .filter((entry) => entry.qty > 0)
+          .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
+        if (Number.isFinite(state.inventoryTotal) && state.inventoryTotal > 0) {
+          poolSize = state.inventoryTotal;
+        } else if (entries.length) {
+          poolSize = entries.reduce((acc, entry) => acc + entry.qty, 0);
+        }
+      }
+      remainingList.innerHTML = "";
+      if (!entries.length) {
+        const empty = document.createElement("li");
+        empty.textContent = "All prizes claimed";
+        remainingList.appendChild(empty);
+        return;
+      }
+      entries.forEach((entry) => {
+        const item = document.createElement("li");
+        const tier = Number(entry.tier) || 1;
+        item.classList.add(`tier-${Math.max(1, Math.min(3, tier))}`);
+        const displayName = `${entry.name}${entry.qty > 1 ? ` ×${entry.qty}` : ""}`.trim();
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = displayName;
+        const chance = poolSize ? (entry.qty / poolSize) * 100 : 0;
+        const chanceLabel = document.createElement("small");
+        chanceLabel.textContent = formatPercent(chance);
+        item.appendChild(nameSpan);
+        item.appendChild(chanceLabel);
+        remainingList.appendChild(item);
+      });
+    }
+
+    function renderImportItem(entry) {
+      if (!importList) {
+        return;
+      }
+      const rarity = getRarityLabel(entry).toLowerCase() || "common";
+      const row = document.createElement("li");
+      row.className = `rarity-${rarity}`;
+      const name = document.createElement("span");
+      name.className = "name";
+      const qty = Number(entry.count) || 1;
+      const baseName = entry.name || "Prize";
+      name.textContent = qty > 1 ? `${baseName} x${qty}` : baseName;
+      const badge = document.createElement("span");
+      badge.className = "rarity";
+      badge.textContent = rarity.toUpperCase();
+      row.appendChild(name);
+      row.appendChild(badge);
+      importList.appendChild(row);
+      importList.scrollTop = importList.scrollHeight;
+    }
+
+    function startImportAnimation(sequence) {
+      if (!Array.isArray(sequence) || !sequence.length || !importBackdrop || !importList) {
+        return;
+      }
+      importAnimationActive = true;
+      importAnimationId += 1;
+      const runId = importAnimationId;
+      importList.innerHTML = "";
+      importBackdrop.classList.add("visible");
+      if (importContinueButton) {
+        importContinueButton.classList.remove("visible");
+        importContinueButton.onclick = null;
+      }
+      importStatus.textContent = `Preparing ${sequence.length} prizes...`;
+
+      const grouped = [];
+      const indexByKey = new Map();
+      sequence.forEach((entry) => {
+        const normalized = entry || {};
+        const rarity = getRarityLabel(normalized).toLowerCase() || "common";
+        const name = normalized.name || "Prize";
+        const tier = Number(normalized.tier) || (rarity === "legendary" ? 3 : rarity === "uncommon" ? 2 : 1);
+        const key = `${tier}::${name}`;
+        if (!indexByKey.has(key)) {
+          indexByKey.set(key, grouped.length);
+          grouped.push({ name, tier, flair: rarity, count: 1 });
+          return;
+        }
+        const idx = indexByKey.get(key);
+        grouped[idx].count += 1;
+      });
+
+      const totalGrouped = grouped.length;
+      let loadedGrouped = 0;
+
+      const finishImport = () => {
+        if (runId !== importAnimationId) {
+          return;
+        }
+        importAnimationActive = false;
+        importBackdrop.classList.remove("visible");
+        importStatus.textContent = "Import complete";
+        if (importContinueButton) {
+          importContinueButton.classList.remove("visible");
+        }
+        maybeApplyPrizeState(true);
+      };
+
+      const revealNextGroup = () => {
+        if (runId !== importAnimationId) {
+          return;
+        }
+        if (loadedGrouped >= totalGrouped) {
+          finishImport();
+          return;
+        }
+        const entry = grouped[loadedGrouped];
+        renderImportItem(entry);
+        loadedGrouped += 1;
+        const revealedRarity = (entry.flair || "common").toUpperCase();
+        importStatus.textContent = `Revealed ${loadedGrouped}/${totalGrouped}: ${revealedRarity}`;
+        if (!importContinueButton) {
+          if (loadedGrouped >= totalGrouped) {
+            finishImport();
+          }
+          return;
+        }
+        if (loadedGrouped >= totalGrouped) {
+          importContinueButton.textContent = "Finish Import";
+        } else {
+          const next = grouped[loadedGrouped];
+          const nextRarity = (next.flair || "common").toUpperCase();
+          importContinueButton.textContent = `Reveal Next ${nextRarity}`;
+        }
+      };
+
+      const armManualReveal = () => {
+        if (!importContinueButton) {
+          revealNextGroup();
+          return;
+        }
+        importStatus.textContent = "Click to reveal each prize.";
+        importContinueButton.textContent = "Reveal First Prize";
+        importContinueButton.classList.add("visible");
+        importContinueButton.onclick = () => revealNextGroup();
+      };
+
+      armManualReveal();
+    }
+
+    function formatTruncated(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) {
+        return "0";
+      }
+      if (Number.isInteger(num)) {
+        return `${num}`;
+      }
+      const truncated = Math.trunc(num * 10) / 10;
+      return Number.isInteger(truncated) ? `${truncated.toFixed(0)}` : `${truncated.toFixed(1)}`;
+    }
+
+    function formatPercent(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) {
+        return "0%";
+      }
+      const truncated = Math.trunc(num * 10) / 10;
+      return Number.isInteger(truncated) ? `${truncated}%` : `${truncated.toFixed(1)}%`;
+    }
+
+    function updateChanceDisplay(state) {
+      if (!tileRatio) {
+        return;
+      }
+      let remainingTiles = Number.isFinite(state.availableTiles) ? state.availableTiles : 0;
+      let totalTiles = Number.isFinite(state.totalTiles) ? state.totalTiles : 0;
+      if (!totalTiles && !remainingTiles && Number.isFinite(state.inventoryTotal) && state.inventoryTotal > 0) {
+        totalTiles = state.inventoryTotal;
+        remainingTiles = state.inventoryTotal;
+      }
+      tileRatio.textContent = `${formatTruncated(totalTiles)}/${formatTruncated(remainingTiles)}`;
+    }
+
+    function pulseTextEffect(target, className, duration = 1400) {
+      if (!target) {
+        return;
+      }
+      target.classList.remove(className);
+      void target.offsetWidth;
+      target.classList.add(className);
+      window.setTimeout(() => target.classList.remove(className), duration);
+    }
+
+    function animateHitCardText() {
+      pulseTextEffect(hitsIndicator, "text-spark", 1300);
+    }
+
+    function animateProgressiveChanceText() {
+      pulseTextEffect(tileRatio, "text-sweep", 1500);
+    }
+
+    window.gridOverlay = window.gridOverlay || {};
+    window.gridOverlay.animateHitCardText = animateHitCardText;
+    window.gridOverlay.animateProgressiveChanceText = animateProgressiveChanceText;
+
+    function applyPrizeState(state) {
+      if (!state) {
+        return;
+      }
+      renderRemainingPrizes(state);
+      updateChanceDisplay(state);
+      queuedPrizeState = null;
+    }
+
+    function maybeApplyPrizeState(force = false) {
+      if (importAnimationActive) {
+        return;
+      }
+      if ((force || !prizePoolLocked) && queuedPrizeState) {
+        applyPrizeState(queuedPrizeState);
+      }
+    }
+
+    function queuePrizeState(state) {
+      queuedPrizeState = state;
+      maybeApplyPrizeState();
+    }
+
+    function openRevealModal(details, message) {
+      if (!details) {
+        return;
+      }
+      const revealKey = `${details.tile_id}-${details.name}-${details.awarded_to || ""}`;
+      if (lastRevealKey === revealKey && revealBackdrop.classList.contains("visible")) {
+        return;
+      }
+      lastRevealKey = revealKey;
+      currentReveal = details;
+      const tileNumber = typeof details.tile_id === "number" ? details.tile_id + 1 : details.number || "?";
+      modalTitle.textContent = `Reveal #${tileNumber}`;
+      modalOwner.textContent = details.awarded_to
+        ? `@${details.awarded_to} is revealing`
+        : defaultModalOwner;
+      modalCallout.textContent = details.awarded_to
+        ? `Revealing for @${details.awarded_to}`
+        : defaultModalCallout;
+      modalPrizeName.textContent = details.name || "Secret prize";
+      modalTier.textContent = getRarityLabel(details);
+      const isLegendaryReveal = Number(details.tier) === 3 || String(details.flair || "").toLowerCase() === "legendary";
+      modalCardBack?.classList.toggle("legendary", isLegendaryReveal);
+      modalMessage.textContent = defaultModalMessage;
+      modalCardInner.classList.remove("flipped");
+      flipCard?.classList.remove("anticipation");
+      if (revealModal) {
+        revealModal.classList.remove("flash");
+      }
+      if (flashTimeout) {
+        window.clearTimeout(flashTimeout);
+        flashTimeout = null;
+      }
+      if (confettiTimeout) {
+        window.clearTimeout(confettiTimeout);
+        confettiTimeout = null;
+      }
+      if (confettiContainer) {
+        confettiContainer.innerHTML = "";
+      }
+      revealActionButton.disabled = false;
+      revealActionButton.textContent = "Click to reveal";
+      revealActionButton.hidden = false;
+      greatButton.disabled = true;
+      greatButton.classList.remove("ready");
+      revealBackdrop.classList.add("visible");
+    }
+
+    function triggerRevealAnimation() {
+      if (!currentReveal || modalCardInner.classList.contains("flipped")) {
+        return;
+      }
+      revealActionButton.disabled = true;
+      revealActionButton.hidden = true;
+      modalMessage.textContent = "Charging the grid...";
+      flipCard?.classList.add("anticipation");
+      const revealDetails = currentReveal;
+      window.setTimeout(() => {
+        if (!revealDetails) {
+          return;
+        }
+        flipCard?.classList.remove("anticipation");
+        modalCardInner.classList.add("flipped");
+        modalPrizeName.textContent = revealDetails.name || "Secret prize";
+        modalTier.textContent = getRarityLabel(revealDetails);
+        modalMessage.textContent = revealDetails.name
+          ? `Revealed: ${revealDetails.name}`
+          : "Prize revealed";
+        triggerModalFlash();
+        launchConfetti();
+        window.setTimeout(() => {
+          greatButton.disabled = false;
+          greatButton.classList.add("ready");
+        }, revealSpinDuration + 450);
+      }, suspenseDelay);
+    }
+
+    function finalizePendingReveal() {
+      if (pendingRevealId === null) {
+        return;
+      }
+      lastSelectedTileId = pendingRevealId;
+      pendingRevealId = null;
+      revealBlocked = false;
+      renderGrid(tilesCache);
+      prizePoolLocked = false;
+      maybeApplyPrizeState();
+      if (pendingRevealMessage) {
+        showBanner(pendingRevealMessage);
+        pendingRevealMessage = "";
+      }
+    }
+
+    function hideRevealModal() {
+      revealBackdrop.classList.remove("visible");
+      modalCardInner.classList.remove("flipped");
+      revealActionButton.disabled = false;
+      revealActionButton.hidden = false;
+      revealActionButton.textContent = "Click to reveal";
+      greatButton.disabled = true;
+      greatButton.classList.remove("ready");
+      modalOwner.textContent = defaultModalOwner;
+      modalCallout.textContent = defaultModalCallout;
+      modalMessage.textContent = defaultModalMessage;
+      modalTitle.textContent = defaultModalTitle;
+      modalPrizeName.textContent = "";
+      modalTier.textContent = "";
+      modalCardBack?.classList.remove("legendary");
+      flipCard?.classList.remove("anticipation");
+      if (revealModal) {
+        revealModal.classList.remove("flash");
+      }
+      if (flashTimeout) {
+        window.clearTimeout(flashTimeout);
+        flashTimeout = null;
+      }
+      if (confettiTimeout) {
+        window.clearTimeout(confettiTimeout);
+        confettiTimeout = null;
+      }
+      if (confettiContainer) {
+        confettiContainer.innerHTML = "";
+      }
+      currentReveal = null;
+    }
+
+    function finalizeAndCloseReveal() {
+      finalizePendingReveal();
+      hideRevealModal();
+    }
+
+    function showBanner(text) {
+      if (!text) {
+        return;
+      }
+      revealText.textContent = text;
+      revealBanner.classList.add("active");
+      if (bannerTimeout) {
+        window.clearTimeout(bannerTimeout);
+      }
+      bannerTimeout = window.setTimeout(() => revealBanner.classList.remove("active"), 4800);
+    }
+
+    function triggerModalFlash() {
+      if (!revealModal) {
+        return;
+      }
+      revealModal.classList.add("flash");
+      if (flashTimeout) {
+        window.clearTimeout(flashTimeout);
+      }
+      flashTimeout = window.setTimeout(() => revealModal.classList.remove("flash"), flashDurationMs);
+    }
+
+    function launchConfetti() {
+      if (!confettiContainer) {
+        return;
+      }
+      confettiContainer.innerHTML = "";
+      const colors = ["#4ade80", "#38bdf8", "#f472b6", "#facc15", "#34d399"];
+      const pieces = 18;
+      for (let i = 0; i < pieces; i += 1) {
+        const piece = document.createElement("span");
+        const delay = Math.random() * 0.35;
+        const duration = 1.2 + Math.random() * 0.9;
+        piece.style.setProperty("--confetti-rotation", `${Math.random() * 360}deg`);
+        piece.style.left = `${Math.random() * 100}%`;
+        piece.style.top = `${35 + Math.random() * 40}%`;
+        piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+        piece.style.animationDelay = `${delay}s`;
+        piece.style.animationDuration = `${duration}s`;
+        confettiContainer.appendChild(piece);
+      }
+      if (confettiTimeout) {
+        window.clearTimeout(confettiTimeout);
+      }
+      confettiTimeout = window.setTimeout(() => {
+        if (confettiContainer) {
+          confettiContainer.innerHTML = "";
+        }
+      }, 2200);
+    }
+
+    revealActionButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      triggerRevealAnimation();
+    });
+    greatButton.addEventListener("click", finalizeAndCloseReveal);
+
+    function animateReveal(details, message) {
+      if (!details) {
+        return;
+      }
+      const tileEl = gridEl.querySelector(`[data-tile='${details.tile_id}']`);
+      if (tileEl) {
+        tileEl.classList.add("reveal-flare");
+        window.setTimeout(() => tileEl.classList.remove("reveal-flare"), 2500);
+      }
+    }
+
+    function handlePayload(payload) {
+      if (Array.isArray(payload.import_sequence) && payload.import_sequence.length) {
+        startImportAnimation(payload.import_sequence);
+      }
+      if (payload.reveal) {
+        pendingRevealId = payload.reveal.tile_id;
+        revealBlocked = true;
+        lastSelectedTileId = null;
+        pendingRevealMessage = payload.message || "";
+      }
+      renderGrid(payload.tiles);
+      updateStatus(payload);
+      animateReveal(payload.reveal, payload.message);
+      if (payload.reveal) {
+        openRevealModal(payload.reveal, payload.message);
+      }
+      prizePoolLocked = revealBlocked;
+      queuePrizeState({
+        tiles: payload.tiles || [],
+        totalTiles: payload.total_tiles || 0,
+        availableTiles: payload.available_tiles || 0,
+        hitsRemaining: payload.hits_remaining || 0,
+        inventorySummary: payload.inventory_summary || [],
+        inventoryTotal: payload.inventory_total || 0,
+      });
+    }
+
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    const socket = new WebSocket(`${scheme}://${location.host}/ws`);
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "request_grid_state" }));
+    });
+    socket.addEventListener("message", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "grid_state") {
+          handlePayload(data);
+        }
+      } catch (error) {
+        console.error("Grid overlay parse error", error);
+      }
+    });
+  </script>
+</body>
+</html>

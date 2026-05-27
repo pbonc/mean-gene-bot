@@ -135,6 +135,55 @@ class SimpleRaffleState:
         self.save()
         return True
 
+    def get_entry_capacity_remaining(self):
+        occupied_numbers = len(self.picks)
+        unspent_entries = sum(max(0, int(v)) for v in self.entries.values())
+        return max(0, 1000 - occupied_numbers - unspent_entries)
+
+    def add_entries_capped(self, user, count):
+        user = user.lower()
+        requested = max(0, int(count))
+        if user in self.ignored_users:
+            return {
+                "requested": requested,
+                "applied": 0,
+                "capacity_before": self.get_entry_capacity_remaining(),
+                "truncation_reason": "user_ignored",
+            }
+
+        # Intentionally do not cap by board occupancy. This raffle design allows
+        # users to hold large entry balances and potentially blot out the board.
+        capacity_before = self.get_entry_capacity_remaining()
+        applied = requested
+        truncation_reason = None
+
+        if applied > 0:
+            self.entries[user] = self.entries.get(user, 0) + applied
+            self.save()
+
+        return {
+            "requested": requested,
+            "applied": applied,
+            "capacity_before": capacity_before,
+            "truncation_reason": truncation_reason,
+        }
+
+    def remove_entries(self, user, count):
+        user = user.lower()
+        if not (isinstance(count, int) and count > 0):
+            return False, "Please enter a positive whole number."
+        current = self.entries.get(user, 0)
+        if current <= 0:
+            return False, f"@{user} has no entries to remove."
+        removed = min(current, count)
+        remaining = current - removed
+        if remaining > 0:
+            self.entries[user] = remaining
+        else:
+            self.entries.pop(user, None)
+        self.save()
+        return True, removed
+
     def trade_entries(self, from_user, to_user, count):
         from_user = from_user.lower()
         to_user = to_user.lower()
@@ -372,14 +421,95 @@ class SimpleRaffleState:
         if self.zap_trigger_type != trigger_type:
             return False, None
         
-        # Award the entry and re-arm for the next cycle
+        # Mark winner and re-arm for the next cycle. Entry payout is handled by the cog
+        # so faction/relic modifiers can be applied exactly once.
         self.zap_awarded_user = user
-        self.add_entries(user, 1)
         self.save()
         self._reset_zap_cycle()
         return True, f"🔥 ZAPPED! @{user} just won a FREE raffle entry! (ZAP continues)"
 
 class RaffleCog(commands.Cog):
+    def _award_zap_trigger_entry(self, trigger_user: str):
+        faction_cog = self.bot.get_cog("FactionCog")
+        if faction_cog and hasattr(faction_cog, "award_entry_reward"):
+            return faction_cog.award_entry_reward(
+                trigger_user,
+                1,
+                reward_type="zap_trigger",
+            )
+
+        if hasattr(self.state, "add_entries_capped"):
+            capped = self.state.add_entries_capped(trigger_user, 1)
+            return {
+                "applied": int(capped.get("applied", 0)),
+                "gmb_applied": False,
+                "capacity_reason": capped.get("truncation_reason"),
+            }
+
+        ok = self.state.add_entries(trigger_user, 1)
+        return {
+            "applied": 1 if ok else 0,
+            "gmb_applied": False,
+            "capacity_reason": None if ok else "entry_grant_failed",
+        }
+
+    async def _apply_zap_faction_bonus(self, trigger_user: str, channel):
+        faction_cog = self.bot.get_cog("FactionCog")
+        if not faction_cog or not hasattr(faction_cog, "service"):
+            return
+
+        service = faction_cog.service
+        faction = service.add_influence_for_user_faction(trigger_user, influence_amount=1)
+        if not faction:
+            return
+
+        stream_active_members = service.get_recent_active_members()
+        if len(stream_active_members) < 2:
+            return
+
+        active_members = service.get_recent_active_members_for_faction(faction.id)
+        if len(active_members) < 2:
+            return
+
+        candidates = [user for user in active_members if user != trigger_user]
+        if not candidates:
+            candidates = [trigger_user] if trigger_user in active_members else []
+        if not candidates:
+            return
+
+        recipient = random.choice(candidates)
+        reward_result = None
+        if hasattr(faction_cog, "award_entry_reward"):
+            reward_result = faction_cog.award_entry_reward(
+                recipient,
+                1,
+                reward_type="zap_faction_echo",
+            )
+
+        if not reward_result:
+            if hasattr(self.state, "add_entries_capped"):
+                capped = self.state.add_entries_capped(recipient, 1)
+                reward_result = {
+                    "applied": int(capped.get("applied", 0)),
+                    "gmb_applied": False,
+                }
+            else:
+                ok = self.state.add_entries(recipient, 1)
+                reward_result = {"applied": 1 if ok else 0, "gmb_applied": False}
+
+        if reward_result.get("applied", 0) <= 0:
+            return
+
+        flavor = ""
+        if reward_result.get("derpdawg_floor_applied"):
+            flavor += " 🐾 The Derp relic raised this 1-entry reward to 2 before multipliers."
+        if reward_result.get("gmb_applied"):
+            flavor += " ⚡ Golden Milkbone resonance doubled the payout."
+
+        await channel.send(
+            f"⚡ {faction.name} faction echo: @{recipient} gains +{reward_result['applied']} bonus entries from @{trigger_user}'s zap!{flavor}"
+        )
+
     @commands.command(name="badbeat")
     async def badbeat_command(self, ctx):
         """Show the current bad beat jackpot in chat."""
@@ -422,25 +552,31 @@ class RaffleCog(commands.Cog):
         """Called when an SFX command is used. Pass username and ctx for messaging."""
         awarded, message = self.state.check_zap_and_award(username, trigger_type='sfx')
         if awarded and message:
+            self._award_zap_trigger_entry(username.lower())
             # Add a small delay to allow the SFX command to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
+            await self._apply_zap_faction_bonus(username.lower(), ctx)
 
     async def trigger_zap_song(self, username, ctx):
         """Called when a song request (!srx) is used. Pass username and ctx for messaging."""
         awarded, message = self.state.check_zap_and_award(username, trigger_type='song')
         if awarded and message:
+            self._award_zap_trigger_entry(username.lower())
             # Add a small delay to allow the song request to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
+            await self._apply_zap_faction_bonus(username.lower(), ctx)
 
     async def trigger_zap_gif(self, username, ctx):
         """Called when a GIF command is used. Pass username and ctx for messaging."""
         awarded, message = self.state.check_zap_and_award(username, trigger_type='gif')
         if awarded and message:
+            self._award_zap_trigger_entry(username.lower())
             # Add a small delay to allow the GIF command to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
+            await self._apply_zap_faction_bonus(username.lower(), ctx)
         
     def __init__(self, bot):
         self.bot = bot
@@ -847,6 +983,31 @@ class RaffleCog(commands.Cog):
                 await ctx.send(f"User @{recipient} is not eligible for the raffle.")
             return
 
+        if cmd == "remove":
+            if not ctx.author.is_mod:
+                await ctx.send("Only mods can remove entries from users.")
+                return
+            if len(args) < 3:
+                await ctx.send("Usage: !raffle remove <user> <count>")
+                return
+            target = args[1].lstrip("@").lower()
+            try:
+                n = int(args[2])
+            except Exception:
+                await ctx.send("Please enter a positive whole number.")
+                return
+            ok, result = self.state.remove_entries(target, n)
+            if not ok:
+                await ctx.send(result)
+                return
+            removed = result
+            remaining = self.state.user_entries(target)
+            await ctx.send(
+                f"Removed {removed} entr{'y' if removed == 1 else 'ies'} from @{target}. "
+                f"@{target} now has {remaining} entr{'y' if remaining == 1 else 'ies'}."
+            )
+            return
+
         if cmd == "ignore":
             if not ctx.author.is_mod:
                 await ctx.send("Only mods can ignore users from the raffle.")
@@ -1000,9 +1161,11 @@ class RaffleCog(commands.Cog):
         # Check if this chat message triggers the zap
         awarded, zap_message = self.state.check_zap_and_award(user, trigger_type='chat')
         if awarded and zap_message:
+            self._award_zap_trigger_entry(user)
             # Add a small delay to allow the triggering message to appear in chat first
             await asyncio.sleep(0.5)
             await message.channel.send(zap_message)
+            await self._apply_zap_faction_bonus(user, message.channel)
         
         if self.state.is_open and user not in self.state.chat_awarded and not self.state.is_ignored(user):
             if not self.state.first_chatter_awarded:

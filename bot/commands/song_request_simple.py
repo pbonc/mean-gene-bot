@@ -3,9 +3,10 @@ import json
 import logging
 import asyncio
 import difflib
+from collections import deque
 from twitchio.ext import commands
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Import the new music sheets manager
 try:
@@ -328,6 +329,15 @@ class SimpleSongManager:
         # Song cooldown system (20 minutes)
         self.song_cooldowns = {}  # {song_number: last_played_timestamp}
         self.cooldown_minutes = 20
+
+        # High-variety autoplay controls (auto mode only)
+        self.autoplay_recent_max = 60
+        self.autoplay_artist_spacing = 4
+        self.autoplay_recent_ids = deque(maxlen=self.autoplay_recent_max)
+        self.autoplay_recent_artists = deque(maxlen=max(20, self.autoplay_artist_spacing * 5))
+        self.autoplay_shuffle_bag = []
+        self.autoplay_state_file = os.path.join(DATA_DIR, "autoplay_state.json")
+        self._load_autoplay_state()
         
         # Download Queue System (replaces concurrent pre-cache tasks)
         self.download_queue = DownloadQueue(self.logger)
@@ -389,6 +399,102 @@ class SimpleSongManager:
             
         except Exception as e:
             self.logger.error(f"Error checking cache status: {e}")
+
+    def _get_song_artist_key(self, song_info: Optional[Dict]) -> Optional[str]:
+        """Build a normalized artist token for spacing in autoplay mode."""
+        if not isinstance(song_info, dict):
+            return None
+        artist = (song_info.get('artist') or '').strip().lower()
+        return artist or None
+
+    def _load_autoplay_state(self):
+        """Load persisted autoplay history/cooldowns to preserve variety across restarts."""
+        try:
+            if not os.path.exists(self.autoplay_state_file):
+                return
+
+            with open(self.autoplay_state_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            recent_ids = data.get('recent_ids', [])
+            if isinstance(recent_ids, list):
+                cleaned_ids = [str(x) for x in recent_ids if x]
+                self.autoplay_recent_ids = deque(cleaned_ids[-self.autoplay_recent_max:], maxlen=self.autoplay_recent_max)
+
+            recent_artists = data.get('recent_artists', [])
+            if isinstance(recent_artists, list):
+                cleaned_artists = [str(x).strip().lower() for x in recent_artists if str(x).strip()]
+                max_artists = max(20, self.autoplay_artist_spacing * 5)
+                self.autoplay_recent_artists = deque(cleaned_artists[-max_artists:], maxlen=max_artists)
+
+            cooldowns_raw = data.get('song_cooldowns', {})
+            now = datetime.now()
+            rebuilt_cooldowns = {}
+            if isinstance(cooldowns_raw, dict):
+                for song_num, dt_str in cooldowns_raw.items():
+                    try:
+                        ts = datetime.fromisoformat(str(dt_str).replace('Z', '+00:00'))
+                        if ts.tzinfo is not None:
+                            ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
+                        if ts + timedelta(minutes=self.cooldown_minutes) > now:
+                            rebuilt_cooldowns[int(song_num)] = ts
+                    except Exception:
+                        continue
+            self.song_cooldowns = rebuilt_cooldowns
+
+            bag = data.get('shuffle_bag', [])
+            if isinstance(bag, list):
+                self.autoplay_shuffle_bag = [str(x) for x in bag if x]
+
+            self.logger.info(
+                f"Loaded autoplay state: recent={len(self.autoplay_recent_ids)}, "
+                f"artist_recent={len(self.autoplay_recent_artists)}, cooldowns={len(self.song_cooldowns)}, "
+                f"bag={len(self.autoplay_shuffle_bag)}"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to load autoplay state: {e}")
+
+    def _save_autoplay_state(self):
+        """Persist autoplay state asynchronously to keep stream behavior stable across restarts."""
+        try:
+            asyncio.create_task(self._save_autoplay_state_async())
+        except Exception:
+            pass
+
+    async def _save_autoplay_state_async(self):
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(self.executor, self._save_autoplay_state_sync)
+        except Exception as e:
+            self.logger.error(f"Failed to save autoplay state async: {e}")
+
+    def _save_autoplay_state_sync(self):
+        try:
+            payload = {
+                'recent_ids': list(self.autoplay_recent_ids),
+                'recent_artists': list(self.autoplay_recent_artists),
+                'song_cooldowns': {str(num): ts.isoformat() for num, ts in self.song_cooldowns.items()},
+                'shuffle_bag': list(self.autoplay_shuffle_bag),
+            }
+            with open(self.autoplay_state_file, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.logger.error(f"Failed to save autoplay state sync: {e}")
+
+    def _rebuild_autoplay_shuffle_bag(self):
+        """Rebuild shuffled autoplay candidates for high-variety playback."""
+        import random
+
+        song_ids = []
+        for song in self.playlist_cache:
+            song_id = self._get_song_identity(song)
+            if song_id:
+                song_ids.append(song_id)
+
+        random.shuffle(song_ids)
+        self.autoplay_shuffle_bag = song_ids
+        self._save_autoplay_state()
+        self.logger.info(f"Rebuilt autoplay shuffle bag with {len(song_ids)} songs")
 
     def _sync_queue_to_sheets(self):
         """Sync current queue to Google Sheets (if configured)"""
@@ -960,6 +1066,36 @@ class SimpleSongManager:
         from datetime import datetime
         song_number = song.get('number') if isinstance(song, dict) else song
         self.song_cooldowns[song_number] = datetime.now()
+        self._save_autoplay_state()
+
+    def get_autoplay_variety_status(self) -> Dict:
+        """Return lightweight autoplay variety diagnostics for moderator visibility."""
+        now = datetime.now()
+        expired = []
+        for song_number, last_played in self.song_cooldowns.items():
+            if last_played + timedelta(minutes=self.cooldown_minutes) <= now:
+                expired.append(song_number)
+
+        for song_number in expired:
+            self.song_cooldowns.pop(song_number, None)
+
+        if expired:
+            self._save_autoplay_state()
+
+        artist_window = list(self.autoplay_recent_artists)[-self.autoplay_artist_spacing:]
+        bag_total = len(self.autoplay_shuffle_bag)
+        playlist_total = len(self.playlist_cache)
+
+        return {
+            'playlist_total': playlist_total,
+            'bag_remaining': bag_total,
+            'bag_fill_percent': round((bag_total / playlist_total) * 100, 1) if playlist_total else 0.0,
+            'recent_tracks': len(self.autoplay_recent_ids),
+            'recent_tracks_max': self.autoplay_recent_max,
+            'artist_spacing': self.autoplay_artist_spacing,
+            'artist_window': artist_window,
+            'active_cooldowns': len(self.song_cooldowns),
+        }
     
     async def start_smart_pre_cache(self, song_info, priority=None):
         """Queue a song for download (replaces old concurrent pre-cache system)"""
@@ -1119,14 +1255,53 @@ class SimpleSongManager:
                 self.logger.error(f"Error downloading: {error_str}")
             return False
     
-    async def pre_cache_next_random(self):
+    def _get_song_identity(self, song_info: Optional[Dict]) -> Optional[str]:
+        """Build a stable song identity token for repeat prevention."""
+        if not isinstance(song_info, dict):
+            return None
+
+        number = song_info.get('number')
+        if number is not None:
+            return f"num:{number}"
+
+        youtube_url = song_info.get('youtube_url')
+        if youtube_url:
+            return f"url:{youtube_url}"
+
+        title = (song_info.get('title') or '').strip().lower()
+        artist = (song_info.get('artist') or '').strip().lower()
+        if title or artist:
+            return f"meta:{title}|{artist}"
+
+        return None
+
+    def _record_autoplay_song(self, song_info: Optional[Dict]):
+        """Track recent autoplay picks to avoid short-cycle repeats."""
+        song_id = self._get_song_identity(song_info)
+        if song_id:
+            self.autoplay_recent_ids.append(song_id)
+        artist_key = self._get_song_artist_key(song_info)
+        if artist_key:
+            self.autoplay_recent_artists.append(artist_key)
+        self._save_autoplay_state()
+
+    async def pre_cache_next_random(self, exclude_song: Optional[Dict] = None):
         """Queue the next likely random song for smooth auto-playlist"""
         try:
             if not self.playlist_cache:
                 return
-                
+            excluded_ids = set()
+            exclude_id = self._get_song_identity(exclude_song)
+            if exclude_id:
+                excluded_ids.add(exclude_id)
+
+            if self.next_random_cached:
+                cached_id = self._get_song_identity(self.next_random_cached)
+                if cached_id:
+                    excluded_ids.add(cached_id)
+
             # Get next random song (same logic as get_random_playlist_song)
-            random_song = self.get_random_playlist_song()
+            random_song = self.get_random_playlist_song(extra_excluded_ids=excluded_ids)
             if not random_song or not random_song.get('youtube_url'):
                 return
                 
@@ -1808,7 +1983,13 @@ class SimpleSongManager:
             if is_hot_queue:
                 audio_file = await self.download_hot_queue_audio(youtube_url, song_info['title'], chat_channel)
             else:
-                audio_file = await self.download_and_normalize_audio(youtube_url, song_info['title'], chat_channel)
+                allow_fallback_cached = username != "AutoPlaylist"
+                audio_file = await self.download_and_normalize_audio(
+                    youtube_url,
+                    song_info['title'],
+                    chat_channel,
+                    allow_fallback_cached=allow_fallback_cached,
+                )
             
             if not audio_file:
                 self.logger.warning(f"Could not download audio for: {song_info['title']}")
@@ -1861,7 +2042,10 @@ class SimpleSongManager:
             
             # Increment play count for playlist songs (not user requests)
             if username == "AutoPlaylist":
+                self._record_autoplay_song(effective_song_info)
                 self.increment_play_count(effective_song_info)
+            elif effective_song_info.get('number'):
+                self.update_last_played(effective_song_info)
             
             return True
             
@@ -1977,75 +2161,131 @@ class SimpleSongManager:
             return f"▶️ Playing{backend_info}"
         return f"⏹️ Stopped{backend_info}"
 
-    def get_random_playlist_song(self):
-        """Get a song from the curated playlist with improved play count balancing"""
+    def get_random_playlist_song(self, extra_excluded_ids: Optional[set] = None):
+        """Pick next auto-play song using a high-variety shuffle-bag policy.
+
+        Priority:
+        1) Shuffle-bag with strict filters (recent songs, artist spacing, cooldown).
+        2) Relax artist spacing.
+        3) Relax recent-song filter.
+        4) Rebuild bag and retry before emergency fallback.
+        """
         if not self.playlist_cache:
             return None
-        
+
         import random
-        
-        # Sort songs by play count (least played first)
-        sorted_songs = sorted(self.playlist_cache, key=lambda x: x.get('play_count', 0))
-        
-        # Find the minimum and maximum play counts
-        min_play_count = sorted_songs[0].get('play_count', 0)
-        max_play_count = sorted_songs[-1].get('play_count', 0)
-        
-        # If all songs have the same play count, pick randomly
-        if min_play_count == max_play_count:
-            selected_song = random.choice(self.playlist_cache)
-            self.logger.info(f"Selected random song (all equal play_count {min_play_count}): {selected_song['title']} by {selected_song['artist']}")
-            return selected_song
-        
-        # Create weighted selection pool based on inverse play count
-        weighted_songs = []
+
+        excluded_ids = set(self.autoplay_recent_ids)
+        if extra_excluded_ids:
+            excluded_ids.update(extra_excluded_ids)
+
+        id_to_song = {}
         for song in self.playlist_cache:
-            play_count = song.get('play_count', 0)
-            
-            # Calculate weight: songs with lower play counts get exponentially higher weights
-            # Formula gives much higher weight to less played songs
-            weight = max_play_count - play_count + 1
-            
-            # Extra boost for completely unplayed songs
-            if play_count == 0:
-                weight *= 5  # 5x weight for unplayed songs
-            elif play_count <= min_play_count + 1:
-                weight *= 3  # 3x weight for songs played once or twice
-            
-            # Add song multiple times based on weight
-            weighted_songs.extend([song] * weight)
-        
-        # Select from weighted pool
-        selected_song = random.choice(weighted_songs)
-        play_count = selected_song.get('play_count', 0)
-        self.logger.info(f"Selected weighted random song (play_count {play_count}): {selected_song['title']} by {selected_song['artist']}")
-        
-        return selected_song
+            song_id = self._get_song_identity(song)
+            if song_id:
+                id_to_song[song_id] = song
+
+        blocked_artists = set(list(self.autoplay_recent_artists)[-self.autoplay_artist_spacing:])
+        recent_ids = set(self.autoplay_recent_ids)
+
+        def _is_eligible(song, enforce_recent=True, enforce_artist=True, enforce_cooldown=True):
+            song_id = self._get_song_identity(song)
+            if song_id and song_id in excluded_ids:
+                return False
+            if enforce_recent and song_id and song_id in recent_ids:
+                return False
+            if enforce_cooldown and self.is_song_on_cooldown(song):
+                return False
+            if enforce_artist:
+                artist_key = self._get_song_artist_key(song)
+                if artist_key and artist_key in blocked_artists:
+                    return False
+            return True
+
+        def _pick_from_bag(enforce_recent=True, enforce_artist=True, enforce_cooldown=True):
+            idx = 0
+            while idx < len(self.autoplay_shuffle_bag):
+                song_id = self.autoplay_shuffle_bag[idx]
+                song = id_to_song.get(song_id)
+                if not song:
+                    self.autoplay_shuffle_bag.pop(idx)
+                    continue
+                if _is_eligible(song, enforce_recent, enforce_artist, enforce_cooldown):
+                    self.autoplay_shuffle_bag.pop(idx)
+                    self._save_autoplay_state()
+                    return song
+                idx += 1
+            return None
+
+        if not self.autoplay_shuffle_bag:
+            self._rebuild_autoplay_shuffle_bag()
+
+        choice = _pick_from_bag(enforce_recent=True, enforce_artist=True, enforce_cooldown=True)
+        reason = "shuffle-bag strict"
+        if not choice:
+            choice = _pick_from_bag(enforce_recent=True, enforce_artist=False, enforce_cooldown=True)
+            reason = "shuffle-bag relaxed artist spacing"
+        if not choice:
+            choice = _pick_from_bag(enforce_recent=False, enforce_artist=False, enforce_cooldown=True)
+            reason = "shuffle-bag relaxed recent filter"
+
+        if not choice:
+            self._rebuild_autoplay_shuffle_bag()
+            choice = _pick_from_bag(enforce_recent=True, enforce_artist=True, enforce_cooldown=True)
+            reason = "reshuffled bag strict"
+        if not choice:
+            choice = _pick_from_bag(enforce_recent=False, enforce_artist=False, enforce_cooldown=True)
+            reason = "reshuffled bag relaxed"
+
+        if not choice:
+            fallback_pool = [
+                song for song in self.playlist_cache
+                if self._get_song_identity(song) not in excluded_ids and not self.is_song_on_cooldown(song)
+            ]
+            if not fallback_pool:
+                fallback_pool = [song for song in self.playlist_cache if self._get_song_identity(song) not in excluded_ids]
+            if not fallback_pool:
+                fallback_pool = list(self.playlist_cache)
+            choice = random.choice(fallback_pool)
+            reason = "emergency fallback pool"
+
+        self.logger.info(f"Selected random song ({reason}): {choice['title']} by {choice['artist']}")
+        return choice
 
     def increment_play_count(self, song_info):
-        """Increment the play count for a song and save to file"""
+        """Increment play count and stamp last_played for a playlist song."""
         try:
-            # Find the song in the playlist cache
+            ts = datetime.now(timezone.utc).isoformat()
             for song in self.playlist_cache:
-                if (song.get('youtube_url') == song_info.get('youtube_url') or 
-                    (song.get('title') == song_info.get('title') and 
-                     song.get('artist') == song_info.get('artist'))):
-                    
-                    # Increment play count
+                if (song.get('number') and song.get('number') == song_info.get('number')) or \
+                   (song.get('youtube_url') and song.get('youtube_url') == song_info.get('youtube_url')) or \
+                   (song.get('title') == song_info.get('title') and song.get('artist') == song_info.get('artist')):
                     current_count = song.get('play_count', 0)
                     song['play_count'] = current_count + 1
-                    
-                    # Add song to cooldown to prevent immediate re-requests
+                    song['last_played'] = ts
                     self.add_song_cooldown(song)
-                    
-                    self.logger.info(f"Incremented play count for '{song['title']}' by {song['artist']}: {current_count} -> {song['play_count']} (added to {self.cooldown_minutes}-minute cooldown)")
-                    
-                    # Save the updated playlist asynchronously
+                    self.logger.info(
+                        f"Incremented play count for '{song['title']}' by {song['artist']}: {current_count} -> {song['play_count']} (added to {self.cooldown_minutes}-minute cooldown)"
+                    )
                     asyncio.create_task(self._save_playlist_async())
-                    
                     break
         except Exception as e:
             self.logger.error(f"Failed to increment play count: {e}")
+
+    def update_last_played(self, song_info):
+        """Stamp last_played for a playlist song without changing play_count."""
+        try:
+            ts = datetime.now(timezone.utc).isoformat()
+            for song in self.playlist_cache:
+                if (song.get('number') and song.get('number') == song_info.get('number')) or \
+                   (song.get('youtube_url') and song.get('youtube_url') == song_info.get('youtube_url')) or \
+                   (song.get('title') == song_info.get('title') and song.get('artist') == song_info.get('artist')):
+                    song['last_played'] = ts
+                    asyncio.create_task(self._save_playlist_async())
+                    self.logger.info(f"Updated last_played for '{song['title']}' by {song['artist']} -> {ts}")
+                    break
+        except Exception as e:
+            self.logger.error(f"Failed to update last_played: {e}")
     
     async def _save_playlist_async(self):
         """Save playlist cache asynchronously"""
@@ -2284,7 +2524,7 @@ class SimpleSongManager:
                 
             if random_song:
                 # Start pre-caching the next random song while this one plays
-                asyncio.create_task(self.pre_cache_next_random())
+                asyncio.create_task(self.pre_cache_next_random(exclude_song=random_song))
                 
                 success = await self.play_song(random_song, "AutoPlaylist", chat_channel)
                 if success:
@@ -2406,6 +2646,30 @@ class SongRequestCog(commands.Cog):
             if self.playlist_task and not self.playlist_task.done():
                 self.playlist_task.cancel()
             self.playlist_task = asyncio.create_task(self._run_playlist(ctx.channel))
+        elif action_or_request.lower() == "remove":
+            # Remove the most recent queued song from this user (not catalog deletion)
+            removed = None
+            for idx in range(len(self.manager.current_queue) - 1, -1, -1):
+                song_info, queue_username, timestamp = self.manager.current_queue[idx]
+                if queue_username.lower() == username.lower():
+                    removed = self.manager.current_queue.pop(idx)
+                    break
+            if not removed:
+                await ctx.send("❌ You don't have any songs in the queue to remove.")
+                return
+
+            song_info, queue_username, timestamp = removed
+            refund_text = ""
+            quarters_spent = song_info.get('quarters_spent', 0)
+            if quarters_spent:
+                self.manager.give_quarters(username, quarters_spent)
+                refund_text = f" Refunded {quarters_spent} quarter(s)."
+
+            asyncio.create_task(self.manager._async_sync_queue_to_sheets())
+
+            title = song_info.get('title', 'Your song')
+            await ctx.send(f"🗑️ Removed your last queued song: {title}.{refund_text}")
+            return
             await ctx.send("▶️ SRX started.")
             return
         elif action_or_request.lower() == "stop":
@@ -2808,6 +3072,28 @@ class SongRequestCog(commands.Cog):
         msg += f"{status['stats']['total_failed']} failed, "
         msg += f"{status['stats']['total_queued']} total queued"
         
+        await ctx.send(msg)
+
+    @commands.command(name="srxvariety", aliases=["autoplaystats", "varietystats"])
+    async def srx_variety_status(self, ctx):
+        """Show autoplay variety diagnostics (Mod only)."""
+        if not ctx.author.is_mod:
+            await ctx.send("❌ Only mods can check autoplay variety status.")
+            return
+
+        stats = self.manager.get_autoplay_variety_status()
+
+        artist_window = stats['artist_window']
+        artist_window_text = ", ".join(artist_window) if artist_window else "(none)"
+
+        msg = "🎲 **SRX Autoplay Variety Status**\n"
+        msg += f"• Playlist songs: {stats['playlist_total']}\n"
+        msg += f"• Shuffle bag remaining: {stats['bag_remaining']} ({stats['bag_fill_percent']}%)\n"
+        msg += f"• Recent track memory: {stats['recent_tracks']}/{stats['recent_tracks_max']}\n"
+        msg += f"• Artist spacing window: {stats['artist_spacing']}\n"
+        msg += f"• Current artist blocklist: {artist_window_text}\n"
+        msg += f"• Active cooldown entries: {stats['active_cooldowns']}"
+
         await ctx.send(msg)
 
     async def _handle_add_song_from_url(self, ctx, youtube_url: str):

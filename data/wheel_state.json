@@ -1,32 +1,30 @@
 {
   "slots": {
-    "deputydawg777": 1
+    "hoplon5": 1
   },
   "scores": {
-    "livesuieng": 1,
-    "roningaidin": 1,
+    "terminallynormal": 1,
     "snipah201z": 1,
-    "fal_the_warlock": 1,
-    "colonel_dinggus": 1,
-    "palmarbugle3069": 1,
-    "iamdar": 1
+    "desktoppilotsociety": 1,
+    "nate048": 1,
+    "tankahdelphia": 1,
+    "fal_the_warlock": 1
   },
-  "last_winner": "iamdar",
+  "last_winner": "fal_the_warlock",
   "remove_on_win": true,
   "wheel_locked": false,
-  "last_man_standing": true,
+  "last_man_standing": false,
   "order": [
-    "deputydawg777"
+    "hoplon5"
   ],
   "colors": {
-    "roningaidin": "#2dd4bf",
-    "deputydawg777": "#38bdf8",
-    "snipah201z": "#6366f1",
+    "hoplon5": "#ffffff",
+    "tankahdelphia": "#38bdf8",
+    "nate048": "#6366f1",
     "fal_the_warlock": "#fc0303",
-    "livesuieng": "#abcd91",
-    "colonel_dinggus": "#f59e0b",
-    "palmarbugle3069": "#a3e635",
-    "iamdar": "#34d399"
+    "terminallynormal": "#a55a55",
+    "desktoppilotsociety": "#f59e0b",
+    "snipah201z": "#a3e635"
   },
   "multiplier": 1,
   "manual_users": []

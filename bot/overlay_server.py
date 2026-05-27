@@ -4,6 +4,7 @@ import os
 import json
 from aiohttp import web
 import asyncio
+from bot.grid_state import GridManager
 
 overlay_clients = set()
 # Track clients that want AS_overlay messages
@@ -73,17 +74,51 @@ def _load_rpg_payload_from_files():
         session = state.get("session", {})
         users = state.get("users", {})
         party = []
-        for username in session.get("participants", []):
+        for idx, username in enumerate(session.get("participants", []), start=1):
             user = users.get(username, {})
             class_name = user.get("class_name", "Derp Clone")
             if user.get("is_revenant"):
                 class_name = "Revenant"
+            hp_max = int(user.get("hp_max", 10) or 10)
+            hp = int(user.get("hp_current", hp_max) or hp_max)
+            hp = max(0, min(hp, hp_max))
             party.append({
+                "number": idx,
                 "name": username,
                 "class": class_name,
-                "hp": user.get("hp_current", 10),
-                "hp_max": user.get("hp_max", 10),
+                "hp": hp,
+                "hp_max": hp_max,
+                "is_totem": False,
+                "is_imp": False,
+                "is_undead": False,
+                "is_pet": False,
+                "goldrpg_ready": bool(user.get("hop_goldrpg_ready")),
+                "special_ready": False,
+                "special_icon": None,
+                "donut_buff_active": False,
+                "gold_glow": False,
             })
+
+            # Add any prince summons owned by this participant so fallback payloads still show them
+            for summon in session.get("prince_summons", []):
+                if str(summon.get("owner", "")).lower() != str(username).lower():
+                    continue
+                if not summon.get("alive"):
+                    continue
+                summon_hp_max = int(summon.get("max_hp", 1) or 1)
+                summon_hp = int(summon.get("hp", summon_hp_max) or summon_hp_max)
+                summon_hp = max(0, min(summon_hp, summon_hp_max))
+                party.append({
+                    "number": None,
+                    "name": f"{username}'s {str(summon.get('type', 'Prince')).title()}",
+                    "class": str(summon.get("type", "Prince")).title(),
+                    "hp": summon_hp,
+                    "hp_max": summon_hp_max,
+                    "is_totem": False,
+                    "is_imp": False,
+                    "is_undead": False,
+                    "is_pet": True,
+                })
         return {
             "type": "rpg_state",
             "battle_active": bool(session.get("battle_active")),
@@ -133,6 +168,18 @@ async def websocket_handler(request):
                                 pass
                     if data.get('type') == 'request_rpg_state':
                         payload = latest_rpg_state or _load_rpg_payload_from_files()
+                        if payload:
+                            try:
+                                await ws.send_json(payload)
+                            except Exception:
+                                pass
+                    if data.get('type') == 'request_grid_state':
+                        payload = latest_grid_state
+                        if not payload:
+                            try:
+                                payload = GridManager().get_payload()
+                            except Exception:
+                                payload = None
                         if payload:
                             try:
                                 await ws.send_json(payload)
@@ -191,11 +238,17 @@ async def allen_ginter_overlay(request):
 async def nfl_break_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "nfl_break_overlay.html"))
 
+async def nba_break_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "nba_break_overlay.html"))
+
 async def wheel_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "wheel_overlay.html"))
 
 async def battle_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "battle_overlay.html"))
+
+async def grid_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "grid_overlay.html"))
 
 async def get_raffle_data(request):
     """API endpoint to return current raffle state"""
@@ -371,6 +424,7 @@ async def shutdown():
 latest_ticker_message = ""
 latest_wheel_state = None
 latest_rpg_state = None
+latest_grid_state = None
 
 
 async def rpg_state_task(interval: float = 2.0):
@@ -388,7 +442,6 @@ async def rpg_state_task(interval: float = 2.0):
         await asyncio.sleep(max(0.5, interval))
 
 async def as_overlay_task():
-    logging.basicConfig(level=logging.INFO)
     import time
     import random
     # This task sends the latest full ticker string (as produced by main.ticker_cycle_task)
@@ -413,13 +466,15 @@ async def as_overlay_task():
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
-    global latest_ticker_message, latest_wheel_state, latest_rpg_state
+    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_grid_state
     if message.get("type") == "ticker" and "text" in message:
         latest_ticker_message = message["text"]
     if message.get("type") == "wheel_state":
         latest_wheel_state = message
     if message.get("type") == "rpg_state":
         latest_rpg_state = message
+    if message.get("type") == "grid_state":
+        latest_grid_state = message
     
     msg_type = message.get("type", "unknown")
     logging.info(f"Broadcasting {msg_type} message to {len(overlay_clients)} overlay clients")
@@ -447,8 +502,10 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/anime", anime_overlay)
     app.router.add_get("/ag", allen_ginter_overlay)
     app.router.add_get("/nfl", nfl_break_overlay)
+    app.router.add_get("/nba", nba_break_overlay)
     app.router.add_get("/wheel", wheel_overlay)
     app.router.add_get("/battle", battle_overlay)
+    app.router.add_get("/grid", grid_overlay)
 
     # Tetris card drop overlay
     app.router.add_get("/tetris", tetris_cards_overlay)

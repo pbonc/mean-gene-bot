@@ -9,6 +9,12 @@ import json
 from dotenv import load_dotenv, set_key
 import logging
 
+
+def _normalize_access_token(access_token: str | None) -> str:
+    if not access_token:
+        return ""
+    return str(access_token).replace("oauth:", "").strip()
+
 def refresh_twitch_token():
     """
     Refresh the Twitch OAuth token using the refresh token.
@@ -84,6 +90,8 @@ def validate_twitch_token(access_token):
     Returns:
         tuple: (valid: bool, message: str)
     """
+    access_token = _normalize_access_token(access_token)
+
     if not access_token:
         return False, "No access token provided"
         
@@ -102,6 +110,23 @@ def validate_twitch_token(access_token):
     except Exception as e:
         return False, f"Error validating token: {e}"
 
+
+def get_twitch_token_details(access_token):
+    """Return raw Twitch validate payload for diagnostics."""
+    access_token = _normalize_access_token(access_token)
+    if not access_token:
+        return False, "No access token provided"
+
+    url = "https://id.twitch.tv/oauth2/validate"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            return False, f"Validation failed with status {response.status_code}"
+        return True, response.json()
+    except Exception as e:
+        return False, f"Error reading token details: {e}"
+
 def auto_refresh_if_needed():
     """
     Check if the current token is valid, and refresh if needed.
@@ -110,7 +135,7 @@ def auto_refresh_if_needed():
         tuple: (success: bool, message: str)
     """
     load_dotenv()
-    current_token = os.getenv("TWITCH_OAUTH_TOKEN")
+    current_token = _normalize_access_token(os.getenv("TWITCH_OAUTH_TOKEN"))
     
     if not current_token:
         return False, "No TWITCH_OAUTH_TOKEN found in .env"
@@ -131,7 +156,7 @@ def auto_refresh_if_needed():
     if success:
         # Reload environment to get new token
         load_dotenv(override=True)
-        new_token = os.getenv("TWITCH_OAUTH_TOKEN")
+        new_token = _normalize_access_token(os.getenv("TWITCH_OAUTH_TOKEN"))
         
         # Validate new token
         new_valid, new_msg = validate_twitch_token(new_token)

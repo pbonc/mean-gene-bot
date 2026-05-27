@@ -3,6 +3,7 @@ import os
 import random
 import re
 from twitchio.ext import commands
+from bot.overlay_server import broadcast_overlay_message
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
@@ -12,6 +13,13 @@ WOTD_STATE_FILE = os.path.join(DATA_DIR, "wotd_state.json")
 WOTD_GENERIC_FILE = os.path.join(DATA_DIR, "wotd_generic_library.json")
 WOTD_STREAM_FILE = os.path.join(DATA_DIR, "wotd_stream_terms.json")
 EMOTES_FILE = os.path.join(DATA_DIR, "channel_emotes.json")
+WOTD_SHOWER_COUNT = 1260
+WOTD_SHOWER_DURATION_MS = 15000
+WOTD_SHOWER_EMOJIS = [
+    "🎉", "✨", "🔥", "💥", "🌟", "⚡", "🎊", "🎈", "💫", "🪩",
+    "🥳", "😎", "🤖", "👑", "🚀", "🧨", "🌈", "🍀", "💎", "🔔",
+    "🦄", "🎯", "🕹️", "🎵", "🌊", "🍕", "🍩", "🍿", "🧃", "🐉",
+]
 
 
 class WOTDState:
@@ -175,30 +183,31 @@ class WOTDCog(commands.Cog):
                 print(f"[WOTD] Error loading emotes: {e}")
         return []
 
-    def generate_emote_spam(self):
-        """Generate 5 messages of ~500 char emote chaos (Pee Wee's Playhouse style)"""
-        emotes = self.load_emotes()
-        if not emotes:
-            return None
-        
-        prefix = "iamdar"
-        messages = []
-        
-        for _ in range(5):
-            # Build message with random emotes until we reach ~500 chars
-            message = ""
-            while len(message) < 480:
-                emote = random.choice(emotes)
-                emote_text = f"{prefix}{emote} "
-                if len(message) + len(emote_text) <= 500:
-                    message += emote_text
-                else:
-                    break
-            
-            if message.strip():
-                messages.append(message.strip())
-        
-        return messages if messages else None
+    def generate_emote_shower_tokens(self, count=60):
+        """Generate hardcoded non-Twitch emoji tokens for on-screen shower effect."""
+        safe_count = max(60, min(3000, int(count)))
+        tokens = [random.choice(WOTD_SHOWER_EMOJIS) for _ in range(safe_count)]
+        return tokens if tokens else None
+
+    @commands.command(name="wotdtest")
+    async def wotdtest_command(self, ctx):
+        """Trigger the WOTD overlay emote shower for testing."""
+        if not ctx.author.is_mod:
+            await ctx.send("❌ Only mods can use this command.")
+            return
+
+        emote_tokens = self.generate_emote_shower_tokens(count=WOTD_SHOWER_COUNT)
+        if not emote_tokens:
+            await ctx.send("No emotes available for WOTD effect test.")
+            return
+
+        await broadcast_overlay_message({
+            "type": "emote_shower",
+            "emotes": emote_tokens,
+            "count": WOTD_SHOWER_COUNT,
+            "duration": WOTD_SHOWER_DURATION_MS,
+        })
+        await ctx.send("WOTD overlay effect test fired.")
 
     @commands.command(name="wotd")
     async def wotd_command(self, ctx, *args):
@@ -308,19 +317,21 @@ class WOTDCog(commands.Cog):
                 raffle_cog = self.bot.get_cog("RaffleCog")
                 if raffle_cog:
                     raffle_cog.state.add_entries(username, prize)
-                
-                # Generate emote spam (Pee Wee's Playhouse style)
-                emote_messages = self.generate_emote_spam()
-                
+
                 # Send main announcement
                 await message.channel.send(f"🎉 @{username} found the Word of the Day: \"{word}\"! +{prize} raffle entries!")
-                
-                # Spam emotes (5 messages of chaos)
-                if emote_messages:
-                    for emote_msg in emote_messages:
-                        await message.channel.send(emote_msg)
-                
-                print(f"[WOTD] Winner: {username} found \"{word}\" - Awarded {prize} entries + EMOTE SPAM!")
+
+                # Trigger overlay emote shower instead of chat spam
+                emote_tokens = self.generate_emote_shower_tokens(count=70)
+                if emote_tokens:
+                    await broadcast_overlay_message({
+                        "type": "emote_shower",
+                        "emotes": emote_tokens,
+                        "count": WOTD_SHOWER_COUNT,
+                        "duration": WOTD_SHOWER_DURATION_MS,
+                    })
+
+                print(f"[WOTD] Winner: {username} found \"{word}\" - Awarded {prize} entries + OVERLAY EMOTE SHOWER!")
 
 
 def prepare(bot):

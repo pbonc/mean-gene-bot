@@ -1,7 +1,7 @@
 {
   "is_active": true,
-  "current_word": "domain",
-  "prize_value": 30,
-  "stream_bias_percent": 65,
+  "current_word": "practitioner",
+  "prize_value": 20,
+  "stream_bias_percent": 45,
   "winner": null
 }
