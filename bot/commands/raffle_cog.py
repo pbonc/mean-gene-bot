@@ -29,6 +29,7 @@ class SimpleRaffleState:
         self.entries = {}  # user -> int
         self.picks = {}    # 'NNN' -> user
         self.winner = None
+        self.giveaway_jail_user = "livesuieng"
         self.winning_number = None
         self.chat_awarded = set()
         self.first_chatter_awarded = False
@@ -52,15 +53,37 @@ class SimpleRaffleState:
         if not hasattr(self, 'giveaway_amount'):
             self.giveaway_amount = 0.0
 
+    def _backup_invalid_state_file(self):
+        backup_file = f"{self.state_file}.corrupt"
+        suffix = 1
+        while os.path.exists(backup_file):
+            backup_file = f"{self.state_file}.corrupt.{suffix}"
+            suffix += 1
+        os.replace(self.state_file, backup_file)
+
     def load(self):
         if os.path.exists(self.state_file):
-            with open(self.state_file, "r") as f:
-                data = json.load(f)
+            try:
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    raw = f.read()
+                if not raw.strip():
+                    raise ValueError("raffle state file is empty")
+                data = json.loads(raw)
+                if not isinstance(data, dict):
+                    raise ValueError("raffle state file must contain a JSON object")
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                try:
+                    self._backup_invalid_state_file()
+                except OSError:
+                    pass
+                self.save()
+                return
             self.is_open = data.get("is_open", False)
             self.entries_per_chat = data.get("entries_per_chat", 1)
             self.entries = data.get("entries", {})
             self.picks = data.get("picks", {})
             self.winner = data.get("winner", None)
+            self.giveaway_jail_user = data.get("giveaway_jail_user", "livesuieng")
             self.winning_number = data.get("winning_number", None)
             self.chat_awarded = set(data.get("chat_awarded", []))
             self.first_chatter_awarded = data.get("first_chatter_awarded", False)
@@ -86,6 +109,7 @@ class SimpleRaffleState:
             "entries": self.entries,
             "picks": sorted_picks,
             "winner": self.winner,
+            "giveaway_jail_user": self.giveaway_jail_user,
             "winning_number": self.winning_number,
             "chat_awarded": list(self.chat_awarded),
             "first_chatter_awarded": self.first_chatter_awarded,
@@ -206,6 +230,8 @@ class SimpleRaffleState:
         user = user.lower()
         if user in self.ignored_users:
             return False, "You are not eligible for the raffle."
+        if self.is_in_giveaway_jail(user):
+            return False, self.get_giveaway_jail_message(user)
         errors = []
         picks_to_make = []
         for num in numbers:
@@ -232,6 +258,8 @@ class SimpleRaffleState:
         user = user.lower()
         if user in self.ignored_users:
             return False, "You are not eligible for the raffle."
+        if self.is_in_giveaway_jail(user):
+            return False, self.get_giveaway_jail_message(user)
         if not (isinstance(count, int) and count > 0):
             return False, "You must pick at least 1 number."
         if self.entries.get(user, 0) < count:
@@ -283,12 +311,21 @@ class SimpleRaffleState:
         self.winning_number = number
         if user:
             self.winner = user
+            self.giveaway_jail_user = user.lower()
             self.save()
             return user, number
         else:
             self.winner = None
             self.save()
             return None, number
+
+    def is_in_giveaway_jail(self, user):
+        jail_user = (self.giveaway_jail_user or "").strip().lower()
+        return bool(jail_user) and user.lower() == jail_user
+
+    def get_giveaway_jail_message(self, user):
+        jailed_user = (self.giveaway_jail_user or user or "").strip().lower()
+        return f"@{jailed_user} is in giveaway jail and cannot enter again until there is a new winner."
 
     def award_chat_entry(self, user):
         user = user.lower()
@@ -891,7 +928,9 @@ class RaffleCog(commands.Cog):
             if winner:
                 total_picks = len(self.state.picks)
                 winner_message = f"The winning number is {num}! Congratulations @{winner}!"
-                discord_winner_message = f"🎉 {winner_message} ({total_picks} out of 1000 numbers were picked)"
+                giveaway_amount = self.state.get_giveaway_amount()
+                amount_suffix = f" Prize amount: ${giveaway_amount:.2f}." if giveaway_amount > 0 else ""
+                discord_winner_message = f"🎉 {winner_message}{amount_suffix} ({total_picks} out of 1000 numbers were picked)"
                 await ctx.send(winner_message)
                 await self.send_to_discord(discord_winner_message)
                 if bad_beat_users:

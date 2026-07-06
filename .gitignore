@@ -51,6 +51,7 @@ cache/
 audio_cache/
 assets/audio_cache/
 bot/audio_cache/
+data/music_cache/
 
 # Ignore environment variable files
 .env

@@ -4,6 +4,7 @@ import random
 import asyncio
 import logging
 import subprocess
+import json
 from twitchio.ext import commands
 from concurrent.futures import ThreadPoolExecutor
 from bot.overlay_server import broadcast_overlay_message
@@ -13,6 +14,7 @@ from typing import List, Dict
 import wave
 import contextlib
 import math
+from datetime import datetime
 
 # Optional Google Sheets sync helper (if requirements installed)
 try:
@@ -26,6 +28,9 @@ IMAGE_EXTS = [".gif", ".jpg", ".jpeg", ".png", ".webp"]
 AUDIO_EXTS = [".mp3", ".wav", ".ogg"]
 SCAN_INTERVAL = 3  # seconds
 MODS_FOLDER = "mods"
+YTMODE_STATE_FILE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "data", "ytmode_state.json")
+)
 RESERVED_RPG_COMMANDS = {
     "ascend",
     "blessing",
@@ -250,8 +255,32 @@ class MediaOverlayCog(commands.Cog):
         self._registered = set()
         self.media_commands = {}  # cmd: {"image": (path, fname), "sfx": (path, ...)}
         self.executor = ThreadPoolExecutor(max_workers=2)
+        self.ytmode_enabled = self._load_ytmode_state()
         # Note: SFX queue removed - audio_manager now handles queuing internally
         bot.loop.create_task(self._watch_media_folders()) 
+
+    def _load_ytmode_state(self) -> bool:
+        try:
+            with open(YTMODE_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return bool(data.get("enabled", False))
+        except FileNotFoundError:
+            return False
+        except Exception as exc:
+            self.logger.warning("Failed to load ytmode state: %s", exc)
+            return False
+
+    def _save_ytmode_state(self):
+        payload = {
+            "enabled": bool(self.ytmode_enabled),
+            "updated_at": datetime.utcnow().replace(microsecond=0).isoformat(),
+        }
+        try:
+            os.makedirs(os.path.dirname(YTMODE_STATE_FILE), exist_ok=True)
+            with open(YTMODE_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+        except Exception as exc:
+            self.logger.warning("Failed to save ytmode state: %s", exc)
 
     def _is_generated_media_command(self, cmd: str) -> bool:
         existing = self.bot.get_command(cmd)
@@ -440,6 +469,9 @@ class MediaOverlayCog(commands.Cog):
                 self.logger.debug(f"Skipping media command !{cmd}; command already exists and is not media-generated")
                 return
         async def media_player(ctx):
+            if self.ytmode_enabled and "image" in entry and "sfx" not in entry:
+                await ctx.send("🎬 GIF commands are disabled while !ytmode is ON.")
+                return
             # SFX permissions and selection logic
             if "sfx" in entry:
                 path_or_paths, sfx_type, extra = entry["sfx"]
@@ -470,7 +502,7 @@ class MediaOverlayCog(commands.Cog):
                     except Exception:
                         pass
             # Overlay image
-            if "image" in entry:
+            if "image" in entry and not self.ytmode_enabled:
                 path, rel_fname = entry["image"]
                 ext = os.path.splitext(rel_fname)[1].lower()
                 url = f"/gifs/{rel_fname}"
@@ -518,6 +550,8 @@ class MediaOverlayCog(commands.Cog):
         entry = self.media_commands.get(cmd)
         if not entry:
             return False
+        if self.ytmode_enabled and "image" in entry and "sfx" not in entry:
+            return False
         if "sfx" in entry:
             path_or_paths, sfx_type, extra = entry["sfx"]
             is_mod_command = sfx_type in ("modfolderfile", "modfile")
@@ -530,7 +564,7 @@ class MediaOverlayCog(commands.Cog):
             else:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, audio_manager.play_sfx, path_or_paths)
-        if "image" in entry:
+        if "image" in entry and not self.ytmode_enabled:
             path, rel_fname = entry["image"]
             ext = os.path.splitext(rel_fname)[1].lower()
             url = f"/gifs/{rel_fname}"
@@ -903,6 +937,37 @@ class MediaOverlayCog(commands.Cog):
         self.media_commands = snapshot
         refresh_media_trigger_set()
         await ctx.send(f"Media scan complete. Added {len(added)}, removed {len(removed)}.")
+
+    @commands.command(name="ytmode")
+    async def ytmode(self, ctx, mode: str = None):
+        """Toggle GIF-only command behavior for YouTube mode."""
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send("Only mods can toggle ytmode.")
+            return
+
+        arg = (mode or "").strip().lower()
+        if arg in ("", "status"):
+            state = "ON" if self.ytmode_enabled else "OFF"
+            await ctx.send(
+                f"ytmode is {state}. GIF-only commands are {'disabled' if self.ytmode_enabled else 'enabled'}. SRX stays enabled."
+            )
+            return
+
+        if arg in ("on", "enable", "enabled", "true", "1"):
+            self.ytmode_enabled = True
+        elif arg in ("off", "disable", "disabled", "false", "0"):
+            self.ytmode_enabled = False
+        elif arg in ("toggle",):
+            self.ytmode_enabled = not self.ytmode_enabled
+        else:
+            await ctx.send("Usage: !ytmode [on|off|toggle|status]")
+            return
+
+        self._save_ytmode_state()
+        if self.ytmode_enabled:
+            await ctx.send("✅ ytmode ON: GIF-only commands are disabled. SRX remains enabled.")
+        else:
+            await ctx.send("✅ ytmode OFF: GIF-only commands are enabled.")
 
 
 def prepare(bot):

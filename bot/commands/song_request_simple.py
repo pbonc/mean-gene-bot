@@ -48,6 +48,7 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 QUARTERS_FILE = os.path.join(DATA_DIR, "user_quarters.json") 
 PLAYLIST_CACHE_FILE = os.path.join(DATA_DIR, "playlist_cache.json")
 MUSIC_CACHE_DIR = os.path.join(DATA_DIR, "music_cache")
+LOCAL_SRX_FOLDER = os.path.join(DATA_DIR, "srx_local")
 COOKIES_FILE = os.path.join(PROJECT_ROOT, "cookies.txt")
 
 def get_ydl_opts(output_template=None, download=True, quiet=True, use_android_client=False):
@@ -1335,6 +1336,94 @@ class SimpleSongManager:
                 
         # No gaps found, return next highest number
         return max(existing_numbers) + 1
+
+    def get_next_catalog_number_append_only(self) -> int:
+        """Return the next catalog number using append-only numbering."""
+        if not self.playlist_cache:
+            return 1
+        existing_numbers = [song.get('number') for song in self.playlist_cache if isinstance(song.get('number'), int)]
+        if not existing_numbers:
+            return 1
+        return max(existing_numbers) + 1
+
+    def sync_local_folder_to_catalog(self, folder_path: Optional[str] = None) -> Dict:
+        """
+        Import new .mp3 files from a local folder into SRX catalog.
+        Append-only behavior: never remove songs from catalog.
+        """
+        target_folder = folder_path or LOCAL_SRX_FOLDER
+
+        result = {
+            'success': False,
+            'folder': target_folder,
+            'added': 0,
+            'skipped': 0,
+            'total_mp3': 0,
+            'start_total': len(self.playlist_cache),
+            'end_total': len(self.playlist_cache),
+            'error': None,
+        }
+
+        try:
+            if not os.path.isdir(target_folder):
+                result['error'] = f"Local folder not found: {target_folder}"
+                return result
+
+            mp3_files = [
+                f for f in os.listdir(target_folder)
+                if os.path.isfile(os.path.join(target_folder, f)) and f.lower().endswith('.mp3')
+            ]
+            mp3_files.sort(key=lambda name: name.lower())
+            result['total_mp3'] = len(mp3_files)
+
+            # Build a quick lookup so repeated syncs do not duplicate catalog entries.
+            known_local_files = set()
+            for song in self.playlist_cache:
+                local_file = (song.get('local_file') or '').strip().lower()
+                if local_file:
+                    known_local_files.add(local_file)
+
+            for filename in mp3_files:
+                full_path = os.path.abspath(os.path.join(target_folder, filename))
+                normalized_path = os.path.normcase(full_path).lower()
+                if normalized_path in known_local_files:
+                    result['skipped'] += 1
+                    continue
+
+                stem = os.path.splitext(filename)[0].strip()
+                artist = "Local"
+                title = stem
+                if ' - ' in stem:
+                    left, right = stem.split(' - ', 1)
+                    if left.strip() and right.strip():
+                        artist = left.strip()
+                        title = right.strip()
+
+                new_song = {
+                    'number': self.get_next_catalog_number_append_only(),
+                    'title': title,
+                    'artist': artist,
+                    'duration': 0,
+                    'verified': True,
+                    'play_count': 0,
+                    'local_file': full_path,
+                    'source': 'local_mp3'
+                }
+
+                self.playlist_cache.append(new_song)
+                known_local_files.add(normalized_path)
+                result['added'] += 1
+
+            if result['added'] > 0:
+                self.playlist_cache.sort(key=lambda x: x['number'])
+                self._save_playlist_sync()
+
+            result['success'] = True
+            result['end_total'] = len(self.playlist_cache)
+            return result
+        except Exception as e:
+            result['error'] = str(e)
+            return result
     
     def _get_cache_filename(self, song_info):
         """Get consistent cache filename for a song"""
@@ -1969,27 +2058,40 @@ class SimpleSongManager:
                 await self.stop_music()
                 await asyncio.sleep(0.2)  # Brief pause for cleanup
             
+            local_file = song_info.get('local_file')
             youtube_url = song_info.get('youtube_url')
-            if not youtube_url:
-                self.logger.warning("No YouTube URL for song")
-                if MUSIC_STATE_AVAILABLE and music_state_manager:
-                    music_state_manager.stop_playback()
-                return False
-            
-            # Check if this is a hot queue item
-            is_hot_queue = song_info.get('hot_queue', False)
-            
-            # Try to get audio file (download if needed)
-            if is_hot_queue:
-                audio_file = await self.download_hot_queue_audio(youtube_url, song_info['title'], chat_channel)
+
+            # Local catalog entries play directly from disk.
+            if local_file:
+                audio_file = local_file
+                if not os.path.exists(audio_file):
+                    self.logger.error(f"Local song file not found: {audio_file}")
+                    if chat_channel:
+                        await chat_channel.send(f"❌ File not found for #{song_info.get('number', '?')}: {song_info.get('title', 'Unknown')}")
+                    if MUSIC_STATE_AVAILABLE and music_state_manager:
+                        music_state_manager.stop_playback()
+                    return False
             else:
-                allow_fallback_cached = username != "AutoPlaylist"
-                audio_file = await self.download_and_normalize_audio(
-                    youtube_url,
-                    song_info['title'],
-                    chat_channel,
-                    allow_fallback_cached=allow_fallback_cached,
-                )
+                if not youtube_url:
+                    self.logger.warning("No YouTube URL for song")
+                    if MUSIC_STATE_AVAILABLE and music_state_manager:
+                        music_state_manager.stop_playback()
+                    return False
+
+                # Check if this is a hot queue item
+                is_hot_queue = song_info.get('hot_queue', False)
+
+                # Try to get audio file (download if needed)
+                if is_hot_queue:
+                    audio_file = await self.download_hot_queue_audio(youtube_url, song_info['title'], chat_channel)
+                else:
+                    allow_fallback_cached = username != "AutoPlaylist"
+                    audio_file = await self.download_and_normalize_audio(
+                        youtube_url,
+                        song_info['title'],
+                        chat_channel,
+                        allow_fallback_cached=allow_fallback_cached,
+                    )
             
             if not audio_file:
                 self.logger.warning(f"Could not download audio for: {song_info['title']}")
@@ -2031,7 +2133,7 @@ class SimpleSongManager:
             self.is_paused = False
             self.current_song = audio_file
             self.current_song_info = (effective_song_info, username)
-            self.current_hot_queue_file = audio_file if is_hot_queue else None  # Track for cleanup
+            self.current_hot_queue_file = audio_file if song_info.get('hot_queue', False) else None  # Track for cleanup
             
             # Track song timing
             import time
@@ -2626,11 +2728,42 @@ class SongRequestCog(commands.Cog):
                 msg += f"\nYouTube: {song_info.get('youtube_url', '')}"
         await ctx.send(msg)
 
+    async def _remove_last_queued_song_for_user(self, ctx, username: str):
+        """Remove the most recent queued song for a user without touching the SRX catalog."""
+        removed = None
+        for idx in range(len(self.manager.current_queue) - 1, -1, -1):
+            song_info, queue_username, timestamp = self.manager.current_queue[idx]
+            if queue_username.lower() == username.lower():
+                removed = self.manager.current_queue.pop(idx)
+                break
+
+        if not removed:
+            await ctx.send("❌ You don't have any songs in the queue to remove.")
+            return
+
+        song_info, queue_username, timestamp = removed
+        refund_text = ""
+        quarters_spent = song_info.get('quarters_spent', 0)
+        if quarters_spent:
+            self.manager.give_quarters(username, quarters_spent)
+            refund_text = f" Refunded {quarters_spent} quarter(s)."
+
+        asyncio.create_task(self.manager._async_sync_queue_to_sheets())
+
+        title = song_info.get('title', 'Your song')
+        await ctx.send(f"🗑️ Removed your last queued song: {title}.{refund_text}")
+
+    @commands.command(name="wrongsong")
+    async def wrongsong_command(self, ctx):
+        """Remove the calling user's latest SRX queue entry (does not delete catalog entries)."""
+        username = ctx.author.name
+        await self._remove_last_queued_song_for_user(ctx, username)
+
     @commands.command(name="srx")
     async def song_request(self, ctx, action_or_request: str = None, *, url: str = None):
-        """Song request system: !srx [number] (FREE) | !srx [youtube_url] (1 quarter) | !srx "title" (search) | !srx add [url] (mod) | !srx hot [url] (mod) | !srx del [number] (mod) | !srx [start|stop|pause|resume|next|status] (mod - playback control)"""
+        """Song request system: !srx [number] (FREE) | !srx [youtube_url] (1 quarter) | !srx "title" (search) | !srx add [url] (mod) | !srx hot [url] (mod) | !srx del [number] (mod) | !srx importlocal [folder] (mod) | !srx [start|stop|pause|resume|next|status] (mod - playback control)"""
         if not action_or_request:
-            await ctx.send("🎵 **Song Requests:** `!srx 42` (playlist, FREE) | `!srx [youtube_url]` (1 quarter) | `!srx keyword` (search) | `!srx add [url]` (mod) | `!srx hot [url]` (mod) | `!srx del [number]` (mod) | **Playback:** `!srx start/stop/pause/resume/next/status` (mod)")
+            await ctx.send("🎵 **Song Requests:** `!srx 42` (playlist, FREE) | `!srx [youtube_url]` (1 quarter) | `!srx keyword` (search) | `!srx add [url]` (mod) | `!srx hot [url]` (mod) | `!srx del [number]` (mod) | `!srx importlocal [folder]` (mod, mp3 only) | **Playback:** `!srx start/stop/pause/resume/next/status` (mod)")
             return
 
         username = ctx.author.name
@@ -2647,30 +2780,7 @@ class SongRequestCog(commands.Cog):
                 self.playlist_task.cancel()
             self.playlist_task = asyncio.create_task(self._run_playlist(ctx.channel))
         elif action_or_request.lower() == "remove":
-            # Remove the most recent queued song from this user (not catalog deletion)
-            removed = None
-            for idx in range(len(self.manager.current_queue) - 1, -1, -1):
-                song_info, queue_username, timestamp = self.manager.current_queue[idx]
-                if queue_username.lower() == username.lower():
-                    removed = self.manager.current_queue.pop(idx)
-                    break
-            if not removed:
-                await ctx.send("❌ You don't have any songs in the queue to remove.")
-                return
-
-            song_info, queue_username, timestamp = removed
-            refund_text = ""
-            quarters_spent = song_info.get('quarters_spent', 0)
-            if quarters_spent:
-                self.manager.give_quarters(username, quarters_spent)
-                refund_text = f" Refunded {quarters_spent} quarter(s)."
-
-            asyncio.create_task(self.manager._async_sync_queue_to_sheets())
-
-            title = song_info.get('title', 'Your song')
-            await ctx.send(f"🗑️ Removed your last queued song: {title}.{refund_text}")
-            return
-            await ctx.send("▶️ SRX started.")
+            await self._remove_last_queued_song_for_user(ctx, username)
             return
         elif action_or_request.lower() == "stop":
             if not ctx.author.is_mod:
@@ -2818,6 +2928,15 @@ class SongRequestCog(commands.Cog):
             
             song_number = int(url.strip())
             await self._handle_delete_song(ctx, song_number)
+            return
+
+        elif action_or_request.lower() == "importlocal":
+            if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+                await ctx.send("❌ Only moderators or the broadcaster can import local songs into the catalog.")
+                return
+
+            target_folder = url.strip() if url else LOCAL_SRX_FOLDER
+            await self._handle_import_local_folder(ctx, target_folder)
             return
 
         # Handle regular requests (existing logic)
@@ -3196,6 +3315,27 @@ class SongRequestCog(commands.Cog):
             
         except Exception as e:
             await ctx.send(f"❌ Error adding song: {str(e)[:100]}")
+
+    async def _handle_import_local_folder(self, ctx, folder_path: str):
+        """Handle !srx importlocal [folder] - import .mp3 files into catalog as local tracks."""
+        result = self.manager.sync_local_folder_to_catalog(folder_path)
+
+        if not result['success']:
+            await ctx.send(f"❌ {result.get('error', 'Failed to import local songs.')}")
+            return
+
+        # Sync catalog to Google Sheets after successful import.
+        if result['added'] > 0 and SHEETS_SYNC_AVAILABLE and music_sheets_manager:
+            try:
+                music_sheets_manager.force_sync_catalog()
+            except Exception as e:
+                self.manager.logger.error(f"Failed to sync catalog after local import: {e}")
+
+        await ctx.send(
+            f"📁 Local import complete from {result['folder']}: "
+            f"{result['added']} added, {result['skipped']} already known, "
+            f"catalog {result['start_total']} -> {result['end_total']}"
+        )
 
     async def _handle_hot_queue(self, ctx, youtube_url: str):
         """Handle !srx hot [url] - Hot queue a YouTube song"""

@@ -241,6 +241,12 @@ async def nfl_break_overlay(request):
 async def nba_break_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "nba_break_overlay.html"))
 
+async def nhl_break_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "nhl_break_overlay.html"))
+
+async def mlb_break_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "mlb_break_overlay.html"))
+
 async def wheel_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "wheel_overlay.html"))
 
@@ -503,6 +509,8 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/ag", allen_ginter_overlay)
     app.router.add_get("/nfl", nfl_break_overlay)
     app.router.add_get("/nba", nba_break_overlay)
+    app.router.add_get("/nhl", nhl_break_overlay)
+    app.router.add_get("/mlb", mlb_break_overlay)
     app.router.add_get("/wheel", wheel_overlay)
     app.router.add_get("/battle", battle_overlay)
     app.router.add_get("/grid", grid_overlay)

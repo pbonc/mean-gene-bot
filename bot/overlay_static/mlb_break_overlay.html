@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NBA Break Board</title>
+  <title>MLB Break Board</title>
   <style>
     @font-face {
       font-family: 'BreakSans';
@@ -11,51 +11,51 @@
     }
 
     :root {
-      --bg: #0f1115;
-      --ink: #f4f6fb;
-      --accent: #66c2ff;
+      --bg: #0d1520;
+      --ink: #f6f8fb;
+      --accent: #7fd0ff;
       --accent2: #ff8a3d;
-      --muted: #a6b0c3;
-      --border: #2a3344;
-      --tile: #1a2130;
-      --tile2: #222d40;
+      --muted: #b3bfd2;
+      --border: #263346;
+      --tile: #182232;
+      --tile2: #243247;
     }
 
     html, body {
       height: 100%;
       margin: 0;
-      background: radial-gradient(circle at 15% 10%, #1f2f4a 0%, #10151f 45%, #0b0e14 100%);
+      background: radial-gradient(circle at top, #16314d 0%, #0f1724 38%, #08101b 100%);
       color: var(--ink);
       font-family: 'BreakSans', 'Trebuchet MS', Arial, sans-serif;
     }
 
     .frame {
-      max-width: 1400px;
-      margin: 24px auto;
-      padding: 24px;
-      background: rgba(16, 21, 31, 0.92);
+      max-width: 1800px;
+      margin: 12px auto;
+      padding: 18px 20px;
+      background: rgba(9, 16, 26, 0.94);
       border: 3px solid var(--border);
       box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
     }
 
     header {
       text-align: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .title {
-      font-size: 42px;
+      font-size: 36px;
       letter-spacing: 2px;
       color: var(--accent);
       font-weight: 900;
       text-transform: uppercase;
-      text-shadow: 0 3px 16px rgba(22, 130, 230, 0.25);
+      text-shadow: 0 3px 16px rgba(127, 208, 255, 0.25);
     }
 
     .subtitle {
-      font-size: 16px;
+      font-size: 14px;
       color: var(--muted);
-      margin-top: 6px;
+      margin-top: 4px;
     }
 
     .controls {
@@ -103,19 +103,21 @@
     }
 
     .section-title {
-      font-size: 22px;
-      margin: 18px 0 8px;
-      padding-bottom: 6px;
+      font-size: 20px;
+      margin: 12px auto 6px;
+      padding-bottom: 4px;
       border-bottom: 3px solid var(--accent2);
       color: var(--accent);
       font-weight: 700;
+      max-width: 1080px;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 16px;
-      margin-top: 18px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      width: min(100%, 1080px);
+      margin: 10px auto 0;
     }
 
     #picklist {
@@ -125,7 +127,7 @@
 
     .tile {
       position: relative;
-      padding: 18px 16px;
+      padding: 12px 14px;
       background: linear-gradient(135deg, var(--tile), var(--tile2));
       border: 3px solid var(--border);
       border-radius: 8px;
@@ -142,9 +144,11 @@
 
     .tile h4 {
       margin: 0;
-      font-size: 18px;
+      font-size: 16px;
+      line-height: 1.15;
       font-weight: 700;
       color: inherit;
+      padding-right: 60px;
     }
 
     .tile small {
@@ -169,8 +173,8 @@
 
     .tile .assign {
       display: block;
-      margin-top: 6px;
-      font-size: 13px;
+      margin-top: 5px;
+      font-size: 12px;
       color: inherit;
       font-weight: 700;
     }
@@ -183,47 +187,69 @@
       text-decoration-color: rgba(220, 30, 30, 0.88);
     }
 
-    /* Eastern Conference */
-    .tile[data-team="Boston Celtics"] { background: linear-gradient(135deg, #007a33, #00a34a); color: #ffffff; }
-    .tile[data-team="Brooklyn Nets"] { background: linear-gradient(135deg, #111111, #333333); color: #ffffff; }
-    .tile[data-team="New York Knicks"] { background: linear-gradient(135deg, #006bb6, #f58426); color: #ffffff; }
-    .tile[data-team="Philadelphia 76ers"] { background: linear-gradient(135deg, #006bb6, #ed174c); color: #ffffff; }
-    .tile[data-team="Toronto Raptors"] { background: linear-gradient(135deg, #ce1141, #2b2d32); color: #ffffff; }
+    .tile[data-team="Baltimore Orioles"] { background: linear-gradient(135deg, #df4601, #111111); color: #ffffff; }
+    .tile[data-team="Boston Red Sox"] { background: linear-gradient(135deg, #bd3039, #0d0d0d); color: #ffffff; }
+    .tile[data-team="New York Yankees"] { background: linear-gradient(135deg, #132448, #c4ced4); color: #ffffff; }
+    .tile[data-team="Tampa Bay Rays"] { background: linear-gradient(135deg, #092c5c, #7cbeff); color: #ffffff; }
+    .tile[data-team="Toronto Blue Jays"] { background: linear-gradient(135deg, #134a8e, #e8291c); color: #ffffff; }
 
-    .tile[data-team="Chicago Bulls"] { background: linear-gradient(135deg, #ce1141, #000000); color: #ffffff; }
-    .tile[data-team="Cleveland Cavaliers"] { background: linear-gradient(135deg, #860038, #fdbb30); color: #ffffff; }
-    .tile[data-team="Detroit Pistons"] { background: linear-gradient(135deg, #1d42ba, #c8102e); color: #ffffff; }
-    .tile[data-team="Indiana Pacers"] { background: linear-gradient(135deg, #002d62, #fdbb30); color: #ffffff; }
-    .tile[data-team="Milwaukee Bucks"] { background: linear-gradient(135deg, #00471b, #eee1c6); color: #102010; }
+    .tile[data-team="Chicago White Sox"] { background: linear-gradient(135deg, #111111, #495057); color: #ffffff; }
+    .tile[data-team="Cleveland Guardians"] { background: linear-gradient(135deg, #0a2342, #e50022); color: #ffffff; }
+    .tile[data-team="Detroit Tigers"] { background: linear-gradient(135deg, #0c2340, #fa4616); color: #ffffff; }
+    .tile[data-team="Kansas City Royals"] { background: linear-gradient(135deg, #004687, #7c878e); color: #ffffff; }
+    .tile[data-team="Minnesota Twins"] { background: linear-gradient(135deg, #002b5c, #cf3341); color: #ffffff; }
 
-    .tile[data-team="Atlanta Hawks"] { background: linear-gradient(135deg, #e03a3e, #26282a); color: #ffffff; }
-    .tile[data-team="Charlotte Hornets"] { background: linear-gradient(135deg, #1d1160, #00788c); color: #ffffff; }
-    .tile[data-team="Miami Heat"] { background: linear-gradient(135deg, #98002e, #f9a01b); color: #ffffff; }
-    .tile[data-team="Orlando Magic"] { background: linear-gradient(135deg, #0077c0, #111111); color: #ffffff; }
-    .tile[data-team="Washington Wizards"] { background: linear-gradient(135deg, #002b5c, #e31837); color: #ffffff; }
+    .tile[data-team="Houston Astros"] { background: linear-gradient(135deg, #002d62, #eb6e1f); color: #ffffff; }
+    .tile[data-team="Los Angeles Angels"] { background: linear-gradient(135deg, #ba0021, #862633); color: #ffffff; }
+    .tile[data-team="Athletics"] { background: linear-gradient(135deg, #003831, #efb21e); color: #ffffff; }
+    .tile[data-team="Seattle Mariners"] { background: linear-gradient(135deg, #0c2c56, #005c5c); color: #ffffff; }
+    .tile[data-team="Texas Rangers"] { background: linear-gradient(135deg, #003278, #c0111f); color: #ffffff; }
 
-    /* Western Conference */
-    .tile[data-team="Denver Nuggets"] { background: linear-gradient(135deg, #0e2240, #fec524); color: #ffffff; }
-    .tile[data-team="Minnesota Timberwolves"] { background: linear-gradient(135deg, #0c2340, #236192); color: #ffffff; }
-    .tile[data-team="Oklahoma City Thunder"] { background: linear-gradient(135deg, #007ac1, #ef3b24); color: #ffffff; }
-    .tile[data-team="Portland Trail Blazers"] { background: linear-gradient(135deg, #e03a3e, #000000); color: #ffffff; }
-    .tile[data-team="Utah Jazz"] { background: linear-gradient(135deg, #002b5c, #f9a01b); color: #ffffff; }
+    .tile[data-team="Atlanta Braves"] { background: linear-gradient(135deg, #13274f, #ce1141); color: #ffffff; }
+    .tile[data-team="Miami Marlins"] { background: linear-gradient(135deg, #00a3e0, #f5d130); color: #ffffff; }
+    .tile[data-team="New York Mets"] { background: linear-gradient(135deg, #002d72, #ff5910); color: #ffffff; }
+    .tile[data-team="Philadelphia Phillies"] { background: linear-gradient(135deg, #e81828, #003278); color: #ffffff; }
+    .tile[data-team="Washington Nationals"] { background: linear-gradient(135deg, #ab0003, #14225a); color: #ffffff; }
 
-    .tile[data-team="Golden State Warriors"] { background: linear-gradient(135deg, #1d428a, #ffc72c); color: #ffffff; }
-    .tile[data-team="LA Clippers"] { background: linear-gradient(135deg, #1d428a, #c8102e); color: #ffffff; }
-    .tile[data-team="Los Angeles Lakers"] { background: linear-gradient(135deg, #552583, #fdb927); color: #ffffff; }
-    .tile[data-team="Phoenix Suns"] { background: linear-gradient(135deg, #1d1160, #e56020); color: #ffffff; }
-    .tile[data-team="Sacramento Kings"] { background: linear-gradient(135deg, #5a2d81, #c4ced4); color: #ffffff; }
+    .tile[data-team="Chicago Cubs"] { background: linear-gradient(135deg, #0e3386, #cc3433); color: #ffffff; }
+    .tile[data-team="Cincinnati Reds"] { background: linear-gradient(135deg, #c6011f, #111111); color: #ffffff; }
+    .tile[data-team="Milwaukee Brewers"] { background: linear-gradient(135deg, #12284b, #ffc52f); color: #ffffff; }
+    .tile[data-team="Pittsburgh Pirates"] { background: linear-gradient(135deg, #27251f, #fdb827); color: #ffffff; }
+    .tile[data-team="St. Louis Cardinals"] { background: linear-gradient(135deg, #c41e3a, #0c2340); color: #ffffff; }
 
-    .tile[data-team="Dallas Mavericks"] { background: linear-gradient(135deg, #00538c, #002b5e); color: #ffffff; }
-    .tile[data-team="Houston Rockets"] { background: linear-gradient(135deg, #ce1141, #111111); color: #ffffff; }
-    .tile[data-team="Memphis Grizzlies"] { background: linear-gradient(135deg, #5d76a9, #12173f); color: #ffffff; }
-    .tile[data-team="New Orleans Pelicans"] { background: linear-gradient(135deg, #0c2340, #c8102e); color: #ffffff; }
-    .tile[data-team="San Antonio Spurs"] { background: linear-gradient(135deg, #111111, #7f7f7f); color: #ffffff; }
+    .tile[data-team="Arizona Diamondbacks"] { background: linear-gradient(135deg, #a71930, #000000); color: #ffffff; }
+    .tile[data-team="Colorado Rockies"] { background: linear-gradient(135deg, #333366, #c4ced4); color: #ffffff; }
+    .tile[data-team="Los Angeles Dodgers"] { background: linear-gradient(135deg, #005a9c, #0c2c56); color: #ffffff; }
+    .tile[data-team="San Diego Padres"] { background: linear-gradient(135deg, #2f241d, #ffc425); color: #ffffff; }
+    .tile[data-team="San Francisco Giants"] { background: linear-gradient(135deg, #fd5a1e, #27251f); color: #ffffff; }
+
+    @media (max-width: 1200px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .frame {
+        padding: 14px;
+      }
+
+      .title {
+        font-size: 30px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tile h4 {
+        padding-right: 54px;
+      }
+    }
 
     footer {
       text-align: center;
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: 12px;
       color: var(--muted);
     }
@@ -232,8 +258,8 @@
 <body>
   <div class="frame">
     <header>
-      <div class="title">NBA Break Board</div>
-      <div class="subtitle">Click a team, enter a username, and apply. The tile strikes through and shows the username.</div>
+      <div class="title">MLB Break Board</div>
+      <div class="subtitle">Click a team, enter a username, and apply. Reassignments replace the old owner, and you can clear a single team from the modal.</div>
       <div class="controls">
         <button class="btn" id="clear">Clear All</button>
         <button class="btn" id="export">Export Hits</button>
@@ -246,33 +272,33 @@
     </header>
 
     <section>
-      <div class="section-title">Eastern Conference - Atlantic Division</div>
-      <div class="grid" id="east-atlantic"></div>
+      <div class="section-title">American League East</div>
+      <div class="grid" id="al-east"></div>
     </section>
 
     <section>
-      <div class="section-title">Eastern Conference - Central Division</div>
-      <div class="grid" id="east-central"></div>
+      <div class="section-title">American League Central</div>
+      <div class="grid" id="al-central"></div>
     </section>
 
     <section>
-      <div class="section-title">Eastern Conference - Southeast Division</div>
-      <div class="grid" id="east-southeast"></div>
+      <div class="section-title">American League West</div>
+      <div class="grid" id="al-west"></div>
     </section>
 
     <section>
-      <div class="section-title">Western Conference - Northwest Division</div>
-      <div class="grid" id="west-northwest"></div>
+      <div class="section-title">National League East</div>
+      <div class="grid" id="nl-east"></div>
     </section>
 
     <section>
-      <div class="section-title">Western Conference - Pacific Division</div>
-      <div class="grid" id="west-pacific"></div>
+      <div class="section-title">National League Central</div>
+      <div class="grid" id="nl-central"></div>
     </section>
 
     <section>
-      <div class="section-title">Western Conference - Southwest Division</div>
-      <div class="grid" id="west-southwest"></div>
+      <div class="section-title">National League West</div>
+      <div class="grid" id="nl-west"></div>
     </section>
 
     <section>
@@ -281,7 +307,7 @@
     </section>
 
     <footer>
-      NBA Break Board - Current NBA teams only, grouped by conference and division.
+      MLB Break Board - Current MLB teams only, grouped by division.
     </footer>
   </div>
 
@@ -301,52 +327,52 @@
   </div>
 
   <script>
-    const EAST_ATLANTIC = [
-      'Boston Celtics',
-      'Brooklyn Nets',
-      'New York Knicks',
-      'Philadelphia 76ers',
-      'Toronto Raptors'
+    const AL_EAST = [
+      'Baltimore Orioles',
+      'Boston Red Sox',
+      'New York Yankees',
+      'Tampa Bay Rays',
+      'Toronto Blue Jays'
     ];
 
-    const EAST_CENTRAL = [
-      'Chicago Bulls',
-      'Cleveland Cavaliers',
-      'Detroit Pistons',
-      'Indiana Pacers',
-      'Milwaukee Bucks'
+    const AL_CENTRAL = [
+      'Chicago White Sox',
+      'Cleveland Guardians',
+      'Detroit Tigers',
+      'Kansas City Royals',
+      'Minnesota Twins'
     ];
 
-    const EAST_SOUTHEAST = [
-      'Atlanta Hawks',
-      'Charlotte Hornets',
-      'Miami Heat',
-      'Orlando Magic',
-      'Washington Wizards'
+    const AL_WEST = [
+      'Houston Astros',
+      'Los Angeles Angels',
+      'Athletics',
+      'Seattle Mariners',
+      'Texas Rangers'
     ];
 
-    const WEST_NORTHWEST = [
-      'Denver Nuggets',
-      'Minnesota Timberwolves',
-      'Oklahoma City Thunder',
-      'Portland Trail Blazers',
-      'Utah Jazz'
+    const NL_EAST = [
+      'Atlanta Braves',
+      'Miami Marlins',
+      'New York Mets',
+      'Philadelphia Phillies',
+      'Washington Nationals'
     ];
 
-    const WEST_PACIFIC = [
-      'Golden State Warriors',
-      'LA Clippers',
-      'Los Angeles Lakers',
-      'Phoenix Suns',
-      'Sacramento Kings'
+    const NL_CENTRAL = [
+      'Chicago Cubs',
+      'Cincinnati Reds',
+      'Milwaukee Brewers',
+      'Pittsburgh Pirates',
+      'St. Louis Cardinals'
     ];
 
-    const WEST_SOUTHWEST = [
-      'Dallas Mavericks',
-      'Houston Rockets',
-      'Memphis Grizzlies',
-      'New Orleans Pelicans',
-      'San Antonio Spurs'
+    const NL_WEST = [
+      'Arizona Diamondbacks',
+      'Colorado Rockies',
+      'Los Angeles Dodgers',
+      'San Diego Padres',
+      'San Francisco Giants'
     ];
 
     const hits = new Set();
@@ -354,10 +380,10 @@
     const assignments = new Map();
     const assignedNames = new Set();
 
-    function makeTile(label, division, conference, note) {
+    function makeTile(label, division, league, note) {
       const div = document.createElement('div');
       div.className = 'tile';
-      const key = `${conference} - ${division}:${label}`;
+      const key = `${league} - ${division}:${label}`;
       div.dataset.key = key;
       div.dataset.team = label;
 
@@ -390,19 +416,19 @@
 
     function render() {
       const divisions = {
-        'east-atlantic': { teams: EAST_ATLANTIC, conference: 'Eastern Conference', division: 'Atlantic' },
-        'east-central': { teams: EAST_CENTRAL, conference: 'Eastern Conference', division: 'Central' },
-        'east-southeast': { teams: EAST_SOUTHEAST, conference: 'Eastern Conference', division: 'Southeast' },
-        'west-northwest': { teams: WEST_NORTHWEST, conference: 'Western Conference', division: 'Northwest' },
-        'west-pacific': { teams: WEST_PACIFIC, conference: 'Western Conference', division: 'Pacific' },
-        'west-southwest': { teams: WEST_SOUTHWEST, conference: 'Western Conference', division: 'Southwest' }
+        'al-east': { teams: AL_EAST, league: 'American League', division: 'East' },
+        'al-central': { teams: AL_CENTRAL, league: 'American League', division: 'Central' },
+        'al-west': { teams: AL_WEST, league: 'American League', division: 'West' },
+        'nl-east': { teams: NL_EAST, league: 'National League', division: 'East' },
+        'nl-central': { teams: NL_CENTRAL, league: 'National League', division: 'Central' },
+        'nl-west': { teams: NL_WEST, league: 'National League', division: 'West' }
       };
 
       Object.entries(divisions).forEach(([id, group]) => {
         const root = document.getElementById(id);
         root.innerHTML = '';
         group.teams.forEach(team => {
-          root.appendChild(makeTile(team, group.division, group.conference, 'Team'));
+          root.appendChild(makeTile(team, group.division, group.league, 'Team'));
         });
       });
 
@@ -411,20 +437,20 @@
 
     function persist() {
       try {
-        localStorage.setItem('nba_hits', JSON.stringify([...hits]));
+        localStorage.setItem('mlb_hits', JSON.stringify([...hits]));
       } catch {}
       try {
         const obj = {};
         assignments.forEach((set, name) => {
           obj[name] = [...set];
         });
-        localStorage.setItem('nba_assignments', JSON.stringify(obj));
+        localStorage.setItem('mlb_assignments', JSON.stringify(obj));
       } catch {}
     }
 
     function restore() {
       try {
-        const raw = localStorage.getItem('nba_hits');
+        const raw = localStorage.getItem('mlb_hits');
         if (raw) {
           const arr = JSON.parse(raw);
           arr.forEach(k => hits.add(k));
@@ -437,7 +463,7 @@
       } catch {}
 
       try {
-        const rawA = localStorage.getItem('nba_assignments');
+        const rawA = localStorage.getItem('mlb_assignments');
         if (rawA) {
           const obj = JSON.parse(rawA);
           Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
@@ -459,10 +485,10 @@
       });
       assignments.clear();
       try {
-        localStorage.removeItem('nba_hits');
+        localStorage.removeItem('mlb_hits');
       } catch {}
       try {
-        localStorage.removeItem('nba_assignments');
+        localStorage.removeItem('mlb_assignments');
       } catch {}
       renderPickList();
       refreshPickerNames();

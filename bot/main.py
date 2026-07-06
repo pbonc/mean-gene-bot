@@ -1,6 +1,26 @@
 import shutil
 import signal
 from bot.audio_manager import AudioManager
+
+_SINGLE_INSTANCE_MUTEX = None
+
+
+def _acquire_single_instance_lock() -> bool:
+    """Prevent multiple bot.main processes from running simultaneously on Windows."""
+    global _SINGLE_INSTANCE_MUTEX
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        mutex_name = "Local\\MeanGeneBotMainSingleton"
+        _SINGLE_INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, mutex_name)
+        ERROR_ALREADY_EXISTS = 183
+        return kernel32.GetLastError() != ERROR_ALREADY_EXISTS
+    except Exception:
+        # If lock creation fails, do not block startup.
+        return True
+
+
 def backup_raffle_state():
     src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raffle_state.json")
     if os.path.isfile(src):
@@ -16,6 +36,7 @@ import logging
 from datetime import datetime
 import importlib
 import asyncio
+import time
 from twitchio.ext import commands
 from dotenv import load_dotenv
 try:
@@ -103,6 +124,10 @@ def _normalize_twitch_token(token: str | None) -> str | None:
 
 TWITCH_TOKEN = _normalize_twitch_token(TWITCH_TOKEN)
 
+YOUTUBE_PROMO_URL = "https://www.youtube.com/@iamdartv"
+YOUTUBE_PROMO_INTERVAL_SECONDS = 15 * 60
+YOUTUBE_PROMO_MESSAGE = f"Check out my YouTube channel: {YOUTUBE_PROMO_URL}"
+
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -139,11 +164,6 @@ class Bot(commands.Bot):
     # Track last AI usage per user (username: datetime)
     _ai_cooldowns = {}
 
-    def __init__(self):
-        super().__init__(token=TWITCH_TOKEN, client_id=TWITCH_CLIENT_ID, nick=TWITCH_BOT_ID, prefix='!', initial_channels=TWITCH_CHANNELS)
-        self.discord_client = None
-
-
     @commands.command(name='afk')
     async def afk(self, ctx):
         if not ctx.author.is_mod:
@@ -157,14 +177,25 @@ class Bot(commands.Bot):
             await ctx.send("AFK ticker is already running.")
     async def afk_ticker_cycle_task(self):
         import random
-        from bot.twitch_stats import get_stream_info, get_sub_points
-        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
+        from bot.twitch_stats import get_stream_info
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement, read_follower_count
+        refresh_interval = 30
+        last_refresh = 0.0
+        cached_info = None
+        cached_raffle_odds = None
+        cached_raffle_enc = None
         while True:
             try:
-                info = await get_stream_info()
-                sub_points = await get_sub_points()
-                raffle_odds = await get_raffle_odds_message()
-                raffle_enc = await get_raffle_encouragement()
+                now = time.monotonic()
+                if (now - last_refresh) >= refresh_interval:
+                    cached_info = await get_stream_info()
+                    cached_raffle_odds = await get_raffle_odds_message()
+                    cached_raffle_enc = await get_raffle_encouragement()
+                    last_refresh = now
+
+                info = cached_info
+                raffle_odds = cached_raffle_odds
+                raffle_enc = cached_raffle_enc
                 # Truncate uptime to minutes
                 raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
                 if raw_uptime and raw_uptime != 'N/A':
@@ -184,6 +215,8 @@ class Bot(commands.Bot):
                 labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
                 latest_sub = "N/A"
                 latest_follower = "N/A"
+                follower_count = "N/A"
+                sub_points = "N/A"
                 try:
                     sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
                     if os.path.isfile(sub_path):
@@ -198,6 +231,17 @@ class Bot(commands.Bot):
                             latest_follower = f.read().strip() or "N/A"
                 except Exception:
                     pass
+                try:
+                    follower_count = read_follower_count()
+                except Exception:
+                    pass
+                try:
+                    sub_points_path = os.path.join(labels_dir, "total_subscriber_score.txt")
+                    if os.path.isfile(sub_points_path):
+                        with open(sub_points_path, "r", encoding="utf-8") as f:
+                            sub_points = f.read().strip() or "N/A"
+                except Exception:
+                    pass
                 # Build core info (ordered, no duplicates)
                 core_messages = [
                     f"Title: {info.get('title', 'N/A') if info else 'N/A'}",
@@ -207,8 +251,8 @@ class Bot(commands.Bot):
                     uptime_str,
                     f"Latest Subscriber: {latest_sub}",
                     f"Latest Follower: {latest_follower}",
-                    f"Followers: {info.get('followers', 'N/A') if info else 'N/A'}",
-                    f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
+                    f"Followers: {follower_count}",
+                    f"Sub Points: {sub_points}"
                 ]
                 # Get extra messages (modnews, quotes, derpism, tics, weather)
                 extra_messages = await get_ticker_messages()
@@ -235,13 +279,13 @@ class Bot(commands.Bot):
                 raise
             except Exception as e:
                 logging.error(f"[AFK TICKER ERROR] {e}", exc_info=True)
+
     async def ticker_cycle_task(self):
-        from bot.twitch_stats import get_stream_info, get_sub_points
-        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
+        from bot.twitch_stats import get_stream_info
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement, read_follower_count
         while True:
             try:
                 info = await get_stream_info()
-                sub_points = await get_sub_points()
                 raffle_odds = await get_raffle_odds_message()
                 raffle_enc = await get_raffle_encouragement()
                 raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
@@ -261,6 +305,8 @@ class Bot(commands.Bot):
                 labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
                 latest_sub = "N/A"
                 latest_follower = "N/A"
+                follower_count = "N/A"
+                sub_points = "N/A"
                 try:
                     sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
                     if os.path.isfile(sub_path):
@@ -273,6 +319,17 @@ class Bot(commands.Bot):
                     if os.path.isfile(follower_path):
                         with open(follower_path, "r", encoding="utf-8") as f:
                             latest_follower = f.read().strip() or "N/A"
+                except Exception:
+                    pass
+                try:
+                    follower_count = read_follower_count()
+                except Exception:
+                    pass
+                try:
+                    sub_points_path = os.path.join(labels_dir, "total_subscriber_score.txt")
+                    if os.path.isfile(sub_points_path):
+                        with open(sub_points_path, "r", encoding="utf-8") as f:
+                            sub_points = f.read().strip() or "N/A"
                 except Exception:
                     pass
                 # Get extra messages (first three are always: encouragement, jackpot, odds, then follower count)
@@ -291,14 +348,17 @@ class Bot(commands.Bot):
                 follower_msg = next((m for m in extra_messages if m.startswith('Followers:')), None)
                 if follower_msg:
                     always_present.append(follower_msg)
+                else:
+                    always_present.append(f"Followers: {follower_count}")
 
                 # Core info: always present, never deduplicated out (but skip title)
                 core_messages = [
                     f"Latest Subscriber: {latest_sub}",
                     f"Latest Follower: {latest_follower}",
+                    f"Followers: {follower_count}",
                     f"Viewers: {info.get('viewers', 'N/A') if info else 'N/A'}",
                     uptime_str,
-                    f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
+                    f"Sub Points: {sub_points}"
                 ]
                 # Add label stats (top b/g/d, top 3 g, etc.)
                 from bot.labels_stats import read_label
@@ -403,8 +463,13 @@ class Bot(commands.Bot):
             initial_channels=TWITCH_CHANNELS
         )
         self.discord_client = None
+        self._last_twitch_activity = time.monotonic()
+
+    def _touch_twitch_activity(self):
+        self._last_twitch_activity = time.monotonic()
 
     async def event_ready(self):
+        self._touch_twitch_activity()
         print(f"Logged in as | {self.nick}")
         # Don't broadcast an initial ticker on startup — overlays should
         # receive only canonical ticker strings produced by the ticker task.
@@ -412,6 +477,7 @@ class Bot(commands.Bot):
         logging.info("Bot ready — ticker task will produce overlay messages shortly.")
 
     async def event_message(self, message):
+        self._touch_twitch_activity()
         author_name = message.author.name if message.author else "Unknown"
         print(f"Message from {author_name}: {message.content}")
         try:
@@ -460,6 +526,7 @@ class Bot(commands.Bot):
         await super().event_message(message)
 
     async def event_command(self, ctx):
+        self._touch_twitch_activity()
         try:
             if ctx and ctx.command:
                 log_event(
@@ -475,6 +542,7 @@ class Bot(commands.Bot):
             logging.error(f"[TELEMETRY] Failed to log event_command: {exc}")
 
     async def event_command_error(self, ctx, error):
+        self._touch_twitch_activity()
         try:
             log_event(
                 "command_error",
@@ -490,9 +558,50 @@ class Bot(commands.Bot):
         except Exception as exc:
             logging.error(f"[TELEMETRY] Failed to log event_command_error: {exc}")
 
+    async def _send_youtube_promo(self, source: str = "manual", skip_channel_name: str | None = None):
+        sent_count = 0
+        channels = list(getattr(self, "connected_channels", None) or [])
+        for channel in channels:
+            channel_name = getattr(channel, "name", None)
+            if skip_channel_name and channel_name == skip_channel_name:
+                continue
+            try:
+                await channel.send(YOUTUBE_PROMO_MESSAGE)
+                sent_count += 1
+            except Exception as exc:
+                logging.warning("[YT PROMO] Failed to send in channel %s: %s", channel_name or "unknown", exc)
+
+        if sent_count == 0:
+            logging.info("[YT PROMO] Skipped (%s): no connected channels", source)
+        else:
+            logging.info("[YT PROMO] Sent (%s) to %s channel(s)", source, sent_count)
+
+        return sent_count
+
+    async def youtube_promo_cycle_task(self):
+        while True:
+            try:
+                await asyncio.sleep(YOUTUBE_PROMO_INTERVAL_SECONDS)
+                await self._send_youtube_promo(source="timer")
+            except asyncio.CancelledError:
+                logging.info("[YT PROMO] Cancelled via shutdown request")
+                raise
+            except Exception as exc:
+                logging.error("[YT PROMO] Unexpected error: %s", exc, exc_info=True)
+
     @commands.command(name='hello')
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
+
+    @commands.command(name="yt")
+    async def yt_command(self, ctx):
+        await ctx.send(YOUTUBE_PROMO_MESSAGE)
+        sent_elsewhere = await self._send_youtube_promo(
+            source=f"command:{getattr(ctx.author, 'name', 'unknown')}",
+            skip_channel_name=getattr(getattr(ctx, "channel", None), "name", None),
+        )
+        if sent_elsewhere > 0:
+            logging.info("[YT PROMO] !yt triggered by %s; command message sent plus %s channel broadcast(s)", getattr(ctx.author, "name", "unknown"), sent_elsewhere)
 
     @commands.command(name='reviewlog', aliases=('latestlog',))
     async def reviewlog(self, ctx, count: str = "20", event_type: str = None):
@@ -578,6 +687,10 @@ else:
             print(f'[DISCORD DISABLED] Would send: {message}')
 
 async def main():
+    if not _acquire_single_instance_lock():
+        print("[BOT] Another bot.main instance is already running. Exiting this duplicate process.")
+        return
+
     # Backup raffle state at startup
     backup_raffle_state()
 
@@ -642,11 +755,39 @@ async def main():
         print(f"[BOT] Error checking authentication: {auth_error}")
         print("[BOT] Continuing startup, but Twitch connection may fail...")
 
+    async def start_overlay_server_resilient():
+        host = (os.getenv("OVERLAY_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+        configured_port = (os.getenv("OVERLAY_PORT") or "8080").strip()
+        try:
+            base_port = int(configured_port)
+        except ValueError:
+            print(f"[OVERLAY] Invalid OVERLAY_PORT '{configured_port}', defaulting to 8080")
+            base_port = 8080
+
+        for port in (base_port, base_port + 1, base_port + 2):
+            try:
+                await start_overlay_server(host=host, port=port)
+                return
+            except OSError as overlay_error:
+                # WinError 10048: address already in use.
+                if getattr(overlay_error, "errno", None) == 10048:
+                    print(f"[OVERLAY] Port {port} is already in use, trying next port...")
+                    continue
+                raise
+
+        print(
+            f"[OVERLAY] Disabled: no available ports in range {base_port}-{base_port + 2}. "
+            "Twitch/Discord bot will continue without overlay server."
+        )
+
     # Start the overlay server in the background
-    overlay_task = asyncio.create_task(start_overlay_server())
+    overlay_task = asyncio.create_task(start_overlay_server_resilient())
     discord_bot = None
     bot = None
     ticker_task = None
+    afk_ticker_task = None
+    youtube_promo_task = None
+    connection_watchdog_task = None
 
     async def _force_close_twitch(bot_instance):
         connection = getattr(bot_instance, "_connection", None)
@@ -685,10 +826,10 @@ async def main():
         finally:
             if bot:
                 await _force_close_twitch(bot)
-        for extra_task in (overlay_task, ticker_task, afk_ticker_task):
+        for extra_task in (overlay_task, ticker_task, afk_ticker_task, youtube_promo_task, connection_watchdog_task):
             if extra_task and not extra_task.done():
                 extra_task.cancel()
-        for extra_task in (overlay_task, ticker_task, afk_ticker_task):
+        for extra_task in (overlay_task, ticker_task, afk_ticker_task, youtube_promo_task, connection_watchdog_task):
             if not extra_task:
                 continue
             try:
@@ -729,6 +870,7 @@ async def main():
     # Start ticker cycle tasks
     ticker_task = asyncio.create_task(bot.ticker_cycle_task())
     afk_ticker_task = asyncio.create_task(bot.afk_ticker_cycle_task())
+    youtube_promo_task = asyncio.create_task(bot.youtube_promo_cycle_task())
 
     # Automatically load all cogs in bot/commands/
     commands_dir = os.path.join(os.path.dirname(__file__), "commands")
@@ -786,12 +928,37 @@ async def main():
     async def run_bot_start(coro_factory, label):
         try:
             await coro_factory()
+            if not main_task_ref.get("shutting_down"):
+                raise RuntimeError(f"{label} stopped unexpectedly")
         except AttributeError as err:
             err_msg = err.args[0] if err.args else ""
             if "NoneType' object has no attribute 'cancel'" in err_msg:
                 print(f"[BOT] {label} shutdown race suppressed: {err_msg}")
                 return
             raise
+
+    async def twitch_connection_watchdog():
+        """Detect silent Twitch disconnects so the process doesn't look healthy while chat is dead."""
+        while True:
+            await asyncio.sleep(30)
+            if main_task_ref.get("shutting_down") or not bot:
+                continue
+            try:
+                idle_for = time.monotonic() - getattr(bot, "_last_twitch_activity", time.monotonic())
+                channels = getattr(bot, "connected_channels", None) or []
+                connection = getattr(bot, "_connection", None)
+                websocket = getattr(connection, "_websocket", None) if connection else None
+                websocket_closed = bool(websocket and getattr(websocket, "closed", False))
+
+                if websocket_closed:
+                    raise RuntimeError("Twitch websocket is closed")
+
+                # If we're detached from channels for a sustained period, force a restart path.
+                if idle_for > 180 and not channels:
+                    raise RuntimeError(f"No connected Twitch channels for {int(idle_for)}s")
+            except Exception as watchdog_error:
+                logging.error("[WATCHDOG] Twitch health check failed: %s", watchdog_error, exc_info=True)
+                raise
 
     def reload_twitch_token_for_retry():
         global TWITCH_TOKEN
@@ -823,9 +990,18 @@ async def main():
         print("[BOT] Adding Discord bot to tasks...")
         tasks.append(run_bot_start(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot"))
     
+    connection_watchdog_task = asyncio.create_task(twitch_connection_watchdog())
+
     print(f"[BOT] Running {len(tasks)} bot tasks + overlay + ticker...")
     async def create_main_gather(task_group):
-        gather_task = asyncio.gather(*task_group, overlay_task, ticker_task)
+        gather_task = asyncio.gather(
+            *task_group,
+            overlay_task,
+            ticker_task,
+            afk_ticker_task,
+            youtube_promo_task,
+            connection_watchdog_task,
+        )
         main_task_ref["task"] = gather_task
         return gather_task
 

@@ -100,22 +100,13 @@ class WOTDState:
         return False, f"'{term}' not found in stream library."
 
     def select_word(self):
-        """Select a word based on bias percentage"""
+        """Select a word from the stream-specific library only"""
         stream_terms = self.load_stream_terms()
-        generic_terms = self.load_generic_terms()
+        if not stream_terms:
+            raise ValueError("No stream terms available")
 
-        # Decide which pool to use based on bias
-        use_stream = False
-        if stream_terms:
-            roll = random.randint(1, 100)
-            use_stream = roll <= self.stream_bias_percent
-
-        if use_stream and stream_terms:
-            word = random.choice(stream_terms)
-            source = "stream"
-        else:
-            word = random.choice(generic_terms)
-            source = "generic"
+        word = random.choice(stream_terms)
+        source = "stream"
 
         self.current_word = word
         self.is_active = True
@@ -275,7 +266,11 @@ class WOTDCog(commands.Cog):
                 await ctx.send("❌ Word of the Day is already active! Use !wotd close to end it first.")
                 return
             
-            word, source = self.state.select_word()
+            try:
+                word, source = self.state.select_word()
+            except ValueError:
+                await ctx.send("❌ No stream WOTD terms are available. Add some with !wotd add \"term\" first.")
+                return
             print(f"[WOTD] Selected: \"{word}\" ({source} library) - Prize: {self.state.prize_value} entries")
             await ctx.send(f"📖 Word of the Day is now ACTIVE! First to say it wins {self.state.prize_value} raffle entries!")
             return
