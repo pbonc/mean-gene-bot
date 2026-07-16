@@ -938,7 +938,12 @@ async def main():
             raise
 
     async def twitch_connection_watchdog():
-        """Detect silent Twitch disconnects so the process doesn't look healthy while chat is dead."""
+        """Detect sustained Twitch disconnects without fighting TwitchIO reconnects."""
+        disconnected_since = None
+        reconnect_grace_seconds = max(
+            60,
+            int(os.getenv("TWITCH_RECONNECT_GRACE_SECONDS", "300")),
+        )
         while True:
             await asyncio.sleep(30)
             if main_task_ref.get("shutting_down") or not bot:
@@ -950,12 +955,34 @@ async def main():
                 websocket = getattr(connection, "_websocket", None) if connection else None
                 websocket_closed = bool(websocket and getattr(websocket, "closed", False))
 
+                unhealthy_reason = None
                 if websocket_closed:
-                    raise RuntimeError("Twitch websocket is closed")
+                    unhealthy_reason = "Twitch websocket is closed"
+                elif idle_for > 180 and not channels:
+                    unhealthy_reason = f"No connected Twitch channels for {int(idle_for)}s"
 
-                # If we're detached from channels for a sustained period, force a restart path.
-                if idle_for > 180 and not channels:
-                    raise RuntimeError(f"No connected Twitch channels for {int(idle_for)}s")
+                if unhealthy_reason:
+                    now = time.monotonic()
+                    if disconnected_since is None:
+                        disconnected_since = now
+                        logging.warning(
+                            "[WATCHDOG] %s; allowing TwitchIO up to %ss to reconnect",
+                            unhealthy_reason,
+                            reconnect_grace_seconds,
+                        )
+                        continue
+
+                    disconnected_for = now - disconnected_since
+                    if disconnected_for >= reconnect_grace_seconds:
+                        raise RuntimeError(
+                            f"{unhealthy_reason}; reconnect grace exceeded "
+                            f"({int(disconnected_for)}s)"
+                        )
+                    continue
+
+                if disconnected_since is not None:
+                    logging.info("[WATCHDOG] Twitch connection recovered")
+                    disconnected_since = None
             except Exception as watchdog_error:
                 logging.error("[WATCHDOG] Twitch health check failed: %s", watchdog_error, exc_info=True)
                 raise

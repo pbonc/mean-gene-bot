@@ -456,7 +456,7 @@ async def as_overlay_task():
     while True:
         try:
             now = time.time()
-            logging.info(f"[TICKER DEBUG] Broadcast at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}, clients: {len(as_overlay_clients)}")
+            logging.debug(f"[TICKER DEBUG] Broadcast at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now))}, clients: {len(as_overlay_clients)}")
             # AS overlay task intentionally does not send ticker messages.
             # AS overlay clients are a separate UI and should not receive the regular
             # ticker payloads (those are sent via broadcast_overlay_message as type 'ticker').
@@ -483,7 +483,7 @@ async def broadcast_overlay_message(message: dict):
         latest_grid_state = message
     
     msg_type = message.get("type", "unknown")
-    logging.info(f"Broadcasting {msg_type} message to {len(overlay_clients)} overlay clients")
+    logging.debug(f"Broadcasting {msg_type} message to {len(overlay_clients)} overlay clients")
 
     for ws in list(overlay_clients):
         if ws.closed:
