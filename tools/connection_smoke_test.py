@@ -151,10 +151,23 @@ async def check_overlay(timeout_seconds: float) -> CheckResult:
                     async with session.get(base_url + "/") as response:
                         if response.status != 200:
                             raise RuntimeError(f"overlay root returned HTTP {response.status}")
+                    async with session.get(base_url + "/gifs/test.txt") as response:
+                        if response.status != 200:
+                            raise RuntimeError(f"canonical overlay media returned HTTP {response.status}")
+                    async with session.get(base_url + "/api/cards") as response:
+                        if response.status != 200:
+                            raise RuntimeError(f"card API returned HTTP {response.status}")
+                        card_payload = await response.json()
+                        if not card_payload:
+                            raise RuntimeError("card API did not discover assets/cards")
                     async with session.ws_connect(base_url + "/ws") as websocket:
                         if websocket.closed:
                             raise RuntimeError("overlay websocket closed immediately")
-                    return CheckResult("overlay", True, "HTTP root and WebSocket accepted connections")
+                    return CheckResult(
+                        "overlay",
+                        True,
+                        "HTTP, canonical media/card paths, and WebSocket accepted connections",
+                    )
                 except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                     last_error = exc
                     await asyncio.sleep(0.1)

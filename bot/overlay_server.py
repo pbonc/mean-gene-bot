@@ -13,6 +13,8 @@ _runner = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "overlay_static")
+GIFS_DIR = os.path.join(STATIC_DIR, "gifs")
+CARDS_DIR = os.path.join(os.path.dirname(BASE_DIR), "assets", "cards")
 WHEEL_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "wheel_state.json")
 RPG_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_state.json")
 RPG_LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_log.json")
@@ -280,7 +282,7 @@ async def get_card_data(request):
     import json
     import re
     
-    cards_dir = os.path.join(os.path.dirname(STATIC_DIR), "assets", "cards")
+    cards_dir = CARDS_DIR
     card_data = []
     
     if not os.path.isdir(cards_dir):
@@ -522,12 +524,12 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/api/cards", get_card_data)
     app.router.add_get("/api/raffle", get_raffle_data)
     # Serve GIFs and other overlay static assets
-    gifs_dir = STATIC_DIR
+    gifs_dir = GIFS_DIR
     if os.path.isdir(gifs_dir):
         app.router.add_static('/gifs', gifs_dir)
     
     # Serve trading card images
-    cards_dir = os.path.join(os.path.dirname(STATIC_DIR), "assets", "cards")
+    cards_dir = CARDS_DIR
     if os.path.isdir(cards_dir):
         app.router.add_static('/cards', cards_dir)
     runner = web.AppRunner(app)

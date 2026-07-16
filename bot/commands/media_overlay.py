@@ -22,7 +22,7 @@ try:
 except Exception:
     write_full_sheet = None
 
-GIF_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "overlay_static"))
+GIF_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "overlay_static", "gifs"))
 SFX_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sfx"))
 IMAGE_EXTS = [".gif", ".jpg", ".jpeg", ".png", ".webp"]
 AUDIO_EXTS = [".mp3", ".wav", ".ogg"]
