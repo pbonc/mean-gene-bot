@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NHL Break Board</title>
+  <style>
+    @font-face {
+      font-family: 'BreakSans';
+      src: local('Trebuchet MS');
+    }
+
+    :root {
+      --bg: #0b1220;
+      --ink: #f5f8ff;
+      --accent: #82d4ff;
+      --accent2: #ff7a45;
+      --muted: #afbdd3;
+      --border: #2a3951;
+      --tile: #172235;
+      --tile2: #243652;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(circle at top, #17365f 0%, #0d1729 38%, #060b15 100%);
+      color: var(--ink);
+      font-family: 'BreakSans', 'Trebuchet MS', Arial, sans-serif;
+    }
+
+    .frame {
+      max-width: 1800px;
+      margin: 12px auto;
+      padding: 18px 20px;
+      background: rgba(10, 17, 31, 0.94);
+      border: 3px solid var(--border);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .title {
+      font-size: 36px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      font-weight: 900;
+      text-transform: uppercase;
+      text-shadow: 0 3px 16px rgba(130, 212, 255, 0.25);
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border: 2px solid var(--accent2);
+      background: rgba(255, 122, 69, 0.12);
+      color: var(--ink);
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 120ms ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 122, 69, 0.22);
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+
+    .legend .swatch {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      background: rgba(120, 143, 178, 0.25);
+    }
+
+    .legend .line {
+      height: 2px;
+      width: 40px;
+      background: var(--accent2);
+    }
+
+    .section-title {
+      font-size: 20px;
+      margin: 12px auto 6px;
+      padding-bottom: 4px;
+      border-bottom: 3px solid var(--accent2);
+      color: var(--accent);
+      font-weight: 700;
+      max-width: 1080px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      width: min(100%, 1080px);
+      margin: 10px auto 0;
+    }
+
+    #picklist {
+      font-size: 18px;
+      color: var(--ink);
+    }
+
+    .tile {
+      position: relative;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, var(--tile), var(--tile2));
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+      color: #ffffff;
+    }
+
+    .tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .tile h4 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.15;
+      font-weight: 700;
+      color: inherit;
+      padding-right: 60px;
+    }
+
+    .tile small {
+      display: block;
+      margin-top: 4px;
+      color: inherit;
+      opacity: 0.94;
+    }
+
+    .tile .badge {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      font-size: 11px;
+      padding: 3px 6px;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .tile .assign {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      color: inherit;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1200px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .frame {
+        padding: 14px;
+      }
+
+      .title {
+        font-size: 30px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tile h4 {
+        padding-right: 54px;
+      }
+    }
+
+    .tile.struck h4,
+    .tile.struck small,
+    .tile.struck .assign {
+      text-decoration: line-through;
+      text-decoration-thickness: 4px;
+      text-decoration-color: rgba(220, 30, 30, 0.88);
+    }
+
+    .tile[data-team="Boston Bruins"] { background: linear-gradient(135deg, #ffb81c, #111111); color: #ffffff; }
+    .tile[data-team="Buffalo Sabres"] { background: linear-gradient(135deg, #003087, #ffb81c); color: #ffffff; }
+    .tile[data-team="Detroit Red Wings"] { background: linear-gradient(135deg, #ce1126, #7f0015); color: #ffffff; }
+    .tile[data-team="Florida Panthers"] { background: linear-gradient(135deg, #041e42, #c8102e); color: #ffffff; }
+    .tile[data-team="Montreal Canadiens"] { background: linear-gradient(135deg, #af1e2d, #001e62); color: #ffffff; }
+    .tile[data-team="Ottawa Senators"] { background: linear-gradient(135deg, #c52032, #c2912c); color: #ffffff; }
+    .tile[data-team="Tampa Bay Lightning"] { background: linear-gradient(135deg, #002868, #005bbb); color: #ffffff; }
+    .tile[data-team="Toronto Maple Leafs"] { background: linear-gradient(135deg, #00205b, #0047ba); color: #ffffff; }
+
+    .tile[data-team="Carolina Hurricanes"] { background: linear-gradient(135deg, #cc0000, #111111); color: #ffffff; }
+    .tile[data-team="Columbus Blue Jackets"] { background: linear-gradient(135deg, #002654, #ce1126); color: #ffffff; }
+    .tile[data-team="New Jersey Devils"] { background: linear-gradient(135deg, #ce1126, #111111); color: #ffffff; }
+    .tile[data-team="New York Islanders"] { background: linear-gradient(135deg, #00539b, #f47d30); color: #ffffff; }
+    .tile[data-team="New York Rangers"] { background: linear-gradient(135deg, #0038a8, #ce1126); color: #ffffff; }
+    .tile[data-team="Philadelphia Flyers"] { background: linear-gradient(135deg, #f74902, #111111); color: #ffffff; }
+    .tile[data-team="Pittsburgh Penguins"] { background: linear-gradient(135deg, #000000, #ffb81c); color: #ffffff; }
+    .tile[data-team="Washington Capitals"] { background: linear-gradient(135deg, #041e42, #c8102e); color: #ffffff; }
+
+    .tile[data-team="Chicago Blackhawks"] { background: linear-gradient(135deg, #cf0a2c, #111111); color: #ffffff; }
+    .tile[data-team="Colorado Avalanche"] { background: linear-gradient(135deg, #6f263d, #236192); color: #ffffff; }
+    .tile[data-team="Dallas Stars"] { background: linear-gradient(135deg, #006847, #111111); color: #ffffff; }
+    .tile[data-team="Minnesota Wild"] { background: linear-gradient(135deg, #154734, #a6192e); color: #ffffff; }
+    .tile[data-team="Nashville Predators"] { background: linear-gradient(135deg, #ffb81c, #041e42); color: #ffffff; }
+    .tile[data-team="St. Louis Blues"] { background: linear-gradient(135deg, #002f87, #fcb514); color: #ffffff; }
+    .tile[data-team="Utah Mammoth"] { background: linear-gradient(135deg, #6cace4, #0b1f3a); color: #ffffff; }
+    .tile[data-team="Winnipeg Jets"] { background: linear-gradient(135deg, #041e42, #004c97); color: #ffffff; }
+
+    .tile[data-team="Anaheim Ducks"] { background: linear-gradient(135deg, #b9975b, #111111); color: #ffffff; }
+    .tile[data-team="Calgary Flames"] { background: linear-gradient(135deg, #c8102e, #f1be48); color: #ffffff; }
+    .tile[data-team="Edmonton Oilers"] { background: linear-gradient(135deg, #041e42, #ff4c00); color: #ffffff; }
+    .tile[data-team="Los Angeles Kings"] { background: linear-gradient(135deg, #111111, #6b6b6b); color: #ffffff; }
+    .tile[data-team="San Jose Sharks"] { background: linear-gradient(135deg, #006d75, #111111); color: #ffffff; }
+    .tile[data-team="Seattle Kraken"] { background: linear-gradient(135deg, #001628, #99d9d9); color: #ffffff; }
+    .tile[data-team="Vancouver Canucks"] { background: linear-gradient(135deg, #00205b, #00843d); color: #ffffff; }
+    .tile[data-team="Vegas Golden Knights"] { background: linear-gradient(135deg, #b4975a, #333f48); color: #ffffff; }
+
+    footer {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="title">NHL Break Board</div>
+      <div class="subtitle">Click a team, enter a username, and apply. Reassignments replace the old owner, and you can clear a single team from the modal.</div>
+      <div class="controls">
+        <button class="btn" id="clear">Clear All</button>
+        <button class="btn" id="export">Export Hits</button>
+      </div>
+      <div class="legend">
+        <div class="swatch" title="Tile"></div>
+        <div class="line" title="Border"></div>
+        <div>Struck items = hit/claimed</div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">Eastern Conference - Atlantic Division</div>
+      <div class="grid" id="east-atlantic"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Eastern Conference - Metropolitan Division</div>
+      <div class="grid" id="east-metropolitan"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Western Conference - Central Division</div>
+      <div class="grid" id="west-central"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Western Conference - Pacific Division</div>
+      <div class="grid" id="west-pacific"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Pick List (Grouped by Name)</div>
+      <div id="picklist"></div>
+    </section>
+
+    <footer>
+      NHL Break Board - All 32 current NHL teams, grouped by conference and division.
+    </footer>
+  </div>
+
+  <div id="assignModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);">
+    <div style="max-width:520px; margin:10% auto; background:#141a26; border:3px solid var(--accent2); border-radius:8px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+      <div style="font-size:18px; color:var(--accent); margin-bottom:8px; font-weight:700;">Assign Picker</div>
+      <div id="assignTarget" style="color:var(--muted); margin-bottom:8px;">Selected: (none)</div>
+      <label for="pickerName" style="display:block; margin-bottom:4px; font-weight:600; color:var(--ink);">Picker name</label>
+      <input id="pickerName" list="pickerNames" type="text" style="width:100%; padding:8px; border:2px solid var(--border); background:#232c3d; color:var(--ink); border-radius:6px; box-sizing:border-box;" placeholder="Type name..." />
+      <datalist id="pickerNames"></datalist>
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button class="btn" id="assignClear">Clear Team</button>
+        <button class="btn" id="assignCancel">Cancel</button>
+        <button class="btn" id="assignSave" style="background:var(--accent2); color:#ffffff; border-color:var(--accent2);">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const EAST_ATLANTIC = [
+      'Boston Bruins',
+      'Buffalo Sabres',
+      'Detroit Red Wings',
+      'Florida Panthers',
+      'Montreal Canadiens',
+      'Ottawa Senators',
+      'Tampa Bay Lightning',
+      'Toronto Maple Leafs'
+    ];
+
+    const EAST_METROPOLITAN = [
+      'Carolina Hurricanes',
+      'Columbus Blue Jackets',
+      'New Jersey Devils',
+      'New York Islanders',
+      'New York Rangers',
+      'Philadelphia Flyers',
+      'Pittsburgh Penguins',
+      'Washington Capitals'
+    ];
+
+    const WEST_CENTRAL = [
+      'Chicago Blackhawks',
+      'Colorado Avalanche',
+      'Dallas Stars',
+      'Minnesota Wild',
+      'Nashville Predators',
+      'St. Louis Blues',
+      'Utah Mammoth',
+      'Winnipeg Jets'
+    ];
+
+    const WEST_PACIFIC = [
+      'Anaheim Ducks',
+      'Calgary Flames',
+      'Edmonton Oilers',
+      'Los Angeles Kings',
+      'San Jose Sharks',
+      'Seattle Kraken',
+      'Vancouver Canucks',
+      'Vegas Golden Knights'
+    ];
+
+    const hits = new Set();
+    let selectedKey = null;
+    const assignments = new Map();
+    const assignedNames = new Set();
+
+    function makeTile(label, division, conference, note) {
+      const div = document.createElement('div');
+      div.className = 'tile';
+      const key = `${conference} - ${division}:${label}`;
+      div.dataset.key = key;
+      div.dataset.team = label;
+
+      const h4 = document.createElement('h4');
+      h4.textContent = label;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = division;
+
+      div.appendChild(h4);
+      if (note) {
+        const sm = document.createElement('small');
+        sm.textContent = note;
+        div.appendChild(sm);
+      }
+      div.appendChild(badge);
+
+      div.addEventListener('click', () => {
+        selectedKey = key;
+        document.querySelectorAll('.tile').forEach(el => {
+          el.style.outline = '';
+        });
+        div.style.outline = '3px solid var(--accent2)';
+        openAssignModal(key);
+      });
+
+      return div;
+    }
+
+    function render() {
+      const divisions = {
+        'east-atlantic': { teams: EAST_ATLANTIC, conference: 'Eastern Conference', division: 'Atlantic' },
+        'east-metropolitan': { teams: EAST_METROPOLITAN, conference: 'Eastern Conference', division: 'Metropolitan' },
+        'west-central': { teams: WEST_CENTRAL, conference: 'Western Conference', division: 'Central' },
+        'west-pacific': { teams: WEST_PACIFIC, conference: 'Western Conference', division: 'Pacific' }
+      };
+
+      Object.entries(divisions).forEach(([id, group]) => {
+        const root = document.getElementById(id);
+        root.innerHTML = '';
+        group.teams.forEach(team => {
+          root.appendChild(makeTile(team, group.division, group.conference, ''));
+        });
+      });
+
+      restore();
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem('nhl_hits', JSON.stringify([...hits]));
+      } catch {}
+      try {
+        const obj = {};
+        assignments.forEach((set, name) => {
+          obj[name] = [...set];
+        });
+        localStorage.setItem('nhl_assignments', JSON.stringify(obj));
+      } catch {}
+    }
+
+    function getAssignedName(key) {
+      for (const [name, set] of assignments.entries()) {
+        if (set.has(key)) {
+          return name;
+        }
+      }
+      return null;
+    }
+
+    function removeAssignment(key) {
+      [...assignments.entries()].forEach(([name, set]) => {
+        if (set.delete(key) && set.size === 0) {
+          assignments.delete(name);
+        }
+      });
+    }
+
+    function syncTileAssignment(key) {
+      const tile = document.querySelector(`.tile[data-key="${CSS.escape(key)}"]`);
+      if (!tile) {
+        return;
+      }
+
+      const assignedName = getAssignedName(key);
+      let assignEl = tile.querySelector('.assign');
+
+      if (assignedName) {
+        hits.add(key);
+        tile.classList.add('struck');
+        if (!assignEl) {
+          assignEl = document.createElement('span');
+          assignEl.className = 'assign';
+          tile.appendChild(assignEl);
+        }
+        assignEl.textContent = assignedName;
+        return;
+      }
+
+      hits.delete(key);
+      tile.classList.remove('struck');
+      if (assignEl) {
+        assignEl.remove();
+      }
+    }
+
+    function syncAllTiles() {
+      document.querySelectorAll('.tile').forEach(el => {
+        syncTileAssignment(el.dataset.key);
+      });
+    }
+
+    function restore() {
+      try {
+        const raw = localStorage.getItem('nhl_hits');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          arr.forEach(k => hits.add(k));
+        }
+      } catch {}
+
+      try {
+        const rawA = localStorage.getItem('nhl_assignments');
+        if (rawA) {
+          const obj = JSON.parse(rawA);
+          Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
+        }
+        syncAllTiles();
+        renderPickList();
+        refreshPickerNames();
+      } catch {}
+    }
+
+    document.getElementById('clear').addEventListener('click', () => {
+      hits.clear();
+      document.querySelectorAll('.tile').forEach(el => {
+        el.classList.remove('struck');
+        const assignEl = el.querySelector('.assign');
+        if (assignEl) {
+          assignEl.remove();
+        }
+      });
+      assignments.clear();
+      try {
+        localStorage.removeItem('nhl_hits');
+      } catch {}
+      try {
+        localStorage.removeItem('nhl_assignments');
+      } catch {}
+      renderPickList();
+      refreshPickerNames();
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const exportText = buildPickListExport();
+      navigator.clipboard.writeText(exportText).then(() => {
+        alert('Exported pick list to clipboard.');
+      }).catch(() => {
+        alert('Could not copy pick list to clipboard.');
+      });
+    });
+
+    const modal = document.getElementById('assignModal');
+    const assignTarget = document.getElementById('assignTarget');
+    const pickerNameInput = document.getElementById('pickerName');
+    const pickerNamesDL = document.getElementById('pickerNames');
+
+    function openAssignModal(key) {
+      const assignedName = getAssignedName(key);
+      assignTarget.textContent = assignedName
+        ? `Selected: ${key} | Assigned to: ${assignedName}`
+        : 'Selected: ' + key;
+      pickerNameInput.value = '';
+      refreshPickerNames();
+      modal.style.display = 'block';
+      pickerNameInput.focus();
+    }
+
+    document.getElementById('assignCancel').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('assignClear').addEventListener('click', () => {
+      if (!selectedKey) {
+        return;
+      }
+
+      removeAssignment(selectedKey);
+      syncTileAssignment(selectedKey);
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('assignSave').addEventListener('click', () => {
+      const name = (pickerNameInput.value || '').trim();
+      if (!name) {
+        alert('Enter a picker name.');
+        return;
+      }
+
+      removeAssignment(selectedKey);
+      if (!assignments.has(name)) {
+        assignments.set(name, new Set());
+      }
+
+      const set = assignments.get(name);
+      set.add(selectedKey);
+      assignedNames.add(name);
+
+      syncTileAssignment(selectedKey);
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    function renderPickList() {
+      const root = document.getElementById('picklist');
+      root.innerHTML = '';
+
+      const names = [...assignments.keys()].sort((a, b) => a.localeCompare(b));
+      if (names.length === 0) {
+        root.textContent = 'No picks yet.';
+        return;
+      }
+
+      names.forEach(name => {
+        const group = document.createElement('div');
+        group.style.marginBottom = '10px';
+
+        const heading = document.createElement('div');
+        heading.textContent = name;
+        heading.style.fontWeight = '700';
+        heading.style.color = 'var(--accent)';
+        heading.style.marginBottom = '6px';
+
+        const list = document.createElement('ul');
+        list.style.margin = '0';
+        list.style.paddingLeft = '18px';
+
+        [...assignments.get(name)].sort().forEach(k => {
+          const li = document.createElement('li');
+          li.textContent = k;
+          list.appendChild(li);
+        });
+
+        group.appendChild(heading);
+        group.appendChild(list);
+        root.appendChild(group);
+      });
+    }
+
+    function buildPickListExport() {
+      const names = [...assignments.keys()].sort((a, b) => a.localeCompare(b));
+      if (names.length === 0) {
+        return 'No picks yet.';
+      }
+
+      const lines = [];
+      names.forEach(name => {
+        const items = [...assignments.get(name)].sort();
+        lines.push(`${name}:`);
+        items.forEach(item => lines.push(`  - ${item}`));
+        lines.push('');
+      });
+
+      return lines.join('\n');
+    }
+
+    function refreshPickerNames() {
+      pickerNamesDL.innerHTML = '';
+      const names = new Set([...assignments.keys(), ...assignedNames]);
+      names.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        pickerNamesDL.appendChild(opt);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "is_open": true,
+  "entries_per_chat": 1,
+  "entries": {
+    "iamdar": 5,
+    "deputydawg777": 6,
+    "livesuieng": 6,
+    "fal_the_warlock": 5,
+    "terminallynormal": 3,
+    "karnave": 2
+  },
+  "picks": {},
+  "winner": null,
+  "winning_number": null,
+  "chat_awarded": [
+    "livesuieng",
+    "deputydawg777",
+    "terminallynormal",
+    "karnave",
+    "iamdar",
+    "fal_the_warlock"
+  ],
+  "first_chatter_awarded": true,
+  "first_chatter_user": "iamdar",
+  "ignored_users": [],
+  "bad_beat_jackpot": 25,
+  "giveaway_amount": 0.0,
+  "zap_active": false,
+  "zap_start_time": null,
+  "zap_target_seconds": 0,
+  "zap_awarded_user": null,
+  "zap_trigger_announced": false,
+  "zap_trigger_type": null,
+  "zap_announcement_sent": false
+}

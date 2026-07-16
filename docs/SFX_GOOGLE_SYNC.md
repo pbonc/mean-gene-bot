@@ -14,12 +14,16 @@ Environment variables
 - `GOOGLE_SERVICE_ACCOUNT_JSON` (required): absolute path to the service account JSON key file.
 - `SFX_SPREADSHEET_ID` (required): the spreadsheet ID from the sheet URL.
 - `SFX_SHEET_NAME` (optional, default `sfx`): the worksheet/tab name to write.
+- `SFX_COMMANDS_SHEET_NAME` (optional, default `sfx_commands`): worksheet/tab for the full SFX command catalog.
 
 How it works
 ------------
 - The bot scans `bot/overlay_static/gifs/` and `assets/sfx/` and maintains a registry of commands.
 - When a command is added or removed the bot will attempt to sync the canonical list of commands
-  to the configured Google Sheet (it overwrites the sheet contents for idempotency).
+  to the configured Google Sheet (it overwrites sheet contents for idempotency).
+- It now writes two worksheet tabs in the same spreadsheet:
+  - `SFX_SHEET_NAME` (default `sfx`): public-facing media catalog rows.
+  - `SFX_COMMANDS_SHEET_NAME` (default `sfx_commands`): full SFX command catalog (public + mod-only).
 - Moderators can force an immediate sync via the chat command `!syncsfx`.
 
 Security

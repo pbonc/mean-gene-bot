@@ -309,6 +309,7 @@
       <input id="pickerName" list="pickerNames" type="text" style="width:100%; padding:8px; border:2px solid var(--border); background:#222222; color:var(--ink); border-radius:6px; box-sizing:border-box;" placeholder="Type name..." />
       <datalist id="pickerNames"></datalist>
       <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button class="btn" id="assignClear">Clear Team</button>
         <button class="btn" id="assignCancel">Cancel</button>
         <button class="btn" id="assignSave" style="background:var(--accent2); color:white; border-color:var(--accent2);">Save</button>
       </div>
@@ -578,12 +579,13 @@
     function restore() {
       try {
         const raw = localStorage.getItem('nfl_hits');
-        if (!raw) return;
-        const arr = JSON.parse(raw);
-        arr.forEach(k => hits.add(k));
-        document.querySelectorAll('.tile').forEach(el => {
-          if (hits.has(el.dataset.key)) el.classList.add('struck');
-        });
+        if (raw) {
+          const arr = JSON.parse(raw);
+          arr.forEach(k => hits.add(k));
+          document.querySelectorAll('.tile').forEach(el => {
+            if (hits.has(el.dataset.key)) el.classList.add('struck');
+          });
+        }
       } catch {}
       try {
         const rawA = localStorage.getItem('nfl_assignments');
@@ -591,6 +593,7 @@
           const obj = JSON.parse(rawA);
           Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
         }
+        syncAllTiles();
         renderPickList();
         refreshPickerNames();
       } catch {}
@@ -598,8 +601,18 @@
 
     document.getElementById('clear').addEventListener('click', () => {
       hits.clear();
-      document.querySelectorAll('.tile').forEach(el => el.classList.remove('struck'));
+      document.querySelectorAll('.tile').forEach(el => {
+        el.classList.remove('struck');
+        const assignEl = el.querySelector('.assign');
+        if (assignEl) {
+          assignEl.remove();
+        }
+      });
+      assignments.clear();
       try { localStorage.removeItem('nfl_hits'); } catch {}
+      try { localStorage.removeItem('nfl_assignments'); } catch {}
+      renderPickList();
+      refreshPickerNames();
     });
 
     document.getElementById('export').addEventListener('click', () => {
@@ -616,8 +629,63 @@
     const assignTarget = document.getElementById('assignTarget');
     const pickerNameInput = document.getElementById('pickerName');
     const pickerNamesDL = document.getElementById('pickerNames');
+
+    function getAssignedName(key) {
+      for (const [name, set] of assignments.entries()) {
+        if (set.has(key)) {
+          return name;
+        }
+      }
+      return null;
+    }
+
+    function removeAssignment(key) {
+      [...assignments.entries()].forEach(([name, set]) => {
+        if (set.delete(key) && set.size === 0) {
+          assignments.delete(name);
+        }
+      });
+    }
+
+    function syncTileAssignment(key) {
+      const tile = document.querySelector(`.tile[data-key="${CSS.escape(key)}"]`);
+      if (!tile) {
+        return;
+      }
+
+      const assignedName = getAssignedName(key);
+      let assignEl = tile.querySelector('.assign');
+
+      if (assignedName) {
+        hits.add(key);
+        tile.classList.add('struck');
+        if (!assignEl) {
+          assignEl = document.createElement('span');
+          assignEl.className = 'assign';
+          tile.appendChild(assignEl);
+        }
+        assignEl.textContent = assignedName;
+        return;
+      }
+
+      hits.delete(key);
+      tile.classList.remove('struck');
+      if (assignEl) {
+        assignEl.remove();
+      }
+    }
+
+    function syncAllTiles() {
+      document.querySelectorAll('.tile').forEach(el => {
+        syncTileAssignment(el.dataset.key);
+      });
+    }
+
     function openAssignModal(key) {
-      assignTarget.textContent = 'Selected: ' + key;
+      const assignedName = getAssignedName(key);
+      assignTarget.textContent = assignedName
+        ? `Selected: ${key} | Assigned to: ${assignedName}`
+        : 'Selected: ' + key;
       pickerNameInput.value = '';
       refreshPickerNames();
       modal.style.display = 'block';
@@ -626,21 +694,27 @@
     document.getElementById('assignCancel').addEventListener('click', () => {
       modal.style.display = 'none';
     });
+    document.getElementById('assignClear').addEventListener('click', () => {
+      if (!selectedKey) {
+        return;
+      }
+
+      removeAssignment(selectedKey);
+      syncTileAssignment(selectedKey);
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
     document.getElementById('assignSave').addEventListener('click', () => {
       const name = (pickerNameInput.value || '').trim();
       if (!name) { alert('Enter a picker name.'); return; }
+      removeAssignment(selectedKey);
       if (!assignments.has(name)) assignments.set(name, new Set());
       const set = assignments.get(name);
       set.add(selectedKey);
       assignedNames.add(name);
-      const tile = document.querySelector(`.tile[data-key="${CSS.escape(selectedKey)}"]`);
-      if (tile) {
-        hits.add(selectedKey);
-        tile.classList.add('struck');
-        let assignEl = tile.querySelector('.assign');
-        if (!assignEl) { assignEl = document.createElement('span'); assignEl.className = 'assign'; tile.appendChild(assignEl); }
-        assignEl.textContent = name;
-      }
+      syncTileAssignment(selectedKey);
       persist();
       renderPickList();
       refreshPickerNames();

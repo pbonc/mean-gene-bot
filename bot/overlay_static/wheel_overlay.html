@@ -470,7 +470,8 @@
       const targetRotation = 360 - (data.winner_index * segmentAngle + segmentAngle / 2);
       const delta = (targetRotation - normalizedRotation + 360) % 360;
 
-      const duration = Math.max(3000, Math.min(20000, data.duration_ms || 8000));
+      // Keep UI timing aligned with backend !wheelspin seconds (5s..200s).
+      const duration = Math.max(5000, Math.min(200000, Number(data.duration_ms) || 8000));
       const extraTurns = Math.max(3, Math.round(duration / 1000));
       const finalRotation = currentRotation + extraTurns * 360 + delta;
 

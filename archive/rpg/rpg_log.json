@@ -1,0 +1,808 @@
+{
+  "daily_reset_ts": 1772245321,
+  "daily_log": [
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Monster: skeletank hit @fal_the_warlock's Blob for 37."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Monster: skeletank hit @fal_the_warlock's Blob for 37."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Monster: skeletank hit @fal_the_warlock's Blob for 37."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Monster: skeletank hit @fal_the_warlock's Blob for 37."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Locust: @iamdar's mech dealt 30 damage (0 kills)."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Franklin buff: @nate048 gained +45% JDAM crit chance and +30% Kid intercept chance."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Franklin: @nate048's Franklin hit goblin for 6 (CRIT)."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Ghoul: @fal_the_warlock's Ghoul hit goblin for 74; poison now 1 for 3 turns."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Monster down: goblin defeated by @fal_the_warlock's Ghoul."
+    },
+    {
+      "ts": "2026-03-08T07:42:00Z",
+      "text": "Blob: @fal_the_warlock's Blob slams trickster for 4 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:08Z",
+      "text": "Queued: @nate048 jdam (20)."
+    },
+    {
+      "ts": "2026-03-08T07:42:09Z",
+      "text": "Salary: @colonel_dinggus +4 gacha tokens, +4 entries."
+    },
+    {
+      "ts": "2026-03-08T07:42:09Z",
+      "text": "Join: @colonel_dinggus entered the battle."
+    },
+    {
+      "ts": "2026-03-08T07:42:10Z",
+      "text": "Queued: @snipah201z used Enforcer Slash."
+    },
+    {
+      "ts": "2026-03-08T07:42:21Z",
+      "text": "Queued: @deputydawg777 tommygun (0)."
+    },
+    {
+      "ts": "2026-03-08T07:42:22Z",
+      "text": "Queued: @iamdar rolled gamba."
+    },
+    {
+      "ts": "2026-03-08T07:42:28Z",
+      "text": "Gacha draw: @colonel_dinggus drew 4x for +175 XP (1 rare, 3 common) | bonus: +0 gacha, +0 entries."
+    },
+    {
+      "ts": "2026-03-08T07:42:28Z",
+      "text": "Queued: @tankahdelphia gun (7)."
+    },
+    {
+      "ts": "2026-03-08T07:42:30Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-03-08T07:42:30Z",
+      "text": "Default action: @colonel_dinggus auto-used cleave (join auto timer)."
+    },
+    {
+      "ts": "2026-03-08T07:42:47Z",
+      "text": "Queued: @caerdwyn knocked a desk lamp off the shelf!"
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Queued: @livesuieng mixed a volatile brew."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 14 HP."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "JDAM: @nate048 dealt 127 to primary + splash 86 to 2 targets (299 total)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Slash: @snipah201z dealt 107 and applied bleed to 1 target(s)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: goblin defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: trickster defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: goblin defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: skeletank defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: goblin defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: shaman defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: trickster defeated by @deputydawg777."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Tommygun: @deputydawg777 fired 26 rotating hits across live targets for 3043 total (12 kills)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: shaman defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: summoner defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: skeletank defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Gamba: @iamdar hit 12/14 enemies for 128 each."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Action: @tankahdelphia used gun for 128 damage (CRIT!)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster down: skeletank defeated by @tankahdelphia."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Harvest: @fal_the_warlock executed 1 foe(s): trickster#12 (roll 0.39 < 0.55)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Cleave: @colonel_dinggus hit 3 direct and 3 indirect targets for 64 total."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Meow: @caerdwyn's desk lamp hit trickster for 24 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Brew: @livesuieng restored 305 HP across 7 allies."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Summoner collapse: 1 summoned skeleton(s) crumbled with their master."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Ghoul poison: summoner takes 2 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Summoner rot: @tankahdelphia takes 37 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Summoner rot: @iamdar takes 37 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Summoner rot: @caerdwyn takes 37 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "summoner is stunned and cannot act!"
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Shield Totem: prevented damage to @fal_the_warlock's Blob."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster: goblin hit @fal_the_warlock's Blob for 69."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Monster: trickster hit @fal_the_warlock's Blob for 68."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "goblin is stunned and cannot act!"
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Locust: @iamdar's mech dealt 30 damage (0 kills)."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Franklin: @nate048's Franklin hit goblin for 3."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Ghoul: @fal_the_warlock's Ghoul hit summoner for 116; poison now 1 for 3 turns."
+    },
+    {
+      "ts": "2026-03-08T07:42:48Z",
+      "text": "Blob: @fal_the_warlock's Blob slams goblin for 4 damage."
+    },
+    {
+      "ts": "2026-03-08T07:42:53Z",
+      "text": "Queued: @iamdar rolled gamba."
+    },
+    {
+      "ts": "2026-03-08T07:42:58Z",
+      "text": "Queued: @nate048 jdam (20)."
+    },
+    {
+      "ts": "2026-03-08T07:43:01Z",
+      "text": "Queued: @snipah201z used Enforcer Slash."
+    },
+    {
+      "ts": "2026-03-08T07:43:03Z",
+      "text": "Queued: @tankahdelphia gun (7)."
+    },
+    {
+      "ts": "2026-03-08T07:43:06Z",
+      "text": "Queued: @deputydawg777 tazer (6)."
+    },
+    {
+      "ts": "2026-03-08T07:43:09Z",
+      "text": "Queued: @livesuieng bottle (12)."
+    },
+    {
+      "ts": "2026-03-08T07:43:10Z",
+      "text": "Queued: @caerdwyn knocked a laptop off the shelf!"
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Default action: @fal_the_warlock auto-used harvest (join auto timer)."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Default action: @colonel_dinggus auto-used cleave (join auto timer)."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Meatwad passive: @tankahdelphia as Honey Bear healed party for 14 HP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Monster down: goblin defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Monster down: goblin defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Monster down: trickster defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Monster down: goblin defeated by @iamdar."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Gamba: @iamdar hit 4/5 enemies for 117 each."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "JDAM: @nate048 dealt 59 to primary + splash 78 to 0 targets (59 total)."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Top DPS: fal_the_warlock (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Top Healing: iamdar (+1 gacha token each)."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @livesuieng earned 2 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @nate048 earned 2 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @tankahdelphia earned 2 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @iamdar earned 2 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @caerdwyn earned 1 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @snipah201z earned 1 gacha tokens, 1 tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @fal_the_warlock earned 1 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @deputydawg777 earned 2 gacha tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-08T07:43:18Z",
+      "text": "Loot: @colonel_dinggus earned 2 gacha tokens, 1 tokens, 86408 XP."
+    },
+    {
+      "ts": "2026-03-09T01:36:18Z",
+      "text": "Gacha draw: @iamdar drew 469x for +16675 tokens (66 rare, 403 common) | bonus: +20 gacha, +0 entries."
+    },
+    {
+      "ts": "2026-03-09T01:52:20Z",
+      "text": "New stream started: salary and active flags reset."
+    },
+    {
+      "ts": "2026-03-09T01:53:34Z",
+      "text": "Gacha draw: @nate048 drew 9x for +450 tokens (3 rare, 6 common) | bonus: +0 gacha, +0 entries."
+    },
+    {
+      "ts": "2026-03-09T01:54:30Z",
+      "text": "Gacha draw: @palmarbugle3069 drew 1x for +25 tokens (0 rare, 1 common) | bonus: +0 gacha, +0 entries."
+    },
+    {
+      "ts": "2026-03-09T01:58:49Z",
+      "text": "Gacha draw: @deputydawg777 drew 127x for +4725 XP tokens (19 rare, 108 common; bonus +125). Class tokens: Alchemist x5, Archangel x2, Barbarian x1, Buff x2, Enforcer x3, Healer x32, Hop x1, Mage x21, Meatwad x1, Rogue x27, Warlock x1, Warrior x28, Younger Prince x3."
+    },
+    {
+      "ts": "2026-03-09T05:12:26Z",
+      "text": "Battle start: pack (squirrel x9, trickster x10, summoner x5, shaman x7, goblin x9) level 40."
+    },
+    {
+      "ts": "2026-03-09T05:12:28Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:12:39Z",
+      "text": "Salary: @livesuieng +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-03-09T05:12:39Z",
+      "text": "Join: @livesuieng entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:12:47Z",
+      "text": "Salary: @deputydawg777 +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-03-09T05:12:47Z",
+      "text": "Join: @deputydawg777 entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:35:40Z",
+      "text": "Battle start: pack (squirrel x2, goblin x3, trickster x1, shaman x1, summoner x3) level 10."
+    },
+    {
+      "ts": "2026-03-09T05:35:42Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:36:47Z",
+      "text": "A Loot Goblin has appeared!"
+    },
+    {
+      "ts": "2026-03-09T05:36:47Z",
+      "text": "Battle start: pack (summoner x4, shaman x1, trickster x1, goblin x3, squirrel x1) level 10."
+    },
+    {
+      "ts": "2026-03-09T05:36:49Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:37:19Z",
+      "text": "Battle start: pack (shaman x3, summoner x2, trickster x5) level 10."
+    },
+    {
+      "ts": "2026-03-09T05:37:22Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-09T05:39:19Z",
+      "text": "Action window opened."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Default action: @iamdar bonked (no action submitted)."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Action: @iamdar used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Summoner: summoner summoned skelepriest (1/1)."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Shaman heal: shaman restored 11 HP to shaman"
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Summoner: summoner summoned skelepriest (1/1)."
+    },
+    {
+      "ts": "2026-03-09T05:40:49Z",
+      "text": "Trickster hex: @iamdar will be forced to strike an ally next turn."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Hex: @iamdar's hex fizzled (no allies to target)."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Shaman heal: shaman restored 11 HP to trickster"
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:50Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Action: @iamdar used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Summoner rot: @iamdar takes 12 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Shaman heal: shaman restored 11 HP to trickster"
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Trickster hex: @iamdar will be forced to strike an ally next turn."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:51Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Hex: @iamdar's hex fizzled (no allies to target)."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Summoner rot: @iamdar takes 12 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:52Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Action: @iamdar used bonk for 1 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Summoner rot: @iamdar takes 12 damage."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Shaman heal: shaman restored 11 HP to trickster"
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Trickster hex: @iamdar will be forced to strike an ally next turn."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Trickster hex: @iamdar will be forced to strike an ally next turn."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Shaman heal: shaman restored 11 HP to skelepriest"
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Monster: shaman attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Summoner corruption: summoner hexed @iamdar (12/turn for 3 turns)."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Monster: trickster attacks @iamdar for 19."
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Skelepriest heal: skelepriest restored 6 HP to trickster"
+    },
+    {
+      "ts": "2026-03-09T05:40:53Z",
+      "text": "Monster: skelepriest attacks @iamdar for 10."
+    },
+    {
+      "ts": "2026-03-10T05:21:51Z",
+      "text": "Battle start: pack (summoner x5, trickster x5, shaman x2, goblin x5, squirrel x3) level 20."
+    },
+    {
+      "ts": "2026-03-10T05:21:52Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:22:07Z",
+      "text": "Salary: @tankahdelphia +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-03-10T05:22:07Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:22:10Z",
+      "text": "Join: @deputydawg777 entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:22:15Z",
+      "text": "Salary: @nate048 +2 gacha tokens, +2 entries."
+    },
+    {
+      "ts": "2026-03-10T05:22:15Z",
+      "text": "Join: @nate048 entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:22:15Z",
+      "text": "Pet spawn: @nate048 auto summons Kid."
+    },
+    {
+      "ts": "2026-03-10T05:22:15Z",
+      "text": "Pet spawn: @nate048 auto summons Franklin."
+    },
+    {
+      "ts": "2026-03-10T05:22:18Z",
+      "text": "Join: @livesuieng entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:31:36Z",
+      "text": "Battle start: pack (summoner x2, shaman x1, squirrel x1, trickster x1) level 5."
+    },
+    {
+      "ts": "2026-03-10T05:31:39Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:31:58Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:32:15Z",
+      "text": "Join: @deputydawg777 entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:32Z",
+      "text": "Battle start: pack (summoner x2, squirrel x2, trickster x1) level 5."
+    },
+    {
+      "ts": "2026-03-10T05:35:34Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:42Z",
+      "text": "Salary: @palmarbugle3069 +1 gacha tokens, +1 entries."
+    },
+    {
+      "ts": "2026-03-10T05:35:42Z",
+      "text": "Join: @palmarbugle3069 entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:45Z",
+      "text": "Salary: @colonel_dinggus +1 gacha tokens, +1 entries."
+    },
+    {
+      "ts": "2026-03-10T05:35:45Z",
+      "text": "Join: @colonel_dinggus entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:50Z",
+      "text": "Join: @caerdwyn entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:52Z",
+      "text": "Join: @fal_the_warlock entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:35:57Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:15Z",
+      "text": "A Loot Goblin has appeared!"
+    },
+    {
+      "ts": "2026-03-10T05:44:15Z",
+      "text": "Battle start: pack (goblin x2, squirrel x1, summoner x2) level 5."
+    },
+    {
+      "ts": "2026-03-10T05:44:19Z",
+      "text": "Join: @iamdar entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:30Z",
+      "text": "Join: @nate048 entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:30Z",
+      "text": "Pet spawn: @nate048 auto summons Kid."
+    },
+    {
+      "ts": "2026-03-10T05:44:30Z",
+      "text": "Pet spawn: @nate048 auto summons Franklin."
+    },
+    {
+      "ts": "2026-03-10T05:44:33Z",
+      "text": "Salary: @caerdwyn +1 gacha tokens, +1 entries."
+    },
+    {
+      "ts": "2026-03-10T05:44:33Z",
+      "text": "Join: @caerdwyn entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:36Z",
+      "text": "Join: @livesuieng entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:37Z",
+      "text": "Join: @tankahdelphia entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:44:37Z",
+      "text": "Join: @snipah201z entered the battle."
+    },
+    {
+      "ts": "2026-03-10T05:46:15Z",
+      "text": "Action window opened."
+    },
+    {
+      "ts": "2026-03-10T05:46:37Z",
+      "text": "Gacha draw: @caerdwyn drew 1x for +25 XP tokens (0 rare, 1 common; bonus +0). Class tokens: Warrior x1."
+    },
+    {
+      "ts": "2026-03-10T05:46:38Z",
+      "text": "Queued: @nate048 jdam (20)."
+    }
+  ],
+  "battle_log": [],
+  "battle_id": null,
+  "battle_reports": []
+}

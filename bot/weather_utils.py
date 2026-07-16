@@ -62,13 +62,26 @@ async def fetch_weather(location):
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logging.error(
+                        f"[WEATHER ERROR] HTTP {resp.status} for {location}: {body[:400]}", exc_info=False
+                    )
+                    return f"{location} : [weather error]"
                 try:
                     data = await resp.json()
-                except Exception as e:
-                    logging.error(f"[WEATHER ERROR] JSON decode error for {location}: {e}", exc_info=True)
+                except aiohttp.ContentTypeError as e:
+                    body = await resp.text()
+                    logging.error(
+                        f"[WEATHER ERROR] JSON decode error for {location}: {e} body={body[:400]}",
+                        exc_info=True,
+                    )
                     return f"{location} : [weather error]"
-                if resp.status != 200:
-                    logging.error(f"[WEATHER ERROR] HTTP error {resp.status} for {location}: {data.get('error')}")
+                except Exception as e:
+                    logging.error(
+                        f"[WEATHER ERROR] JSON decode error for {location}: {e}",
+                        exc_info=True,
+                    )
                     return f"{location} : [weather error]"
                 if "current" not in data or "location" not in data:
                     logging.error(f"[WEATHER ERROR] Missing 'current' or 'location' in response for {location}")

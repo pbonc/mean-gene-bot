@@ -206,6 +206,11 @@ class SongCog(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error getting music stats: {str(e)}")
 
+    @commands.command(name="srxcat", aliases=["srxcatalog"])
+    async def srx_catalog_link(self, ctx: commands.Context):
+        """Send the SRX catalog Google Sheet link."""
+        await ctx.send("SRX Catalog: https://docs.google.com/spreadsheets/d/1vCFtktvfxNpaW4U1m9dJoBthS7n9HvYjfe2CYVHo134")
+
     @commands.command(name="cachestats", aliases=["cache"])
     async def cache_stats_cmd(self, ctx: commands.Context):
         """

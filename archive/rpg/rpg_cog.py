@@ -12,6 +12,8 @@ import datetime
 import types
 
 from twitchio.ext import commands
+from bot.commands.base_command import mod_only
+from bot.command_routing import get_media_trigger_set
 
 # Prefer telemetry direct import; fall back to legacy shim if available.
 try:
@@ -19,7 +21,88 @@ try:
 except ImportError:  # pragma: no cover - legacy shim path
     from bot.logging_config import log_event  # type: ignore
 from bot.overlay_server import broadcast_overlay_message
-from bot.telemetry import summarize_rpg_state
+from bot.telemetry import summarize_rpg_state, summarize_rpg_log
+
+# Core RPG configuration and balance constants
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+STATE_FILE = os.path.join(DATA_DIR, "rpg_state.json")
+LOG_FILE = os.path.join(DATA_DIR, "rpg_log.json")
+
+DAILY_COOLDOWN_HOURS = 16
+ACTION_WINDOW_SECONDS = 90
+ACTION_WINDOW_TEST_SECONDS = 30
+JOIN_WINDOW_FIRST_SECONDS = 120
+JOIN_WINDOW_NEXT_SECONDS = 30
+LOG_LIMIT = 200
+BATTLE_LOG_LIMIT = 200
+BATTLE_REPORT_LIMIT = 10
+
+MONSTER_BASE_HP = 20
+MONSTER_HP_PER_LEVEL = 10
+MONSTER_BASE_DAMAGE = 2
+MONSTER_DAMAGE_PER_LEVEL = 2
+
+DEFAULT_PLAYER_HP = 100
+DERP_CLONE_RESET_HP = 100
+DERP_CLONE_LEVEL_CAP = 10
+FORCE_DERP_CLONE_VIEW = True
+def _get_class_display_names(user: dict) -> tuple[str, str]:
+    """Return the actual and display class names (display may force Derp Clone)."""
+    class_name_attr = user.get("class_name")
+    class_name = str(class_name_attr).strip() if class_name_attr is not None else ""
+    if not class_name:
+        class_name = "Derp Clone"
+    if user.get("is_revenant"):
+        class_name = "Revenant"
+    display_class = "Derp Clone" if FORCE_DERP_CLONE_VIEW else class_name
+    return class_name, display_class
+
+def _display_class_is_derp_clone(user: dict) -> bool:
+    if FORCE_DERP_CLONE_VIEW:
+        return True
+    class_name_attr = user.get("class_name")
+    class_name = str(class_name_attr).strip() if class_name_attr is not None else ""
+    return class_name == "" or class_name.lower() == "derp clone"
+ASCENDED_PLAYER_HP = 20
+WARRIOR_HP = 30
+HEALER_HP = 40
+WARRIOR_DAMAGE_MITIGATION = 2
+
+BLEED_DAMAGE = 2
+BLEED_DURATION = 3
+BLEED_CHANCE = 0.25
+STUN_BASE_CHANCE = 0.20
+STUN_DURATION = 1
+STUN_CHANCE_PER_LEVEL = 0.05
+BASE_CRIT_CHANCE = 0.10
+
+XP_PER_LEVEL = 1
+XP_BASE = 100
+XP_GROWTH_RATE = 0.02
+GACHA_TOKEN_DROP_CHANCE = 0.35
+TOKEN_DROP_CHANCE = 0.05
+ENTRY_DROP_CHANCE = 0.01
+ULTRA_ENTRY_DROP_CHANCE = 0.005
+
+# Enforcer class tuning
+ENFORCER_LEVEL_CAP = 250
+ENFORCER_BASE_HP = 60
+ENFORCER_HP_PER_LEVEL = 7
+ENFORCER_DAMAGE_PER_LEVEL = 4
+ENFORCER_SLASH_BASE_DAMAGE = 16
+ENFORCER_SLASH_CRIT_CHANCE = 0.2
+ENFORCER_SLASH_BLEED_CHANCE = 0.35
+ENFORCER_HIGHSTICK_BASE_DAMAGE = 26
+ENFORCER_HIGHSTICK_BLEED_CHANCE = 0.75
+ENFORCER_CROSSCHECK_BASE_DAMAGE = 32
+ENFORCER_CROSSCHECK_STUN_CHANCE = 0.5
+ENFORCER_CROSSCHECK_COOLDOWN = 2
+ENFORCER_FIGHT_BASE_DAMAGE = 26
+ENFORCER_FIGHT_TARGETS = 5
+ENFORCER_REF_PENALTY_CHANCE = 0.05
+ENFORCER_REF_PENALTY_STUN = 1
+ENFORCER_REF_PENALTY_FIGHT_STUN_SECONDS = 120
 
 
 def _reset_daily_log_if_needed(self, now_ts: int | None = None):
@@ -78,33 +161,85 @@ def _enforce_single_revenant(self):
     else:
         state_obj.session()["active_revenant"] = None
 
+
+def _reset_embark_flags_on_startup(self):
+    """Clear stale daily embark timestamps so a new day can embark again."""
+    try:
+        state_obj = self._state_obj()
+        if state_obj is None:
+            return
+        users = state_obj.state.get("users", {}) if hasattr(state_obj, "state") else {}
+        if not isinstance(users, dict):
+            return
+        today = datetime.datetime.utcnow().date()
+        changed = False
+        for user in users.values():
+            ts = user.get("daily_embark_ts")
+            if not ts:
+                continue
+            try:
+                ts_date = datetime.datetime.utcfromtimestamp(ts).date()
+            except Exception:
+                ts_date = None
+            if ts_date != today:
+                user["daily_embark_ts"] = None
+                changed = True
+        if changed:
+            state_obj.save_state()
+    except Exception:
+        try:
+            self.logger.warning("[RPG] _reset_embark_flags_on_startup failed", exc_info=True)
+        except Exception:
+            pass
+
+
+
+async def _auto_media_for_command(self, ctx, command_name: str):
+    """Trigger media overlay for reserved commands when configured."""
+    try:
+        routing = get_media_trigger_set()
+    except Exception:
+        routing = set()
+    if command_name not in routing:
+        return
+    media_cog = None
+    try:
+        media_cog = self.bot.get_cog("MediaOverlayCog") if hasattr(self, "bot") else None
+    except Exception:
+        media_cog = None
+    if not media_cog:
+        return
+    try:
+        await media_cog.play_media_command(command_name, ctx)
+    except Exception:
+        try:
+            self.logger.warning("[RPG] auto_media_for_command failed cmd=%s", command_name, exc_info=True)
+        except Exception:
+            pass
+
+async def _play_media_fallback(self, command_name: str, ctx):
+    """Best-effort media trigger that never raises."""
+    try:
+        media_cog = self.bot.get_cog("MediaOverlayCog") if hasattr(self, "bot") else None
+        if not media_cog:
+            return False
+        await media_cog.play_media_command(command_name, ctx)
+        return True
+    except Exception:
+        try:
+            self.logger.warning("[RPG] play_media_fallback failed cmd=%s", command_name, exc_info=True)
+        except Exception:
+            pass
+    return False
+
+
+logger = logging.getLogger("rpg")
+
 def _get_level_from_xp(self, total_xp: int, user_data: dict = None, max_level: int = None) -> int:
+    # Always respect the class-specific cap using the shared helper
+    max_level = self._get_level_cap(user_data) if max_level is None else max_level
     if max_level is None:
         max_level = LEVEL_CAP
-    if user_data:
-        class_name = user_data.get("class_name", "Derp Clone")
-        if user_data.get("is_revenant") or class_name == "Revenant":
-            max_level = REVENANT_LEVEL_CAP
-        elif class_name == "Streamer":
-            max_level = STREAMER_LEVEL_CAP
-        elif class_name == "Warlock":
-            max_level = WARLOCK_LEVEL_CAP
-        elif class_name == "Hop":
-            max_level = HOP_LEVEL_CAP
-        elif class_name == "Khajiit":
-            max_level = KHAJIIT_LEVEL_CAP
-        elif class_name == "Archangel":
-            max_level = ARCHANGEL_LEVEL_CAP
-        elif class_name == "Alchemist":
-            max_level = ALCHEMIST_LEVEL_CAP
-        elif class_name == "Meatwad":
-            max_level = MEATWAD_LEVEL_CAP
-        elif class_name == "Deputy":
-            max_level = DEPUTY_LEVEL_CAP
-        elif class_name == "Buff":
-            max_level = BUFF_LEVEL_CAP
-        elif class_name == "Barbarian":
-            max_level = BARBARIAN_LEVEL_CAP
     for level in range(1, max_level + 1):
         threshold = self._get_xp_needed_for_level(level)
         if total_xp < threshold:
@@ -134,10 +269,11 @@ async def dropship(self, ctx):
         print("[DEBUG] dropship: not Streamer class")
         await ctx.send("Only Streamer class can use !dropship.")
         return
-    result = self._process_skill(user, "dropship", [], self.state.state)
+    result = self._process_skill(user, "dropship", [], self.state.state, owner=username)
     print(f"[DEBUG] dropship skill result: {result}")
     self.state.save_state()
     await ctx.send(f"@{username} {result['events'][0]}")
+    self._broadcast_state()
 
 def __init__(self, bot):
     print("[RPG] RpgCog __init__ called")
@@ -156,6 +292,7 @@ def __init__(self, bot):
     self._reset_embark_flags_on_startup()
     self._enforce_single_revenant()
     self.state.save_state()
+    self.logger.info("[RPG] starting battle loop task")
     self._battle_loop_task = self.bot.loop.create_task(self._battle_loop())
 
 def cog_unload(self):
@@ -199,6 +336,7 @@ def session(self) -> dict:
         return {}
 
 async def _battle_loop(self):
+    self.logger.info("[RPG] battle loop task started")
     try:
         impl = getattr(type(self), "_battle_loop_impl", None)
         if not impl:
@@ -206,8 +344,13 @@ async def _battle_loop(self):
         await impl(self)
     except AttributeError as exc:
         self.logger.warning("[RPG] Battle loop helper missing; stopping battle loop task.", exc_info=exc)
+    except asyncio.CancelledError:
+        self.logger.info("[RPG] battle loop task cancelled")
+        raise
     except Exception:
         self.logger.exception("[RPG] Battle loop crashed", exc_info=True)
+    finally:
+        self.logger.info("[RPG] battle loop task exited")
 
 @commands.Cog.event
 async def event_command_error(self, ctx, error):
@@ -354,7 +497,7 @@ async def slash(self, ctx):
 REVENANT_CHANCE = 0.02
 REVENANT_NEW_GRANTS_ENABLED = False
 REVENANT_MAX_BONUS_USES = 3
-REVENANT_STREAMS_DURATION = 7
+REVENANT_STREAMS_DURATION = 5
 REVENANT_DURATION_DAYS = 7
 REVENANT_DURATION_SECONDS = REVENANT_DURATION_DAYS * 24 * 60 * 60
 REVENANT_LEVEL_CAP = 1000
@@ -387,6 +530,10 @@ REVENANT_WISP_REZ_COOLDOWN_TURNS = 5
 REVENANT_WISP_HEAL_PER_LEVEL = 1
 REVENANT_WISP_PARTY_HEAL_LEVEL_STEP = 2
 REVENANT_DOOM_COOLDOWN_TURNS = 3
+REVENANT_HARVEST_COOLDOWN_TURNS = 3
+HARVEST_EXEC_BASE_CHANCE = 0.55
+HARVEST_EXEC_DECAY = 0.15
+HARVEST_EXEC_MIN_CHANCE = 0.10
 REVENANT_DOOM_BASE_DAMAGE = 10
 REVENANT_DOOM_DAMAGE_PER_LEVEL = 1
 REVENANT_BERZERK_DAMAGE_MULTIPLIER = 1.25
@@ -405,7 +552,7 @@ STREAMER_MECH_POOL = [
     {"name": "Atlas", "tonnage": 100, "weight": 3, "hp": 220, "armor": 180, "damage": 50, "speed": 30, "special": "intimidate", "special_chance": 1.0, "special_effect": "Enemies deal 10% less damage", "attacks_per_turn": 1},
     {"name": "King Crab", "tonnage": 100, "weight": 3, "hp": 200, "armor": 170, "damage": 60, "speed": 30, "special": "dual_ac20", "special_chance": 0.15, "special_effect": "Fire twice in one turn", "attacks_per_turn": 1},
 ]
-def _streamer_dropship_summon(user, state, rng=random):
+def _streamer_dropship_summon(user, state, owner=None, rng=random):
     # Only one mech at a time
     if user.get("mech_pet") and user["mech_pet"].get("active", False):
         return {"events": ["Dropship already active: {0}".format(user["mech_pet"]["name"])]}
@@ -424,8 +571,40 @@ def _streamer_dropship_summon(user, state, rng=random):
     user["mech_pet"] = dict(selected)
     user["mech_pet"]["active"] = True
     user["mech_pet"]["turns_remaining"] = 5  # Mech persists for 5 turns (adjust as needed)
+    owner_key = owner
+    if not owner_key and isinstance(state, dict):
+        owner_key = next(
+            (name for name, entry in state.get("users", {}).items() if entry is user),
+            None,
+        )
+    if not owner_key:
+        owner_key = STREAMER_NAME.lower()
+
+    if isinstance(state, dict):
+        session = state.setdefault("session", {})
+        streamer_pets = session.setdefault("streamer_pets", [])
+        mech_pet_entry = {
+            "id": f"streamer_mech_{owner_key}_{_now_ts()}",
+            "owner": owner_key,
+            "pet_type": "mech",
+            "mech_name": selected["name"],
+            "tonnage": selected.get("tonnage"),
+            "weight": selected.get("weight"),
+            "hp": selected.get("hp"),
+            "max_hp": selected.get("hp"),
+            "armor": selected.get("armor"),
+            "damage": selected.get("damage"),
+            "speed": selected.get("speed"),
+            "special": selected.get("special"),
+            "special_chance": selected.get("special_chance"),
+            "special_effect": selected.get("special_effect"),
+            "attacks_per_turn": selected.get("attacks_per_turn", 1),
+            "alive": True,
+            "turns_remaining": user["mech_pet"]["turns_remaining"],
+        }
+        streamer_pets.append(mech_pet_entry)
     return {"events": [f"Dropship summoned: {selected['name']} ({selected['tonnage']}t)!"]}
-STREAMER_LEVEL_CAP = 100
+STREAMER_LEVEL_CAP = 250
 STREAMER_NAME = "iamdar"
 STREAMER_BASE_HP = 40
 STREAMER_HP_PER_LEVEL = 10
@@ -436,6 +615,7 @@ TOTEM_KILLSHOT_CHANCE = 0.01  # 1% chance for auto-killshot buff
 TOTEM_DAMAGE_1_CHANCE = 0.45  # 45% chance for +1 dmg
 TOTEM_DAMAGE_5_CHANCE = 0.20  # 20% chance for +5 dmg
 TOTEM_HEALING_CHANCE = 0.22  # party-heal totem chance
+TOTEM_BASE_HP = 100
 TOTEM_LABELS = {
     "killshot": "AUTO KILLSHOT",
     "autocrit": "AUTO CRIT",
@@ -444,6 +624,7 @@ TOTEM_LABELS = {
     "damage_5": "+5 DMG",
     "damage_1": "+1 DMG",
     "xp_buff": "XP TOTEM",
+    "sponge": "SPONGE",
 }
 
 def _pick_xp_buff():
@@ -457,7 +638,7 @@ def _pick_xp_buff():
         return 75
     else:
         return 100
-STREAMER_TOTEM_MAX_ACTIVE = 4
+STREAMER_TOTEM_MAX_ACTIVE = 3
 GAMBA_BASE_DAMAGE = 2
 GAMBA_DAMAGE_PER_LEVEL_STEP = 6
 GAMBA_BASE_HIT_CHANCE = 0.45
@@ -475,7 +656,8 @@ GACHA_RARE_XP = 100
 GACHA_COMMON_XP = 25
 GACHA_BONUS_TOKEN_PROC_CHANCE = 0.02
 GACHA_ENTRY_BONUS_CHANCE = 0.0025
-GACHA_BONUS_TOKEN_DISTRIBUTION = [
+GACHA_BONUS_XP_VALUE = GACHA_COMMON_XP
+GACHA_BONUS_XP_DISTRIBUTION = [
     (1, 0.55),
     (2, 0.20),
     (3, 0.10),
@@ -499,7 +681,7 @@ STREAMER_PET_GORDIE_FIGHT_TARGETS = 3
 
 # Warlock class (special class for fal_the_warlock)
 WARLOCK_NAME = "fal_the_warlock"
-WARLOCK_LEVEL_CAP = 100
+WARLOCK_LEVEL_CAP = 250
 WARLOCK_DOT_DURATION = 3  # DoT lasts 3 turns
 WARLOCK_DOT_BASE_DAMAGE = 2  # Base damage per tick
 SHADOWBOLT_BASE_DAMAGE = 6
@@ -516,9 +698,16 @@ DRAGON_CLAW_CHANCE = 0.12
 DRAGON_CLAW_DAMAGE_MULTIPLIER = 2.5
 DRAGON_CLAW_BLEED_DURATION = 3
 
+# Younger Prince class (special class for karnave)
+YOUNGER_PRINCE_NAME = "karnave"
+YOUNGER_PRINCE_LEVEL_CAP = 250
+YOUNGER_PRINCE_HP_PER_LEVEL = 5
+ELDER_PRINCE_HP_PER_LEVEL = 15
+PRINCE_TAUNT_FLAG = "prince_taunt"
+
 # Hop class (special class for hoplon5)
 HOP_NAME = "hoplon5"
-HOP_LEVEL_CAP = 100
+HOP_LEVEL_CAP = 250
 HOP_SAP_BASE_CHANCE = 0.25  # 25% base chance to stun with sap
 HOP_SAP_CHANCE_PER_LEVEL = 0.02  # +2% per level
 HOP_SAP_STUN_DURATION = 1  # Stuns for 1 turn
@@ -539,7 +728,7 @@ HOP_GOLDRPG_BLEED_DURATION = 3
 
 # Khajiit class (special class for caerdwyn)
 KHAJIIT_NAME = "caerdwyn"
-KHAJIIT_LEVEL_CAP = 100
+KHAJIIT_LEVEL_CAP = 250
 KHAJIIT_SCRATCH_BASE_DAMAGE = 5  # Moderate damage
 KHAJIIT_SCRATCH_BLEED_CHANCE = 0.30  # 30% chance to apply bleed
 KHAJIIT_HAIRBALL_BASE_DAMAGE = 4  # Direct damage
@@ -553,7 +742,7 @@ KHAJIIT_COIN_CHANCES = [0.50, 0.30, 0.15, 0.04, 0.01]  # Chances for 1-5 entries
 
 # Archangel class (special class for karnave)
 ARCHANGEL_NAME = "karnave"
-ARCHANGEL_LEVEL_CAP = 100
+ARCHANGEL_LEVEL_CAP = 250
 ARCHANGEL_PRAY_POWER_GAIN = 2
 ARCHANGEL_PRAY_HEAL = 3  # Base heal amount
 ARCHANGEL_TOUCH_POWER_GAIN = 1
@@ -561,23 +750,23 @@ ARCHANGEL_TOUCH_BASE_DAMAGE = 3
 
 # Alchemist class (special class for livesuieng)
 ALCHEMIST_NAME = "livesuieng"
-ALCHEMIST_LEVEL_CAP = 100
-ALCHEMIST_BOTTLE_BASE_DAMAGE = 9
+ALCHEMIST_LEVEL_CAP = 250
+ALCHEMIST_BOTTLE_BASE_DAMAGE = 12
 ALCHEMIST_BOTTLE_BONUS_CRIT_CHANCE = 0.20
 ALCHEMIST_BOTTLE_BLEED_CHANCE = 0.35
 ALCHEMIST_BOTTLE_BLEED_DURATION = 2
-ALCHEMIST_BOTTLE_SHARD_MAX = 2
-ALCHEMIST_BOTTLE_SHARD_DAMAGE = 1
-ALCHEMIST_BREW_BUFF_CHANCE = 0.60
-ALCHEMIST_BREW_HP_BASE = 4
-ALCHEMIST_BREW_DAMAGE_BASE = 2
-ALCHEMIST_BREW_CRIT_BASE = 0.08
+ALCHEMIST_BOTTLE_SHARD_MAX = 3
+ALCHEMIST_BOTTLE_SHARD_DAMAGE = 2
+ALCHEMIST_BREW_BUFF_CHANCE = 0.75
+ALCHEMIST_BREW_HP_BASE = 7
+ALCHEMIST_BREW_DAMAGE_BASE = 4
+ALCHEMIST_BREW_CRIT_BASE = 0.12
 ALCHEMIST_HUNGOVER_EFFECTIVENESS = 0.90
 
 # Meatwad class (special class for tankadelphia)
 MEATWAD_NAME = "tankadelphia"
 MEATWAD_ALIASES = {MEATWAD_NAME.lower(), "tankahdelphia"}
-MEATWAD_LEVEL_CAP = 100
+MEATWAD_LEVEL_CAP = 250
 MEATWAD_BASE_HP = 60
 MEATWAD_HP_PER_LEVEL = 6
 MEATWAD_CRACK_BERZERK_CHANCE = 0.85
@@ -585,7 +774,7 @@ MEATWAD_GUN_BASE_DAMAGE = 7
 
 # Deputy class (special class for deputydawg777)
 DEPUTY_NAME = "deputydawg777"
-DEPUTY_LEVEL_CAP = 100
+DEPUTY_LEVEL_CAP = 250
 DEPUTY_BASE_HP = 60
 DEPUTY_HP_PER_LEVEL = 6
 DEPUTY_TAZE_BASE_DAMAGE = 6
@@ -605,20 +794,26 @@ DEPUTY_TOMMYGUN_MIN_HIT_DAMAGE = 3
 
 # Buff class (special class for nate048)
 BUFF_NAME = "nate048"
-BUFF_LEVEL_CAP = 100
-BUFF_BASE_HP = 55
-BUFF_HP_PER_LEVEL = 5
-BUFF_KID_BASE_HP = 110
+BUFF_LEVEL_CAP = 250
+BUFF_BASE_HP = 130
+BUFF_HP_PER_LEVEL = 9
+BUFF_SPECIAL_HP_BOOST = 45
+BUFF_KID_BASE_HP = 130
 BUFF_KID_INTERCEPT_CHANCE = 0.25
-BUFF_FRANKLIN_BASE_HP = 35
-BUFF_FRANKLIN_BASE_DAMAGE = 2
-BUFF_FRANKLIN_CRIT_CHANCE = 0.65
-BUFF_FRANKLIN_JDAM_CRIT_CHARGES = 1
-BUFF_FRANKLIN_JDAM_CRIT_CHANCE_BONUS = 0.20
-BUFF_FRANKLIN_INTERCEPT_CHANCE_BONUS = 0.20
-BUFF_JDAM_BASE_DAMAGE = 14
-BUFF_NUKE_HP_PERCENT = 0.90
-BUFF_NUKE_EXECUTE_CHANCE = 0.25
+BUFF_FRANKLIN_BASE_HP = 50
+BUFF_FRANKLIN_BASE_DAMAGE = 3
+BUFF_FRANKLIN_CRIT_CHANCE = 0.85
+BUFF_FRANKLIN_JDAM_CRIT_CHARGES = 2
+BUFF_FRANKLIN_JDAM_CRIT_CHANCE_BONUS = 0.45
+BUFF_FRANKLIN_INTERCEPT_CHANCE_BONUS = 0.30
+BUFF_JDAM_BASE_DAMAGE = 20
+BUFF_NAPALM_BASE_DAMAGE = 18
+BUFF_NAPALM_SPLASH_RATIO = 0.55
+BUFF_NAPALM_SPLASH_TARGETS = 2
+BUFF_NAPALM_DOT_DAMAGE = 5
+BUFF_NAPALM_DOT_DURATION = 3
+BUFF_NUKE_HP_PERCENT = 0.98
+BUFF_NUKE_EXECUTE_CHANCE = 0.35
 
 # Meatwad transformation definitions: (name, rarity_weight, effect_type, effect_value, description, required_level)
 # effect_type: "damage", "defense", "heal_self", "heal_party", "regen", "reflect", "lifesteal", "aoe", "dot", "stun_chance", "crit_chance", "evasion", "counter"
@@ -682,19 +877,33 @@ HEX_FRIENDLY_DAMAGE = 1
 # Leveling system
 LEVEL_CAP = 10
 BASE_CLASS_LEVEL_CAP = 25  # Warrior/Rogue/Mage/Healer
-BASE_DAMAGE_BONUS_PER_LEVEL = 1  # Each skill gets +1 damage per level
-HP_BONUS_PER_LEVEL = 10  # Standard class progression per level
-HEALING_BONUS_PER_LEVEL = 1  # Healers restore +1 HP per level
+BASE_DAMAGE_BONUS_PER_LEVEL = 5  # Each skill gets +5 damage per level for base progression
+HP_BONUS_PER_LEVEL = 10  # Standard class progression per level (fallback)
+HEALING_BONUS_PER_LEVEL = 2  # Healers restore +2 HP per level
 CRIT_CHANCE_PER_LEVEL = 0.05  # 5% at level 2, 10% at level 3, etc.
 CRIT_CHANCE_PER_LEVEL_MAGE_ROGUE = 0.10  # 10% per level for Mage and Rogue (scales faster)
 DAMAGE_MITIGATION_PER_LEVEL = 0.75  # Warriors get +0.75 damage mitigation per level
 CRIT_MULTIPLIER = 2.0  # Crit does 2x damage
-DERP_CLONE_ASCEND_THRESHOLD = 10  # Derp Clone needs 10 damage to ascend
+DERP_CLONE_ASCEND_LEVEL = 10  # Derp Clones must reach level 10 before ascending
 
-BARBARIAN_LEVEL_CAP = 100
+CLASS_PROGRESSION = {
+    "Derp Clone": {"base_hp": 100, "hp_per_level": 10, "base_skill_damage": 5, "skill_damage_per_level": 5},
+    "Warrior": {"base_hp": 110, "hp_per_level": 20, "base_skill_damage": 10, "skill_damage_per_level": 5},
+    "Mage": {"base_hp": 90, "hp_per_level": 10, "base_skill_damage": 8, "skill_damage_per_level": 5},
+    "Healer": {"base_hp": 90, "hp_per_level": 10, "base_skill_damage": 6, "skill_damage_per_level": 5},
+    "Rogue": {"base_hp": 90, "hp_per_level": 10, "base_skill_damage": 8, "skill_damage_per_level": 5},
+    "Monk": {"base_hp": 95, "hp_per_level": 10, "base_skill_damage": 4, "skill_damage_per_level": 4},
+}
+
+MONK_OHM_BASE_HEAL = 5
+MONK_OHM_HEAL_PER_LEVEL = 1
+MONK_PASSIVE_DAMAGE_LEVEL = 5
+MONK_PASSIVE_REZ_LEVEL = 20
+
+BARBARIAN_LEVEL_CAP = 250
 BARBARIAN_BASE_HP = WARRIOR_HP + ((BASE_CLASS_LEVEL_CAP - 1) * HP_BONUS_PER_LEVEL)
-BARBARIAN_CLEAVE_BASE_DAMAGE = 29
-BARBARIAN_CLEAVE_INDIRECT_MULTIPLIER = 0.5
+BARBARIAN_CLEAVE_BASE_DAMAGE = 26
+BARBARIAN_CLEAVE_INDIRECT_MULTIPLIER = 0.45
 BARBARIAN_CLEAVE_DIRECT_TARGETS = 3
 BARBARIAN_CLEAVE_INDIRECT_TARGETS = 3
 BARBARIAN_SHOUT_DAMAGE_MULTIPLIER = 1.10
@@ -714,13 +923,47 @@ CLASS_TIER_SALARIES = {
 
 MYTHIC_SALARY = (25, 25)
 SPECIAL_CLASS_SALARY = (5, 5)
-SPECIAL_SALARY_CLASSES = {"Meatwad", "Khajiit", "Archangel", "Alchemist"}
+SPECIAL_SALARY_CLASSES = {"Meatwad", "Khajiit", "Archangel", "Alchemist", "Younger Prince"}
 REFERRAL_GACHA_TOKENS = 25
 REFERRAL_ENTRIES = 25
 
 
 
-BASE_CLASSES = ["Warrior", "Rogue", "Mage", "Healer", "Monk", "Enforcer"]
+BASE_CLASSES = ["Warrior", "Mage", "Healer", "Rogue"]
+MONK_CLASS = "Monk"
+LEGENDARY_CLASSES = [
+    "Enforcer",
+    "Meatwad",
+    "Deputy",
+    "Hop",
+    "Alchemist",
+    "Khajiit",
+    "Archangel",
+    "Warlock",
+    "Buff",
+    "Barbarian",
+    "Younger Prince",
+]
+CLASS_RARITIES = {
+    "Warrior": "base",
+    "Mage": "base",
+    "Healer": "base",
+    "Rogue": "base",
+    "Monk": "special",
+    "Enforcer": "legendary",
+    "Meatwad": "legendary",
+    "Deputy": "legendary",
+    "Hop": "legendary",
+    "Alchemist": "legendary",
+    "Khajiit": "legendary",
+    "Archangel": "legendary",
+    "Warlock": "legendary",
+    "Buff": "legendary",
+    "Barbarian": "legendary",
+    "Younger Prince": "legendary",
+}
+CLASS_TOKEN_TARGETS = BASE_CLASSES + LEGENDARY_CLASSES
+CLASS_TOKEN_LOOKUP = {name.lower(): name for name in CLASS_TOKEN_TARGETS}
 
 CLASS_MONSTER_SKILLS = {
     "Derp Clone": ("bonk", 1),
@@ -739,11 +982,12 @@ CLASS_MONSTER_SKILLS = {
     "Meatwad": ("gun", MEATWAD_GUN_BASE_DAMAGE),
     "Deputy": ("tazer", DEPUTY_TAZE_BASE_DAMAGE),
     "Buff": ("jdam", BUFF_JDAM_BASE_DAMAGE),
+    "Younger Prince": ("none", 0),
 }
 
 
 def _get_enforcer_skills(level):
-        # ...existing code...
+    # ...existing code...
 
     # --- Enforcer dictionary assignments (must be after all relevant dicts are defined) ---
     skills = ["slash"]
@@ -775,7 +1019,7 @@ def _enforcer_skill_effect(user, skill, targets, state, rng=random):
                 result["penalty"] = True
 
     if skill == "slash":
-        dmg = ENFORCER_SLASH_BASE_DAMAGE + (level - 1)
+        dmg = ENFORCER_SLASH_BASE_DAMAGE + (level - 1) * ENFORCER_DAMAGE_PER_LEVEL
         crit = rng.random() < ENFORCER_SLASH_CRIT_CHANCE
         bleed = rng.random() < ENFORCER_SLASH_BLEED_CHANCE
         if crit:
@@ -783,17 +1027,17 @@ def _enforcer_skill_effect(user, skill, targets, state, rng=random):
         result["events"].append(f"Slash hits for {dmg}{' (CRIT)' if crit else ''}{' and BLEED' if bleed else ''}!")
         ref_penalty("slash")
     elif skill == "high_stick":
-        dmg = ENFORCER_HIGHSTICK_BASE_DAMAGE + (level - 1)
+        dmg = ENFORCER_HIGHSTICK_BASE_DAMAGE + (level - 1) * ENFORCER_DAMAGE_PER_LEVEL
         bleed = rng.random() < ENFORCER_HIGHSTICK_BLEED_CHANCE
         result["events"].append(f"High Stick deals {dmg} and causes heavy BLEED!" if bleed else f"High Stick deals {dmg}.")
         ref_penalty("high_stick")
     elif skill == "cross_check":
-        dmg = ENFORCER_CROSSCHECK_BASE_DAMAGE + (level - 1)
+        dmg = ENFORCER_CROSSCHECK_BASE_DAMAGE + (level - 1) * ENFORCER_DAMAGE_PER_LEVEL
         stun = rng.random() < ENFORCER_CROSSCHECK_STUN_CHANCE
         result["events"].append(f"Cross Check smashes for {dmg}{' and STUNS!' if stun else ''}")
         ref_penalty("cross_check")
     elif skill == "fight":
-        dmg = ENFORCER_FIGHT_BASE_DAMAGE + (level - 1)
+        dmg = ENFORCER_FIGHT_BASE_DAMAGE + (level - 1) * ENFORCER_DAMAGE_PER_LEVEL
         result["events"].append(f"Fight! {username} deals {dmg} to 5 random enemies!")
         ref_penalty("fight")
     elif skill == "check":
@@ -838,6 +1082,8 @@ def _get_level_cap(self, user_data: dict = None) -> int:
     if not user_data:
         return LEVEL_CAP
     class_name = user_data.get("class_name", "Derp Clone")
+    if class_name in {"Warrior", "Mage", "Healer", "Rogue"}:
+        return BASE_CLASS_LEVEL_CAP
     if class_name == "Enforcer":
         return ENFORCER_LEVEL_CAP
     if user_data.get("is_revenant") or class_name == "Revenant":
@@ -846,6 +1092,8 @@ def _get_level_cap(self, user_data: dict = None) -> int:
         return STREAMER_LEVEL_CAP
     if class_name == "Warlock":
         return WARLOCK_LEVEL_CAP
+    if class_name == "Younger Prince":
+        return YOUNGER_PRINCE_LEVEL_CAP
     if class_name == "Hop":
         return HOP_LEVEL_CAP
     if class_name == "Khajiit":
@@ -873,11 +1121,11 @@ def _calculate_max_hp(self, user: dict) -> int:
 #     if user.get("class_name") == "Enforcer":
 #         return _get_enforcer_skills(user.get("player_level", 1))
 #     # ...existing code...
-def _process_skill(self, user: dict, skill: str, targets: list, state: dict, rng=random):
+def _process_skill(self, user: dict, skill: str, targets: list, state: dict, rng=random, *, owner: str | None = None):
     if user.get("class_name") == "Enforcer":
         return _enforcer_skill_effect(user, skill, targets, state, rng)
     if user.get("class_name") == "Streamer" and skill == "dropship":
-        return _streamer_dropship_summon(user, state, rng)
+        return _streamer_dropship_summon(user, state, owner=owner, rng=rng)
     # ...existing code...
 
 CLASS_STREAM_SKILLS = {
@@ -935,7 +1183,7 @@ AUTO_CLASS_ACTIONS = {
 
 
 def _utc_iso():
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 
 def _now_ts():
@@ -1007,9 +1255,11 @@ class RpgState:
                 "daily_reset_ts": None,
                 "daily_log": [],
                 "battle_log": [],
+                "battle_reports": [],
                 "battle_id": None,
             }
             self.save_log()
+        self.log.setdefault("battle_reports", [])
 
     def save_log(self):
         with open(self.log_file, "w", encoding="utf-8") as f:
@@ -1058,9 +1308,10 @@ class RpgState:
                 class_tier = 1
                 base_class = "Khajiit"
             elif username == ARCHANGEL_NAME.lower():
-                class_name = "Archangel"
+                # Default karnave to Younger Prince instead of Archangel
+                class_name = "Younger Prince"
                 class_tier = 1
-                base_class = "Archangel"
+                base_class = "Younger Prince"
             elif username == ALCHEMIST_NAME.lower():
                 class_name = "Alchemist"
                 class_tier = 1
@@ -1103,6 +1354,7 @@ class RpgState:
                 "revenant_acquired_ts": None,
                 "xp_before_revenant": None,
                 "revenant_xp_at_acquire": None,
+                "revenant_harvest_cooldown": 0,
                 "hp_current": DEFAULT_PLAYER_HP,
                 "hp_max": DEFAULT_PLAYER_HP,
                 "damage_done": 0,
@@ -1112,6 +1364,8 @@ class RpgState:
                 "times_knocked_out": 0,
                 "xp": 0,
                 "player_level": 1,
+                "xp_token_balance": 0,
+                "class_tokens": {},
                 "class_change_tokens": 0,
                 "referral_awarded": False,
                 "referral_referrer": None,
@@ -1138,8 +1392,16 @@ class RpgState:
                 "buff_franklin_jdam_buff_triggered": False,
                 "buff_jdam_crit_triggered": False,
                 "buff_jdam_forced_crit_charges": 0,
+                "buff_special_hp_bonus": BUFF_SPECIAL_HP_BOOST if username == BUFF_NAME.lower() else 0,
             }
         user = users[username]
+        if username == BUFF_NAME.lower():
+            user["buff_special_hp_bonus"] = max(
+                int(user.get("buff_special_hp_bonus", 0)),
+                BUFF_SPECIAL_HP_BOOST,
+            )
+        else:
+            user.setdefault("buff_special_hp_bonus", 0)
         
         # Auto-assign special classes to specific users (even if they already exist)
         if username == STREAMER_NAME.lower() and user.get("class_name") != "Streamer":
@@ -1165,10 +1427,15 @@ class RpgState:
             user["class_name"] = "Khajiit"
             user["class_tier"] = 1
             user["base_class"] = "Khajiit"
-        elif username == ARCHANGEL_NAME.lower() and user.get("class_name") != "Archangel":
-            user["class_name"] = "Archangel"
-            user["class_tier"] = 1
-            user["base_class"] = "Archangel"
+        elif username == ARCHANGEL_NAME.lower():
+            current_class = str(user.get("class_name", "")).strip()
+            if current_class == "Archangel":
+                user["class_tier"] = 1
+                user["base_class"] = "Archangel"
+            elif current_class != "Younger Prince":
+                user["class_name"] = "Younger Prince"
+                user["class_tier"] = 1
+                user["base_class"] = "Younger Prince"
         elif username == ALCHEMIST_NAME.lower() and user.get("class_name") != "Alchemist":
             user["class_name"] = "Alchemist"
             user["class_tier"] = 1
@@ -1193,10 +1460,26 @@ class RpgState:
         
         # Normalize HP values to avoid None/invalid entries breaking overlay payloads
         computed_max_hp = self._calculate_max_hp(user)
+        if computed_max_hp is None:
+            computed_max_hp = DEFAULT_PLAYER_HP
+        class_name_lower = str(user.get("class_name", "")).strip().lower()
+        total_xp = int(user.get("xp", 0))
+
+        # Capture any previously stored max HP so we can detect scale-ups
+        try:
+            stored_hp_max_val = int(user.get("hp_max")) if user.get("hp_max") is not None else None
+        except Exception:
+            stored_hp_max_val = None
+
         try:
             hp_max_val = int(user.get("hp_max", computed_max_hp) or computed_max_hp)
         except Exception:
             hp_max_val = computed_max_hp
+        if hp_max_val is None:
+            hp_max_val = computed_max_hp
+        if class_name_lower == "younger prince":
+            hp_max_val = computed_max_hp  # Always recompute for Younger Prince so level scaling applies
+            user["player_level"] = self._get_level_from_xp(total_xp, user)
         if hp_max_val <= 0:
             hp_max_val = DEFAULT_PLAYER_HP
         user["hp_max"] = hp_max_val
@@ -1208,6 +1491,10 @@ class RpgState:
         if hp_current_val < 0:
             hp_current_val = 0
         if hp_current_val > hp_max_val:
+            hp_current_val = hp_max_val
+        # For Younger Prince, bump current HP when scaling up from stale data so HP matches level-based max
+        scaled_up_hp = stored_hp_max_val is not None and stored_hp_max_val < hp_max_val
+        if class_name_lower == "younger prince" and scaled_up_hp and hp_current_val < hp_max_val:
             hp_current_val = hp_max_val
         user["hp_current"] = hp_current_val
         user.setdefault("damage_done", 0)
@@ -1249,7 +1536,12 @@ class RpgState:
         user.setdefault("buff_franklin_crit_triggered", False)
         user.setdefault("buff_franklin_jdam_buff_triggered", False)
         user.setdefault("buff_jdam_crit_triggered", False)
+        user.setdefault("buff_napalm_crit_triggered", False)
         user.setdefault("buff_jdam_forced_crit_charges", 0)
+        user.setdefault("patience_turns_remaining", 0)
+        user.setdefault("prince_patience_locked", False)
+        user.setdefault("xp_token_balance", 0)
+        user.setdefault("class_tokens", {})
         return user
 
     def _calculate_max_hp(self, user: dict) -> int:
@@ -1258,7 +1550,19 @@ class RpgState:
         class_tier = int(user.get("class_tier", 0))
         total_xp = int(user.get("xp", 0))
         level = self._get_level_from_xp(total_xp, user)
-        
+
+        if class_name == "Younger Prince":
+            return max(1, level * YOUNGER_PRINCE_HP_PER_LEVEL)
+
+        # Use the new progression table for base/monk/derp classes before hitting special cases
+        progress = CLASS_PROGRESSION.get(class_name)
+        special_override = {"Streamer", "Meatwad", "Deputy", "Buff", "Barbarian"}
+        if progress and class_name not in special_override:
+            base_hp = progress.get("base_hp", DEFAULT_PLAYER_HP)
+            if level > 1:
+                base_hp += (level - 1) * progress.get("hp_per_level", HP_BONUS_PER_LEVEL)
+            return base_hp
+
         # Base HP by class
         if user.get("is_revenant") or class_name == "Revenant":
             base_hp = REVENANT_BASE_HP
@@ -1273,7 +1577,9 @@ class RpgState:
         elif class_name == "Barbarian":
             base_hp = BARBARIAN_BASE_HP
         elif class_name == "Warrior":
-            base_hp = WARRIOR_HP  # 25 HP
+            base_hp = WARRIOR_HP  # 30 HP
+        elif class_name == "Healer":
+            base_hp = HEALER_HP  # Healers get higher base HP
         elif class_tier > 0:
             base_hp = ASCENDED_PLAYER_HP  # 20 HP for ascended
         else:
@@ -1302,6 +1608,9 @@ class RpgState:
             # Generic scaling for base/ascended/special classes (e.g., Hop, Rogue, Mage, Healer, Derp, Khajiit, Archangel)
             if level > 1:
                 base_hp += (level - 1) * HP_BONUS_PER_LEVEL
+
+        if class_name == "Buff":
+            base_hp += int(user.get("buff_special_hp_bonus", 0))
         
         return base_hp
 
@@ -1313,32 +1622,10 @@ class RpgState:
 
     def _get_level_from_xp(self, total_xp: int, user_data: dict = None, max_level: int = None) -> int:
         """Determine player level from total XP with class-specific level caps."""
+        # Respect class-specific caps via shared helper
+        max_level = self._get_level_cap(user_data) if max_level is None else max_level
         if max_level is None:
             max_level = LEVEL_CAP
-        if user_data:
-            class_name = user_data.get("class_name", "Derp Clone")
-            if user_data.get("is_revenant") or class_name == "Revenant":
-                max_level = REVENANT_LEVEL_CAP
-            elif class_name == "Streamer":
-                max_level = STREAMER_LEVEL_CAP
-            elif class_name == "Warlock":
-                max_level = WARLOCK_LEVEL_CAP
-            elif class_name == "Hop":
-                max_level = HOP_LEVEL_CAP
-            elif class_name == "Khajiit":
-                max_level = KHAJIIT_LEVEL_CAP
-            elif class_name == "Archangel":
-                max_level = ARCHANGEL_LEVEL_CAP
-            elif class_name == "Alchemist":
-                max_level = ALCHEMIST_LEVEL_CAP
-            elif class_name == "Meatwad":
-                max_level = MEATWAD_LEVEL_CAP
-            elif class_name == "Deputy":
-                max_level = DEPUTY_LEVEL_CAP
-            elif class_name == "Buff":
-                max_level = BUFF_LEVEL_CAP
-            elif class_name == "Barbarian":
-                max_level = BARBARIAN_LEVEL_CAP
         for level in range(1, max_level + 1):
             threshold = self._get_xp_needed_for_level(level)
             if total_xp < threshold:
@@ -1356,21 +1643,52 @@ class RpgState:
         session.setdefault("streamer_pets", [])
         session.setdefault("buff_pets", [])
         session.setdefault("spirit_wells", [])
+        session.setdefault("prince_summons", [])
+        session.setdefault("prince_actions", [])
         session.setdefault("deputy_donut_rounds_remaining", 0)
         session.setdefault("barbarian_shout_rounds_remaining", 0)
         session.setdefault("battle_stat_baseline", {})
+        session.setdefault("battle_start_ts", None)
+        session.setdefault("taunted_princes", [])
 
         return session
+
+    def _deactivate_mech_pets(self):
+        users = {}
+        try:
+            users = self.state.state.get("users", {})
+        except Exception:
+            users = {}
+        for user in users.values():
+            mech = user.get("mech_pet")
+            if mech:
+                mech["active"] = False
+                mech["turns_remaining"] = 0
+
+    def _deactivate_mech_for_owner(self, owner: str):
+        """Mark a single owner's mech as inactive (used when mech is destroyed)."""
+        try:
+            user = self.state.get_user(owner)
+        except Exception:
+            user = None
+        if isinstance(user, dict):
+            mech = user.get("mech_pet")
+            if mech:
+                mech["active"] = False
+                mech["turns_remaining"] = 0
 
     def _reset_battle_on_startup(self):
         # Keep a state-only version so calling through RpgState never crashes
         session = self.session()
         session["battle_active"] = False
         session["battle_id"] = None
+        session["battle_start_ts"] = None
         session["monsters"] = []
         session["turn_number"] = 0
         session["phase"] = "idle"
         session["action_window_end"] = None
+        session["action_window_seconds"] = ACTION_WINDOW_SECONDS
+        session["reward_multiplier"] = 1
         session["join_window_end"] = None
         session["participants"] = []
         session["action_queue"] = []
@@ -1382,11 +1700,16 @@ class RpgState:
         session["streamer_pets"] = []
         session["buff_pets"] = []
         session["spirit_wells"] = []
+        session["prince_summons"] = []
+        session["prince_actions"] = []
         session["deputy_donut_rounds_remaining"] = 0
         session["barbarian_shout_rounds_remaining"] = 0
         session["battle_stat_baseline"] = {}
+        session["battle_start_ts"] = None
+        session["taunted_princes"] = []
         session["slow_actions"] = False
         session["channel"] = None
+        self._deactivate_mech_pets()
         self.log.setdefault("battle_log", [])
         self.log["battle_log"] = []
         self.log["battle_id"] = None
@@ -1416,6 +1739,7 @@ class RpgState:
         session["stream_id"] = stream_id
         session["stream_start_ts"] = _now_ts()
         session["battle_id"] = None
+        session["battle_start_ts"] = None
         session["battle_log"] = [] if "battle_log" in session else session.get("battle_log")
         try:
             self.save_state()
@@ -1425,7 +1749,10 @@ class RpgState:
 
     # Raffle cog lookup is a cog concern; in state context just return None
     def _get_raffle_cog(self):
-        return None
+        try:
+            return self.bot.get_cog("RaffleCog") if hasattr(self, "bot") else None
+        except Exception:
+            return None
 
     def _build_overlay_payload(self) -> dict:
         session = self.session()
@@ -1434,56 +1761,75 @@ class RpgState:
         donut_active = int(session.get("deputy_donut_rounds_remaining", 0)) > 0
 
         for username in session.get("participants", []):
-            user = self.get_user(username)
-            class_name = user.get("class_name", "Derp Clone")
-            if user.get("is_revenant"):
-                class_name = "Revenant"
+            try:
+                user = self.get_user(username)
+                class_name, display_class = _get_class_display_names(user)
 
-            # Gold glow for Meatwad with Wesley Snipes transformation
-            gold_glow = False
-            if class_name == "Meatwad":
-                form = user.get("meatwad_form")
-                if form and form.get("name") == "Wesley Snipes":
-                    gold_glow = True
+                # Gold glow for Meatwad with Wesley Snipes transformation
+                gold_glow = False
+                if class_name == "Meatwad":
+                    form = user.get("meatwad_form")
+                    if form and form.get("name") == "Wesley Snipes":
+                        gold_glow = True
 
-            party.append({
-                "number": participant_index,
-                "name": username,
-                "class": class_name,
-                "hp": user.get("hp_current", DEFAULT_PLAYER_HP),
-                "hp_max": user.get("hp_max", DEFAULT_PLAYER_HP),
-                "goldrpg_ready": bool(user.get("hop_goldrpg_ready")),
-                "special_ready": bool(user.get("hop_goldrpg_ready"))
-                    or (class_name == "Deputy" and int(user.get("deputy_teargass_cooldown", 0)) <= 0)
-                    or (class_name == "Revenant" and int(user.get("revenant_doom_cooldown", 0)) <= 0)
-                    or (
-                        class_name == "Barbarian"
-                        and self._get_level_from_xp(int(user.get("xp", 0)), user) >= BARBARIAN_WHIRLWIND_UNLOCK_LEVEL
-                        and int(user.get("barbarian_whirlwind_cooldown", 0)) <= 0
-                    )
-                    or (
-                        class_name == "Buff"
-                        and bool(user.get("buff_kid_intercept_triggered"))
-                        and bool(user.get("buff_franklin_crit_triggered"))
-                        and bool(user.get("buff_jdam_crit_triggered"))
+                # Make HP robust; never emit 0/unknown
+                try:
+                    safe_hp_max = int(user.get("hp_max", DEFAULT_PLAYER_HP) or DEFAULT_PLAYER_HP)
+                except Exception:
+                    safe_hp_max = DEFAULT_PLAYER_HP
+                if safe_hp_max <= 0:
+                    safe_hp_max = DEFAULT_PLAYER_HP
+                try:
+                    safe_hp = int(user.get("hp_current", safe_hp_max) or safe_hp_max)
+                except Exception:
+                    safe_hp = safe_hp_max
+                if safe_hp > safe_hp_max:
+                    safe_hp = safe_hp_max
+                if safe_hp < 0:
+                    safe_hp = 0
+
+                party.append({
+                    "number": participant_index,
+                    "name": username,
+                    "class": display_class,
+                    "hp": safe_hp,
+                    "hp_max": safe_hp_max,
+                    "goldrpg_ready": bool(user.get("hop_goldrpg_ready")),
+                    "special_ready": bool(user.get("hop_goldrpg_ready"))
+                        or (class_name == "Deputy" and int(user.get("deputy_teargass_cooldown", 0)) <= 0)
+                        or (class_name == "Revenant" and int(user.get("revenant_doom_cooldown", 0)) <= 0)
+                        or (
+                            class_name == "Barbarian"
+                            and self._get_level_from_xp(int(user.get("xp", 0)), user) >= BARBARIAN_WHIRLWIND_UNLOCK_LEVEL
+                            and int(user.get("barbarian_whirlwind_cooldown", 0)) <= 0
+                        )
+                        or (
+                            class_name == "Buff"
+                            and bool(user.get("buff_kid_intercept_triggered"))
+                            and bool(user.get("buff_franklin_crit_triggered"))
+                            and bool(user.get("buff_jdam_crit_triggered"))
+                        ),
+                    "special_icon": (
+                        "\u2622\ufe0f"
+                        if (
+                            class_name == "Buff"
+                            and bool(user.get("buff_kid_intercept_triggered"))
+                            and bool(user.get("buff_franklin_crit_triggered"))
+                            and bool(user.get("buff_jdam_crit_triggered"))
+                        )
+                        else None
                     ),
-                "special_icon": (
-                    "\u2622\ufe0f"
-                    if (
-                        class_name == "Buff"
-                        and bool(user.get("buff_kid_intercept_triggered"))
-                        and bool(user.get("buff_franklin_crit_triggered"))
-                        and bool(user.get("buff_jdam_crit_triggered"))
-                    )
-                    else None
-                ),
-                "donut_buff_active": donut_active,
-                "is_totem": False,
-                "is_imp": False,
-                "is_undead": False,
-                "gold_glow": gold_glow,
-            })
-            participant_index += 1
+                    "donut_buff_active": donut_active,
+                    "is_totem": False,
+                    "is_imp": False,
+                    "is_undead": False,
+                    "gold_glow": gold_glow,
+                })
+                participant_index += 1
+            except Exception:
+                # If a single participant fails to serialize, continue and let the fallback kick in
+                self.logger.warning("[RPG] Failed to build overlay tile for %s; will use fallback", username, exc_info=True)
+                continue
 
             totems = [t for t in session.get("totems", []) if t.get("owner") == username and t.get("alive")]
             for totem in totems:
@@ -1579,9 +1925,10 @@ class RpgState:
             ]
             for pet in streamer_pets:
                 pet_type = str(pet.get("pet_type", "streamer_pet")).lower()
-                pet_label = {
+                pet_label = pet.get("mech_name") or {
                     "timberwolf": "Timberwolf",
                     "gordie_howe": "Gordie Howe",
+                    "mech": "Mech",
                 }.get(pet_type, "Streamer Pet")
                 party.append({
                     "number": None,
@@ -1619,6 +1966,25 @@ class RpgState:
                     "buff_pet_id": pet.get("id"),
                 })
 
+            prince_summons = [
+                p for p in session.get("prince_summons", [])
+                if p.get("owner") == username and p.get("alive")
+            ]
+            for summon in prince_summons:
+                summon_type = str(summon.get("type", "Prince")).title()
+                party.append({
+                    "number": None,
+                    "name": f"{username}'s {summon_type}",
+                    "class": summon_type,
+                    "hp": summon.get("hp", 1),
+                    "hp_max": summon.get("max_hp", 1),
+                    "is_totem": False,
+                    "is_imp": False,
+                    "is_undead": False,
+                    "is_pet": True,
+                    "prince_id": summon.get("id"),
+                })
+
             spirit_wells = [
                 w for w in session.get("spirit_wells", [])
                 if w.get("owner") == username and w.get("alive")
@@ -1644,13 +2010,11 @@ class RpgState:
         if not party and session.get("participants"):
             for idx, username in enumerate(session.get("participants", []), start=1):
                 user = self.get_user(username)
-                class_name = user.get("class_name", "Derp Clone")
-                if user.get("is_revenant"):
-                    class_name = "Revenant"
+                class_name, display_class = _get_class_display_names(user)
                 party.append({
                     "number": idx,
                     "name": username,
-                    "class": class_name,
+                    "class": display_class,
                     "hp": int(user.get("hp_current", 0)),
                     "hp_max": int(user.get("hp_max", DEFAULT_PLAYER_HP)),
                     "goldrpg_ready": bool(user.get("hop_goldrpg_ready")),
@@ -1687,6 +2051,8 @@ class RpgState:
         """Resolve salary for user. Returns (gacha_tokens, raffle_entries)."""
         if user.get("is_revenant"):
             return MYTHIC_SALARY
+        if _display_class_is_derp_clone(user):
+            return CLASS_TIER_SALARIES.get(0, (1, 1))
         tier = int(user.get("class_tier", 0))
         return CLASS_TIER_SALARIES.get(tier, (1, 1))
 
@@ -1808,78 +2174,93 @@ class RpgState:
         if session:
             totem_buff = self._get_totem_buff(session)
             totem_damage_bonus = int(totem_buff.get("damage_bonus", 0))
-        
-        # Skip damage scaling for Monk and Revenant
-        if class_name == "Monk" or user_data.get("is_revenant"):
-            result = int((base_damage + referral_bonus + totem_damage_bonus + alchemist_brew_bonus) * effectiveness_multiplier)
-            return (result, False) if include_crit_meta else result
-        
-        # Derp Clone stays at base damage
-        if class_name == "Derp Clone":
-            result = int((base_damage + referral_bonus + totem_damage_bonus + alchemist_brew_bonus) * effectiveness_multiplier)
-            return (result, False) if include_crit_meta else result
-        
-        # Tier 1 classes get level bonuses and crit
+
+        monk_multiplier = self._get_monk_passive_multiplier(session)
         total_xp = int(user_data.get("xp", 0))
         level = self._get_level_from_xp(total_xp, user_data)
+
+        # Skip damage scaling for Monk and Revenant (monk passives still apply)
+        if class_name == "Monk" or user_data.get("is_revenant"):
+            result = int((base_damage + referral_bonus + totem_damage_bonus + alchemist_brew_bonus) * effectiveness_multiplier)
+            result = int(result * monk_multiplier)
+            return (result, False) if include_crit_meta else result
+
+        # Derp Clone uses the new progression curve
+        if class_name == "Derp Clone":
+            progress = CLASS_PROGRESSION.get("Derp Clone", {})
+            base_damage_value = progress.get("base_skill_damage", base_damage)
+            skill_bonus = (level - 1) * progress.get("skill_damage_per_level", BASE_DAMAGE_BONUS_PER_LEVEL)
+            result = int((base_damage_value + skill_bonus + referral_bonus + totem_damage_bonus + alchemist_brew_bonus) * effectiveness_multiplier)
+            result = int(result * monk_multiplier)
+            return (result, False) if include_crit_meta else result
+
         level_bonus = (level - 1) * BASE_DAMAGE_BONUS_PER_LEVEL
         crit_chance = self._get_crit_chance(user_data, level, session)
         crit_chance += float(user_data.get("alchemist_brew_crit_bonus", 0.0))
         crit_chance = min(1.0, crit_chance)
-        
-        # Apply crit to base damage only, then add level bonus
-        final_damage = base_damage
-        did_crit = False
-        if self._consume_forced_crit(user_data):
-            final_damage = int(final_damage * CRIT_MULTIPLIER)
-            did_crit = True
-        elif random.random() < crit_chance:
-            final_damage = int(final_damage * CRIT_MULTIPLIER)
-            did_crit = True
-        
-        final_damage = final_damage + level_bonus + alchemist_brew_bonus
-        
-        # Apply monk blessing bonus: 50% per monk in the party (additive)
-        if session:
-            participants = session.get("participants", [])
-            monk_count = sum(1 for participant in participants if self.state.get_user(participant).get("class_name") == "Monk")
-            if monk_count > 0:
-                monk_bonus = 0.5 * monk_count
-                final_damage = int(final_damage * (1 + monk_bonus))
-            final_damage += totem_damage_bonus
-        
-        # Apply Meatwad transformation damage bonuses
+        effect_type = ""
+        effect_value_numeric = 0.0
+        party_super_buff_values: dict | None = None
         form_data = self._get_effective_meatwad_form(user_data, session)
         if form_data:
-            effect_type = form_data.get("effect_type", "")
-            effect_value = form_data.get("effect_value", 0)
-            
+            effect_type = str(form_data.get("effect_type", "")).strip().lower()
+            raw_value = form_data.get("effect_value", 0)
+            if effect_type == "party_super_buff" and isinstance(raw_value, dict):
+                party_super_buff_values = raw_value
+                crit_bonus = float(party_super_buff_values.get("crit_chance", 0))
+                crit_chance = min(1.0, crit_chance + crit_bonus)
+            else:
+                try:
+                    effect_value_numeric = float(raw_value)
+                except (TypeError, ValueError):
+                    effect_value_numeric = 0.0
+
+        final_damage = base_damage
+        did_crit = False
+        if random.random() < crit_chance:
+            final_damage = int(final_damage * CRIT_MULTIPLIER)
+            did_crit = True
+
+        final_damage = final_damage + level_bonus + alchemist_brew_bonus
+
+        if effect_type:
             if effect_type == "damage":
-                # Direct damage bonus (Monster, Lincoln, Hammer, Humanoid, Slim Jim)
-                final_damage += int(effect_value)
-            elif effect_type == "party_damage":
-                # Party synergy damage (Bridge 2.0, Famous Phrase)
-                if session:
-                    alive_count = len(self._get_alive_participants(session))
-                    final_damage += int(effect_value * alive_count)
-            elif effect_type == "balanced":
-                # Balanced bonus (Humanoid 3) - damage + defense
-                final_damage += int(effect_value)
+                final_damage = int(final_damage * (1 + effect_value_numeric))
+            elif effect_type == "crit_damage" and did_crit:
+                final_damage = int(final_damage * (1 + effect_value_numeric))
             elif effect_type == "five_boost":
-                # Number 5 form - 5% boost to everything
-                final_damage = int(final_damage * (1 + effect_value))
+                final_damage = int(final_damage * (1 + effect_value_numeric))
+            elif effect_type == "party_damage":
+                final_damage = int(final_damage + effect_value_numeric)
+            elif effect_type == "party_super_buff" and party_super_buff_values:
+                final_damage = int(final_damage + party_super_buff_values.get("damage", 0))
             elif effect_type == "chaos":
-                # Master Shake form - random chaos effect
                 chaos_roll = random.random()
                 if chaos_roll < 0.25:
-                    final_damage = int(final_damage * 2)  # Double damage
+                    final_damage = int(final_damage * 2)
                 elif chaos_roll < 0.50:
-                    final_damage = int(final_damage * 0.5)  # Half damage
+                    final_damage = int(final_damage * 0.5)
                 elif chaos_roll < 0.60:
-                    final_damage = 0  # Miss completely
-        
-        result = int((final_damage + referral_bonus) * effectiveness_multiplier)
+                    final_damage = 0
+
+        final_damage = int(final_damage * monk_multiplier)
+        result = int((final_damage + referral_bonus + totem_damage_bonus) * effectiveness_multiplier)
         return (result, did_crit) if include_crit_meta else result
+
+    def _get_monk_passive_multiplier(self, session: dict | None) -> float:
+        if not session:
+            return 1.0
+        participants = session.get("participants", [])
+        for username in participants:
+            participant = self.state.get_user(username)
+            if not participant:
+                continue
+            if participant.get("class_name") != MONK_CLASS:
+                continue
+            monk_level = self._get_level_from_xp(int(participant.get("xp", 0)), participant)
+            if monk_level >= MONK_PASSIVE_DAMAGE_LEVEL:
+                return 2.0
+        return 1.0
 
     def _clear_alchemist_brew_bonuses(self, usernames: list[str] = None):
         helper = getattr(self, "_state_obj", None)
@@ -1942,6 +2323,87 @@ class RpgState:
         owner_data["lifetime_monster_damage"] = int(owner_data.get("lifetime_monster_damage", 0)) + int(dealt)
         owner_data["damage_done"] = int(owner_data.get("damage_done", 0)) + int(dealt)
 
+    def _get_prince_pair(self, session: dict, owner: str) -> tuple[dict | None, dict | None]:
+        owner_key = str(owner or "").strip().lower()
+        elder = None
+        younger = None
+        for summon in session.get("prince_summons", []):
+            if str(summon.get("owner", "")).strip().lower() != owner_key:
+                continue
+            stype = str(summon.get("type", "")).lower()
+            if stype == "elder":
+                elder = summon
+            elif stype == "younger":
+                younger = summon
+        return elder, younger
+
+    def _is_elder_prince_alive(self, session: dict, owner: str) -> bool:
+        elder, _ = self._get_prince_pair(session, owner)
+        return bool(elder and elder.get("alive") and int(elder.get("hp", 0)) > 0)
+
+    def _despawn_princes_for_owner(self, session: dict, owner: str) -> list[str]:
+        """Kill all prince summons (elder/younger) for the owner."""
+        owner_key = str(owner or "").strip().lower()
+        removed_labels = []
+        for summon in session.get("prince_summons", []):
+            if str(summon.get("owner", "")).strip().lower() != owner_key:
+                continue
+            if not summon.get("alive"):
+                continue
+            summon["alive"] = False
+            label = f"{summon.get('type', 'prince').title()} Prince"
+            removed_labels.append(label)
+        return removed_labels
+
+    def _lock_patience_for_owner(self, owner: str):
+        user_data = self.state.get_user(owner)
+        user_data["prince_patience_locked"] = True
+        user_data["patience_turns_remaining"] = 0
+
+    def _spawn_elder_prince(self, session: dict, owner: str) -> dict:
+        owner_key = str(owner or "").strip().lower()
+        elder, younger = self._get_prince_pair(session, owner_key)
+        if elder:
+            elder.update({"alive": True, "hp": elder.get("max_hp", elder.get("hp", 1)), "has_summoned_younger": elder.get("has_summoned_younger", False)})
+            return elder
+        owner_data = self.state.get_user(owner_key)
+        level = self._get_level_from_xp(int(owner_data.get("xp", 0)), owner_data)
+        hp = max(1, level * ELDER_PRINCE_HP_PER_LEVEL)
+        elder = {
+            "id": f"elder_prince_{owner_key}_{_now_ts()}",
+            "owner": owner_key,
+            "type": "elder",
+            "alive": True,
+            "hp": hp,
+            "max_hp": hp,
+            "has_summoned_younger": False,
+            "totem_shield_available": False,
+        }
+        session.setdefault("prince_summons", []).append(elder)
+        return elder
+
+    def _spawn_younger_prince_from_elder(self, session: dict, owner: str) -> dict:
+        owner_key = str(owner or "").strip().lower()
+        elder, younger = self._get_prince_pair(session, owner_key)
+        if younger:
+            return younger
+        owner_data = self.state.get_user(owner_key)
+        level = self._get_level_from_xp(int(owner_data.get("xp", 0)), owner_data)
+        hp = max(1, level * YOUNGER_PRINCE_HP_PER_LEVEL)
+        younger = {
+            "id": f"younger_prince_{owner_key}_{_now_ts()}",
+            "owner": owner_key,
+            "type": "younger",
+            "alive": True,
+            "hp": hp,
+            "max_hp": hp,
+            "immune_turns": 1,
+            "stunned_turns": 0,
+            "totem_shield_available": False,
+        }
+        session.setdefault("prince_summons", []).append(younger)
+        return younger
+
     def _despawn_buff_pets_for_owner(self, session: dict, owner: str) -> list[str]:
         owner_key = str(owner or "").strip().lower()
         if not owner_key:
@@ -1962,10 +2424,96 @@ class RpgState:
                 removed.append("Buff Pet")
         return removed
 
+    def _spawn_buff_pet_if_missing(self, session: dict, owner: str, pet_type: str) -> dict | None:
+        owner_key = str(owner or "").strip().lower()
+        pet_type_key = str(pet_type or "").strip().lower()
+        if not owner_key or not pet_type_key:
+            return None
+        for pet in session.get("buff_pets", []):
+            if not pet.get("alive"):
+                continue
+            if str(pet.get("owner", "")).strip().lower() != owner_key:
+                continue
+            if str(pet.get("pet_type", "")).strip().lower() == pet_type_key:
+                return None
+
+        pet_id = f"buff_{pet_type_key}_{owner_key}_{_now_ts()}"
+        if pet_type_key == "kid":
+            pet_data = {
+                "id": pet_id,
+                "owner": owner_key,
+                "pet_type": "kid",
+                "hp": BUFF_KID_BASE_HP,
+                "max_hp": BUFF_KID_BASE_HP,
+                "alive": True,
+                "intercept_chance": BUFF_KID_INTERCEPT_CHANCE,
+            }
+        else:
+            pet_data = {
+                "id": pet_id,
+                "owner": owner_key,
+                "pet_type": "franklin",
+                "hp": BUFF_FRANKLIN_BASE_HP,
+                "max_hp": BUFF_FRANKLIN_BASE_HP,
+                "alive": True,
+                "damage": BUFF_FRANKLIN_BASE_DAMAGE,
+                "crit_chance": BUFF_FRANKLIN_CRIT_CHANCE,
+            }
+        session.setdefault("buff_pets", []).append(pet_data)
+        return pet_data
+
+    async def _ensure_buff_pets_for_owner(self, session: dict, owner: str, announce: bool = False) -> bool:
+        owner_key = str(owner or "").strip().lower()
+        if not owner_key:
+            return False
+        user = self.state.get_user(owner_key)
+        if str(user.get("class_name", "")).strip().lower() != "buff":
+            return False
+        if self._is_user_revenant(user):
+            return False
+        spawned = False
+        for pet_type in ("kid", "franklin"):
+            pet_data = self._spawn_buff_pet_if_missing(session, owner_key, pet_type)
+            if not pet_data:
+                continue
+            label = "Kid" if pet_type == "kid" else "Franklin"
+            self._log_event(f"Pet spawn: @{owner_key} auto summons {label}.", battle=True)
+            if announce:
+                await self._send_battle_message(f"@{owner_key} automatically summons {label}! (Buff Pet)")
+            spawned = True
+        return spawned
+
+    async def _ensure_buff_pets_for_session(self, session: dict, announce: bool = False) -> bool:
+        updated = False
+        for username in session.get("participants", []):
+            user = self.state.get_user(username)
+            if str(user.get("class_name", "")).strip().lower() != "buff":
+                continue
+            if self._is_user_revenant(user):
+                continue
+            if await self._ensure_buff_pets_for_owner(session, username, announce=announce):
+                updated = True
+        return updated
+
+    async def _cleanup_princes_for_ko(self, session: dict):
+        participants = session.get("participants", [])
+        for username in participants:
+            user = self.state.get_user(username)
+            if str(user.get("class_name", "")).strip().lower() != "younger prince":
+                continue
+            if int(user.get("hp_current", 0)) > 0:
+                continue
+            removed_princes = self._despawn_princes_for_owner(session, username)
+            if removed_princes:
+                self._lock_patience_for_owner(username)
+                await self._send_battle_message(
+                    f"💨 {', '.join(removed_princes)} vanish as @{username} falls!"
+                )
+
     async def _trigger_archangel_death_passive(self, session: dict, username: str) -> bool:
         user = self.state.get_user(username)
         class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "archangel" and username != ARCHANGEL_NAME.lower():
+        if class_name != "archangel":
             return False
 
         user["times_knocked_out"] = int(user.get("times_knocked_out", 0)) + 1
@@ -2079,7 +2627,7 @@ class RpgState:
                     battle=True,
                 )
                 await self._send_battle_message(
-                    f"âœ¨ @{owner}'s Spirit Well is full and revives them at full health!"
+                    f"✨ @{owner}'s Spirit Well is full and revives them at full health!"
                 )
             else:
                 await self._send_battle_message(
@@ -2191,6 +2739,7 @@ class RpgState:
         session["turn_number"] = 0
         session["phase"] = "idle"
         session["action_window_end"] = None
+        session["action_window_seconds"] = ACTION_WINDOW_SECONDS
         session["join_window_end"] = None
         session["participants"] = []
         session["action_queue"] = []
@@ -2206,6 +2755,7 @@ class RpgState:
         session["barbarian_shout_rounds_remaining"] = 0
         session["battle_stat_baseline"] = {}
         session["slow_actions"] = False
+        session["reward_multiplier"] = 1
         users = self.state.state.get("users", {})
         for username, user in users.items():
             user["active_player"] = False
@@ -2222,10 +2772,12 @@ class RpgState:
             user["buff_franklin_crit_triggered"] = False
             user["buff_franklin_jdam_buff_triggered"] = False
             user["buff_jdam_crit_triggered"] = False
+            user["buff_napalm_crit_triggered"] = False
             user["buff_jdam_forced_crit_charges"] = 0
             if username == STREAMER_NAME.lower():
                 user["active_player"] = True
         self._enforce_single_revenant()
+        self._deactivate_mech_pets()
         self.state.save_state()
         self._log_event("Stream reset: RPG state reset for new stream.")
         self._broadcast_state()
@@ -2766,12 +3318,28 @@ class RpgState:
         for entity in session.get("buff_pets", []):
             entity["totem_shield_available"] = shield_active and bool(entity.get("alive"))
 
+        for entity in session.get("prince_summons", []):
+            entity["totem_shield_available"] = shield_active and bool(entity.get("alive"))
+
     async def _apply_healing_totem_pulse(self, session: dict):
         """Apply a small heal to all alive participants when a healing totem is active."""
         totem_buff = self._get_totem_buff(session)
         if not totem_buff.get("has_healing"):
             return
         participants = session.get("participants", [])
+
+        def heal_pool(entities: list[dict], hp_key: str = "hp", max_key: str = "max_hp"):
+            for entity in entities:
+                if not entity:
+                    continue
+                current_hp = int(entity.get(hp_key, 0))
+                max_hp = int(entity.get(max_key, current_hp))
+                if current_hp <= 0 or max_hp <= 0:
+                    continue
+                heal_amount = max(1, int(max_hp * 0.02))
+                entity[hp_key] = min(max_hp, current_hp + heal_amount)
+
+        # Heal all alive heroes
         for username in participants:
             user_data = self.state.get_user(username)
             if int(user_data.get("hp_current", 0)) <= 0:
@@ -2779,6 +3347,17 @@ class RpgState:
             max_hp = int(user_data.get("hp_max", DEFAULT_PLAYER_HP))
             heal_amount = max(1, int(max_hp * 0.02))  # 2% max HP minimum 1
             user_data["hp_current"] = min(max_hp, int(user_data.get("hp_current", 0)) + heal_amount)
+
+        # Heal pets and summons that track hp
+        heal_pool([t for t in session.get("totems", []) if t.get("alive")])
+        heal_pool([t for t in session.get("imps", []) if t.get("alive")])
+        heal_pool([t for t in session.get("green_arrows", []) if t.get("alive")])
+        heal_pool([t for t in session.get("dragons", []) if t.get("alive")])
+        heal_pool([t for t in session.get("undead_pets", []) if t.get("alive")])
+        heal_pool([t for t in session.get("streamer_pets", []) if t.get("alive")])
+        heal_pool([t for t in session.get("buff_pets", []) if t.get("alive")])
+        heal_pool([t for t in session.get("prince_summons", []) if t.get("alive")])
+        heal_pool([t for t in session.get("spirit_wells", []) if t.get("alive")])
         try:
             self.state.save_state()
         except Exception:
@@ -2820,6 +3399,8 @@ class RpgState:
                 total_healed = 0
                 for participant in participants:
                     participant_data = self.state.get_user(participant)
+                    if not participant_data:
+                        continue
                     p_current_hp = int(participant_data.get("hp_current", DEFAULT_PLAYER_HP))
                     if p_current_hp > 0:
                         p_max_hp = int(participant_data.get("hp_max", DEFAULT_PLAYER_HP))
@@ -2881,13 +3462,200 @@ class RpgState:
                     await self._send_battle_message(f"{form_name}: @{username} whirls for {aoe_damage} damage to all enemies!")
                     self._log_event(f"Meatwad passive: @{username} as {form_name} dealt {total_dealt} AoE damage.", battle=True)
 
+            elif effect_type == "party_super_buff":
+                buff_values = form_data.get("effect_value") if isinstance(form_data.get("effect_value"), dict) else {}
+
+                hp_boost = int(buff_values.get("hp", 0))
+                if hp_boost and not form_data.get("super_buff_hp_applied"):
+                    for participant in participants:
+                        participant_data = self.state.get_user(participant)
+                        participant_data["hp_max"] = int(participant_data.get("hp_max", DEFAULT_PLAYER_HP)) + hp_boost
+                        participant_data["hp_current"] = int(participant_data.get("hp_current", DEFAULT_PLAYER_HP)) + hp_boost
+                    form_data["super_buff_hp_applied"] = True
+                    user_data["meatwad_form"] = form_data
+                    await self._send_battle_message(f"{form_name}: @{username}'s form crowns everyone with +{hp_boost} max HP!")
+                    self._log_event(f"Meatwad passive: @{username} as {form_name} granted +{hp_boost} max HP to the party.", battle=True)
+
+                regen_amount = int(buff_values.get("regen", 0))
+                if regen_amount > 0:
+                    total_healed = 0
+                    for participant in participants:
+                        participant_data = self.state.get_user(participant)
+                        p_current = int(participant_data.get("hp_current", 0))
+                        if p_current <= 0:
+                            continue
+                        p_max = int(participant_data.get("hp_max", DEFAULT_PLAYER_HP))
+                        p_new = min(p_max, p_current + regen_amount)
+                        healed = p_new - p_current
+                        if healed > 0:
+                            participant_data["hp_current"] = p_new
+                            total_healed += healed
+                    if total_healed > 0:
+                        await self._send_battle_message(f"{form_name}: @{username}'s aura heals the party for {total_healed} HP!")
+                        self._log_event(f"Meatwad passive: @{username} as {form_name} healed party for {total_healed} HP.", battle=True)
+
+                if buff_values.get("auto_kill"):
+                    alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
+                    if alive_monsters:
+                        victim = random.choice(alive_monsters)
+                        victim_hp = int(victim.get("hp", 0))
+                        victim["hp"] = 0
+                        if victim.get("alive"):
+                            victim["alive"] = False
+                            victim["killed_by"] = username
+                            user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
+                            user_data["killing_blows"] = int(user_data.get("killing_blows", 0)) + 1
+                        user_data["lifetime_monster_damage"] = int(user_data.get("lifetime_monster_damage", 0)) + victim_hp
+                        user_data["damage_done"] = int(user_data.get("damage_done", 0)) + victim_hp
+                        await self._send_battle_message(f"{form_name}: @{username}'s aura obliterates {victim.get('name')}!")
+                        self._log_event(f"Meatwad passive: @{username} as {form_name} auto-killed {victim.get('name')}.", battle=True)
+
+    async def _process_prince_actions(self, session: dict):
+        actions = list(session.get("prince_actions") or [])
+
+        if not actions:
+            # Build a default Elder Prince action for any alive elder on the field
+            owner_candidates = [
+                name for name in session.get("participants", [])
+                if str(self.state.get_user(name).get("class_name", "")).strip().lower() == "younger prince"
+            ]
+            for owner in owner_candidates:
+                elder, _ = self._get_prince_pair(session, owner)
+                if not elder or not elder.get("alive"):
+                    continue
+                level = self._get_level_from_xp(int(self.state.get_user(owner).get("xp", 0)), self.state.get_user(owner))
+                elder_attack = max(4, int(6 + level * 0.8))
+                elder_smote = max(elder_attack + 2, int(8 + level * 0.9))
+                elder_slice = max(3, int(elder_attack * 0.6))
+
+                roll = random.random()
+                if roll < 0.4:
+                    actions.append({"action": "charge", "elder_attack": elder_attack, "taunt_target": owner})
+                elif roll < 0.7:
+                    actions.append({"action": "smite_highest_hp", "elder_smote": elder_smote})
+                else:
+                    actions.append({"action": "slice", "elder_slice": elder_slice})
+
+            session["prince_actions"] = actions
+
+        if not actions:
+            return
+
+        participants = session.get("participants", [])
+        state_obj = self._state_obj() or self.state
+
+        async def handle_knockout(target_name: str, target_user: dict):
+            target_user["injured"] = True
+            target_user["injured_by_prince"] = True
+            if not await self._trigger_archangel_death_passive(session, target_name):
+                target_user["times_knocked_out"] = int(target_user.get("times_knocked_out", 0)) + 1
+                despawned = self._despawn_buff_pets_for_owner(session, target_name)
+                if despawned:
+                    await self._send_battle_message(f"💨 {', '.join(despawned)} vanish as @{target_name} falls!")
+                if str(target_user.get("class_name", "")).strip().lower() == "younger prince":
+                    removed_princes = self._despawn_princes_for_owner(session, target_name)
+                    if removed_princes:
+                        await self._send_battle_message(
+                            f"💨 {', '.join(removed_princes)} vanish as @{target_name} falls!"
+                        )
+
+        async def hit_player(target_name: str, damage: int, verb: str):
+            target_user = state_obj.get_user(target_name)
+            if int(target_user.get("hp_current", DEFAULT_PLAYER_HP)) <= 0:
+                return False
+
+            if target_user.get("totem_shield_available"):
+                target_user["totem_shield_available"] = False
+                self._log_event(
+                    f"Shield Totem: prevented Elder Prince {verb} on @{target_name}.",
+                    battle=True,
+                )
+                await self._send_battle_message(
+                    f"🛡️ Shield Totem blocks the Elder Prince {verb} on @{target_name}!"
+                )
+                return False
+
+            hp_before = int(target_user.get("hp_current", DEFAULT_PLAYER_HP))
+            dealt = min(damage, hp_before)
+            target_user["hp_current"] = max(0, hp_before - damage)
+            target_user["battered_stacks"] = int(target_user.get("battered_stacks", 0)) + 1
+
+            if hp_before > 0 and target_user["hp_current"] == 0:
+                await handle_knockout(target_name, target_user)
+
+            await self._send_battle_message(
+                f"Elder Prince {verb}s @{target_name} for {dealt} damage."
+            )
+            self._log_event(
+                f"Elder Prince {verb}: @{target_name} took {dealt} damage.",
+                battle=True,
+            )
+            return True
+
+        for action in actions:
+            action_name = str(action.get("action", "")).strip().lower()
+            if action_name not in {"charge", "smite_highest_hp", "slice"}:
+                continue
+
+            if action_name == "charge":
+                damage = max(0, int(action.get("elder_attack", 0)))
+                taunt_target = str(action.get("taunt_target", "")).strip().lower()
+                for username in participants:
+                    if taunt_target and str(username).strip().lower() == taunt_target:
+                        continue
+                    await hit_player(username, damage, "charge")
+
+            elif action_name == "smite_highest_hp":
+                damage = max(0, int(action.get("elder_smote", 0)))
+                alive_players = [
+                    name for name in participants
+                    if int(state_obj.get_user(name).get("hp_current", DEFAULT_PLAYER_HP)) > 0
+                ]
+                if not alive_players:
+                    session["prince_actions"] = []
+                    self._log_event("Elder Prince smite fizzled (no targets).", battle=True)
+                    await self._send_battle_message("Elder Prince tries to smite, but no one remains.")
+                    return
+
+                target_name = max(
+                    alive_players,
+                    key=lambda uname: int(state_obj.get_user(uname).get("hp_current", DEFAULT_PLAYER_HP)),
+                )
+                await hit_player(target_name, damage, "smite")
+
+            elif action_name == "slice":
+                damage = max(0, int(action.get("elder_slice", 0)))
+                for username in participants:
+                    target_user = state_obj.get_user(username)
+                    if int(target_user.get("hp_current", DEFAULT_PLAYER_HP)) <= 0:
+                        continue
+                    await hit_player(username, damage, "slice")
+
+        session["prince_actions"] = []
+
     # Note: reflect, defense, damage, party_damage, party_defense, evasion, crit_chance, counter, balanced, five_boost, chaos
     # are handled during damage calculation/monster attacks, not here
 
     async def _battle_loop_impl(self):
         await self.bot.wait_for_ready()
+        self.logger.info("[RPG] battle loop impl started")
+        tick = 0
         while True:
             await asyncio.sleep(1)
+            tick += 1
+            if tick % 30 == 0:
+                session_snapshot = self.state.session()
+                self.logger.info(
+                    "[RPG] loop heartbeat phase=%s active=%s join_end=%s action_end=%s action_secs=%s participants=%s queue=%s",
+                    session_snapshot.get("phase"),
+                    session_snapshot.get("battle_active"),
+                    session_snapshot.get("join_window_end"),
+                    session_snapshot.get("action_window_end"),
+                    session_snapshot.get("action_window_seconds"),
+                    len(session_snapshot.get("participants", [])),
+                    len(session_snapshot.get("action_queue", [])),
+                )
+
             session = self.state.session()
             if not session.get("battle_active"):
                 continue
@@ -2896,17 +3664,22 @@ class RpgState:
                 join_end = session.get("join_window_end")
                 if join_end and now_ts >= int(join_end):
                     session["phase"] = "action"
-                    session["action_window_end"] = _now_ts() + ACTION_WINDOW_SECONDS
+                    duration = int(session.get("action_window_seconds") or ACTION_WINDOW_SECONDS)
+                    session["action_window_end"] = _now_ts() + duration
                     self.state.save_state()
                     self._log_event("Action window opened.", battle=True)
                     self._broadcast_state()
-                    await self._send_battle_message("Action window open. Submit your battle command now!")
+                    try:
+                        await self._announce_action_window(session, duration)
+                    except Exception:
+                        self.logger.warning("[RPG] failed to announce action window", exc_info=True)
                 continue
             action_end = session.get("action_window_end")
             if session.get("phase") == "action" and action_end:
                 turn_number = int(session.get("turn_number", 0))
                 auto_dispatch_turn = int(session.get("auto_join_dispatch_turn", -1))
-                early_dispatch_at = int(action_end) - max(0, int(ACTION_WINDOW_SECONDS) - 30)
+                duration = int(session.get("action_window_seconds") or ACTION_WINDOW_SECONDS)
+                early_dispatch_at = int(action_end) - max(0, duration - 30)
                 if auto_dispatch_turn != turn_number and now_ts >= early_dispatch_at:
                     queued_early = await self._queue_join_auto_actions(announce_reason="join auto timer")
                     session["auto_join_dispatch_turn"] = turn_number
@@ -2937,6 +3710,18 @@ class RpgState:
         class_name = str(user_data.get("class_name", "Derp Clone")).strip()
         if self._is_user_revenant(user_data):
             class_name = "Revenant"
+
+        if class_name == "Younger Prince":
+            session = (self._state_obj() or self.state).session()
+            if self._is_elder_prince_alive(session, username) and not user_data.get("prince_patience_locked"):
+                return ({
+                    "user": username,
+                    "action": "patience",
+                    "damage": 0,
+                    "target_index": None,
+                    "ts": _now_ts(),
+                }, "patience")
+            return (None, "none")
 
         options = AUTO_CLASS_ACTIONS.get(class_name)
         if not options:
@@ -2970,6 +3755,7 @@ class RpgState:
         queued_count = 0
 
         for username in participants:
+            user_obj = state_obj.get_user(username)
             if username in queued_users:
                 continue
 
@@ -2977,7 +3763,7 @@ class RpgState:
             if auto_mode != "primary_half":
                 continue
 
-            user_data = state_obj.get_user(username)
+            user_data = user_obj
             auto_action, auto_name = self._build_auto_action(username, user_data)
             if not auto_action:
                 continue
@@ -3012,11 +3798,12 @@ class RpgState:
             if session.get("phase") != "join":
                 return
             session["phase"] = "action"
-            session["action_window_end"] = _now_ts() + ACTION_WINDOW_SECONDS
+            duration = int(session.get("action_window_seconds") or ACTION_WINDOW_SECONDS)
+            session["action_window_end"] = _now_ts() + duration
             self.state.save_state()
             self._log_event("Action window opened (fallback timer).", battle=True)
             self._broadcast_state()
-            await self._send_battle_message("Action window open. Submit your battle command now!")
+            await self._announce_action_window(session, duration)
         except Exception:
             self.logger.warning("[RPG] _ensure_action_window_open failed", exc_info=True)
 
@@ -3025,13 +3812,150 @@ class RpgState:
         if delay_seconds > 0:
             await asyncio.sleep(delay_seconds)
 
-    def _log_event(self, text: str, *, battle: bool = False):
+    def _get_log_store(self):
         state_obj = getattr(self, "state", None)
-        log_store = None
+        if state_obj is None:
+            return None
         if hasattr(state_obj, "log"):
             log_store = state_obj.log
         elif isinstance(state_obj, dict):
-            log_store = state_obj.setdefault("log", {"daily_log": [], "battle_log": []})
+            log_store = state_obj.setdefault("log", {})
+        else:
+            return None
+        if not isinstance(log_store, dict):
+            return None
+        log_store.setdefault("daily_log", [])
+        log_store.setdefault("battle_log", [])
+        log_store.setdefault("battle_reports", [])
+        return log_store
+
+    def _append_battle_report(self, log_store: dict, report: dict):
+        reports = log_store.setdefault("battle_reports", [])
+        reports.append(report)
+        if len(reports) > BATTLE_REPORT_LIMIT:
+            del reports[: len(reports) - BATTLE_REPORT_LIMIT]
+        state_obj = getattr(self, "state", None)
+        if hasattr(state_obj, "save_log"):
+            try:
+                state_obj.save_log()
+            except Exception:
+                self.logger.warning("[RPG] failed to persist battle reports", exc_info=True)
+
+    def _record_battle_report(self, session: dict, *, status: str, loot_summary: list[dict] | None = None, stat_summary: dict | None = None):
+        log_store = self._get_log_store()
+        if log_store is None:
+            return
+        battle_id = session.get("battle_id") or log_store.get("battle_id") or f"battle_{_now_ts()}"
+        participants = [name for name in session.get("participants", [])]
+        monsters = [monster.copy() for monster in session.get("monsters", [])]
+        action_counts = dict(session.get("turn_action_counts", {}))
+        start_ts = session.get("battle_start_ts")
+        end_ts = _now_ts()
+        start_iso = None
+        if start_ts:
+            try:
+                start_iso = datetime.datetime.utcfromtimestamp(start_ts).replace(microsecond=0).isoformat() + "Z"
+            except Exception:
+                start_iso = None
+        end_iso = _utc_iso()
+        summary = stat_summary or {}
+        stat_summary_copy = {
+            "battle_stats": {name: stats.copy() for name, stats in summary.get("battle_stats", {}).items()},
+            "stat_rows": [row.copy() for row in summary.get("stat_rows", [])],
+            "top_dps": list(summary.get("top_dps", [])),
+            "top_heal": list(summary.get("top_heal", [])),
+            "top_dps_rankings": [row.copy() for row in summary.get("top_dps_rankings", [])],
+            "top_heal_rankings": [row.copy() for row in summary.get("top_heal_rankings", [])],
+        }
+        events = [entry.copy() for entry in log_store.get("battle_log", [])]
+        loot_copy = [dict(item) for item in (loot_summary or [])]
+        monster_summary = []
+        for monster in monsters:
+            monster_summary.append({
+                "name": monster.get("name"),
+                "level": monster.get("level"),
+                "hp": int(monster.get("hp", 0) or 0),
+                "max_hp": int(monster.get("max_hp", 0) or 0),
+                "alive": bool(monster.get("alive")),
+                "is_loot_goblin": bool(monster.get("is_loot_goblin")),
+                "id": monster.get("id"),
+            })
+        report = {
+            "battle_id": battle_id,
+            "status": status,
+            "status_label": status.title(),
+            "participants": participants,
+            "channel": session.get("channel"),
+            "turn_count": int(session.get("turn_number", 0)),
+            "reward_multiplier": int(session.get("reward_multiplier", 1)) if session.get("reward_multiplier") is not None else 1,
+            "slow_actions": bool(session.get("slow_actions")),
+            "phase": session.get("phase"),
+            "action_counts": action_counts,
+            "monsters": monster_summary,
+            "loot_summary": loot_copy,
+            "stat_summary": stat_summary_copy,
+            "events": events,
+            "event_count": len(events),
+            "start_ts": start_ts,
+            "start_ts_iso": start_iso,
+            "end_ts_iso": end_iso,
+            "duration_seconds": (end_ts - start_ts) if start_ts else None,
+            "timestamp": end_iso,
+        }
+        self._append_battle_report(log_store, report)
+
+    def _build_battle_stat_summary(self, session: dict) -> dict:
+        participants = session.get("participants", [])
+        baseline_map = session.get("battle_stat_baseline", {})
+        battle_stats = {}
+        stat_rows = []
+        max_damage = 0
+        max_heal = 0
+        top_dps = []
+        top_heal = []
+        for username in participants:
+            user_data = self.state.get_user(username)
+            baseline = baseline_map.get(username, {})
+            baseline_damage = int(baseline.get("damage", int(user_data.get("damage_done", 0))))
+            baseline_healing = int(baseline.get("healing", int(user_data.get("healing_done", 0))))
+            damage_done = max(0, int(user_data.get("damage_done", 0)) - baseline_damage)
+            healing_done = max(0, int(user_data.get("healing_done", 0)) - baseline_healing)
+            battle_stats[username] = {"damage": damage_done, "healing": healing_done}
+            stat_rows.append({"name": username, "damage": damage_done, "healing": healing_done})
+            if damage_done > 0:
+                if damage_done > max_damage:
+                    max_damage = damage_done
+                    top_dps = [username]
+                elif damage_done == max_damage:
+                    top_dps.append(username)
+            if healing_done > 0:
+                if healing_done > max_heal:
+                    max_heal = healing_done
+                    top_heal = [username]
+                elif healing_done == max_heal:
+                    top_heal.append(username)
+        top_dps_rankings = sorted(
+            stat_rows,
+            key=lambda row: (-int(row.get("damage", 0)), str(row.get("name", ""))),
+        )[:3]
+        top_heal_rankings = sorted(
+            stat_rows,
+            key=lambda row: (-int(row.get("healing", 0)), str(row.get("name", ""))),
+        )[:3]
+        return {
+            "battle_stats": battle_stats,
+            "stat_rows": stat_rows,
+            "top_dps": top_dps,
+            "top_heal": top_heal,
+            "top_dps_rankings": top_dps_rankings,
+            "top_heal_rankings": top_heal_rankings,
+            "max_damage": max_damage,
+            "max_heal": max_heal,
+        }
+
+    def _log_event(self, text: str, *, battle: bool = False):
+        state_obj = getattr(self, "state", None)
+        log_store = self._get_log_store()
         if log_store is None:
             return
 
@@ -3076,11 +4000,49 @@ class RpgState:
             pass
 
     async def _send_battle_message(self, text: str):
-        payload = {"type": "ticker", "text": text}
+        # Broadcast RPG updates only to battle overlays (not the global ticker)
         try:
-            await broadcast_overlay_message(payload)
+            self._broadcast_state()
         except Exception:
-            self.logger.warning("Failed to broadcast RPG battle message", exc_info=True)
+            self.logger.warning("Failed to broadcast RPG state after battle message", exc_info=True)
+
+        async def _send_chat_message(self, text: str, session: dict | None = None) -> bool:
+            """Send a message to the current battle channel if available."""
+            channel_name = None
+            try:
+                channel_name = str(session.get("channel")) if session else None
+            except Exception:
+                channel_name = None
+            try:
+                for ch in getattr(self.bot, "connected_channels", []):
+                    ch_name = getattr(ch, "name", None)
+                    if channel_name and str(ch_name).lower() != str(channel_name).lower():
+                        continue
+                    await ch.send(text)
+                    self.logger.info(
+                        "[RPG] sent chat message channel=%s text=%s", ch_name or channel_name or "?", text
+                    )
+                    return True
+            except Exception:
+                try:
+                    self.logger.warning("[RPG] failed to send chat message text=%s", text, exc_info=True)
+                except Exception:
+                    pass
+            return False
+
+        async def _announce_action_window(self, session: dict, duration: int):
+            msg = f"Action window open ({duration}s). Submit your battle command now!"
+            self.logger.info(
+                "[RPG] announcing action window duration=%s channel=%s phase=%s", duration, session.get("channel"), session.get("phase")
+            )
+            await self._send_battle_message(msg)
+            chat_ok = await self._send_chat_message(msg, session)
+            if not chat_ok:
+                self.logger.info(
+                    "[RPG] action window chat send skipped/failed channel=%s connected_channels=%s",
+                    session.get("channel"),
+                    [getattr(ch, "name", None) for ch in getattr(self.bot, "connected_channels", [])],
+                )
 
     def _get_donut_effectiveness_multiplier(self, session: dict = None) -> float:
         if not session:
@@ -3101,6 +4063,9 @@ class RpgState:
             revenant_doom_cd = int(user_data.get("revenant_doom_cooldown", 0))
             if self._is_user_revenant(user_data) and revenant_doom_cd > 0:
                 user_data["revenant_doom_cooldown"] = revenant_doom_cd - 1
+            revenant_harvest_cd = int(user_data.get("revenant_harvest_cooldown", 0))
+            if self._is_user_revenant(user_data) and revenant_harvest_cd > 0:
+                user_data["revenant_harvest_cooldown"] = max(0, revenant_harvest_cd - 1)
             if str(user_data.get("class_name", "")).strip().lower() != "deputy":
                 continue
             teargass_cd = int(user_data.get("deputy_teargass_cooldown", 0))
@@ -3123,6 +4088,10 @@ class RpgState:
         shout_rounds = int(session.get("barbarian_shout_rounds_remaining", 0))
         if shout_rounds > 0:
             session["barbarian_shout_rounds_remaining"] = shout_rounds - 1
+            if session["barbarian_shout_rounds_remaining"] <= 0:
+                for username in participants:
+                    user_data = state_obj.get_user(username)
+                    user_data["barbarian_shout_icon"] = 0
 
     def _reset_deputy_battle_cooldowns(self, usernames: list[str]):
         for username in usernames:
@@ -3142,6 +4111,7 @@ class RpgState:
             return
         self._enforce_single_revenant()
         self._tick_deputy_turn_state(state_obj, session)
+        await self._ensure_buff_pets_for_session(session, announce=False)
         
         # Give default actions to participants who didn't act
         action_queue = session.get("action_queue", [])
@@ -3150,14 +4120,36 @@ class RpgState:
         await self._queue_join_auto_actions(state_obj, announce_reason="join auto")
         queued_users = {entry.get("user") for entry in action_queue}
         for username in participants:
+            user_data = state_obj.get_user(username)
             if username not in queued_users:
-                user_data = state_obj.get_user(username)
                 auto_mode = str(session.get("auto_join_modes", {}).get(username, "")).strip().lower()
     
                 # Monks do not get a default action if they don't queue one
                 if user_data.get("class_name") == "Monk":
                     continue
     
+                is_younger = str(user_data.get("class_name", "")).strip().lower() == "younger prince"
+                elder_alive = self._is_elder_prince_alive(session, username) if is_younger else False
+                patience_locked = bool(user_data.get("prince_patience_locked")) if is_younger else False
+
+                if is_younger and elder_alive and not patience_locked:
+                    patience_action = {
+                        "user": username,
+                        "action": "patience",
+                        "damage": 0,
+                        "target_index": None,
+                        "ts": _now_ts(),
+                    }
+                    action_queue.append(patience_action)
+                    self._log_event(
+                        f"Default action: @{username} waited with patience (elder alive).",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"@{username} uses Patience while their Elder Prince holds the line."
+                    )
+                    continue
+
                 if auto_mode == "primary_half":
                     auto_action, auto_name = self._build_auto_action(username, user_data)
                     if auto_action:
@@ -3211,6 +4203,7 @@ class RpgState:
         
         # Apply passive Meatwad transformation effects at start of turn
         await self._apply_meatwad_passive_effects(session)
+        await self._process_prince_actions(session)
         
         heal_actions = []  # Collect heal actions to process after monsters attack
         
@@ -3222,6 +4215,27 @@ class RpgState:
             action_name = action.get("action")
             target_index = action.get("target_index")
             user_data = state_obj.get_user(user)
+            user_level = self._get_level_from_xp(int(user_data.get("xp", 0)), user_data)
+
+            is_younger = str(user_data.get("class_name", "")).strip().lower() == "younger prince"
+            elder_alive = self._is_elder_prince_alive(session, user) if is_younger else False
+            patience_locked = bool(user_data.get("prince_patience_locked")) if is_younger else False
+
+            if is_younger and elder_alive and action_name != "patience":
+                action_name = "patience"
+                action["action"] = "patience"
+                action["damage"] = 0
+                action["target_index"] = None
+
+            if is_younger and action_name == "patience" and (patience_locked or not elder_alive):
+                self._log_event(
+                    f"Patience unavailable for @{user} (elder down or locked).",
+                    battle=True,
+                )
+                await self._send_battle_message(
+                    f"@{user} cannot use Patience now that the Elder Prince has fallen."
+                )
+                continue
     
             hexed_turns = int(user_data.get("hexed_turns_remaining", 0))
             if hexed_turns > 0:
@@ -3250,6 +4264,12 @@ class RpgState:
                                 await self._send_battle_message(
                                     f"ðŸ’¨ {', '.join(despawned)} vanish as @{target_name} is knocked out!"
                                 )
+                            if str(target_user.get("class_name", "")).strip().lower() == "younger prince":
+                                removed_princes = self._despawn_princes_for_owner(session, target_name)
+                                if removed_princes:
+                                    await self._send_battle_message(
+                                        f"💨 {', '.join(removed_princes)} vanish as @{target_name} falls!"
+                                    )
                 else:
                     self._log_event(f"Hex: @{user}'s hex fizzled (no allies to target).", battle=True)
                 continue
@@ -3261,11 +4281,58 @@ class RpgState:
                 self._log_event(f"Action: @{user} taunted the enemies.", battle=True)
                 await self._send_battle_message(f"@{user} taunted the enemies, forcing attacks on them!")
                 continue
+
+            if action_name == "patience":
+                user_data["patience_turns_remaining"] = max(1, int(user_data.get("patience_turns_remaining", 0)),)
+                self._log_event(f"Action: @{user} used Patience (untargetable this round).", battle=True)
+                await self._send_battle_message(
+                    f"@{user} waits with Patience, untargetable until their next turn."
+                )
+                continue
             
-            # Process ohm actions - monk meditation that does nothing
+            # Process ohm actions - monk meditate to heal/resurrect the party
             if action_name == "ohm":
-                self._log_event(f"Action: @{user} meditated with ohm.", battle=True)
-                await self._send_battle_message(f"@{user} glows with blessing energy, bolstering the party!")
+                heal_base = MONK_OHM_BASE_HEAL + ((max(1, user_level) - 1) * MONK_OHM_HEAL_PER_LEVEL)
+                heal_multiplier = self._get_donut_effectiveness_multiplier(session)
+                monk_multiplier = self._get_monk_passive_multiplier(session)
+                heal_amount = max(1, int(heal_base * heal_multiplier * monk_multiplier))
+
+                healed_total = 0
+                healed_count = 0
+                participants = session.get("participants", [])
+                for participant in participants:
+                    participant_data = self.state.get_user(participant)
+                    current_hp = int(participant_data.get("hp_current", DEFAULT_PLAYER_HP))
+                    max_hp = int(participant_data.get("hp_max", DEFAULT_PLAYER_HP))
+                    if current_hp <= 0:
+                        continue
+                    new_hp = min(max_hp, current_hp + heal_amount)
+                    healed = new_hp - current_hp
+                    participant_data["hp_current"] = new_hp
+                    healed_count += 1
+                    healed_total += healed
+
+                resurrected_users: list[str] = []
+                if user_level >= MONK_PASSIVE_REZ_LEVEL:
+                    for participant in participants:
+                        participant_data = self.state.get_user(participant)
+                        if int(participant_data.get("hp_current", 0)) <= 0:
+                            participant_data["hp_current"] = 1
+                            resurrected_users.append(participant)
+
+                user_data["healing_done"] = int(user_data.get("healing_done", 0)) + healed_total
+
+                self._log_event(
+                    f"Action: @{user} used OHM to heal {healed_total} HP ({healed_count} targets)" +
+                    (f" and resurrect {len(resurrected_users)} allies" if resurrected_users else "") +
+                    ".",
+                    battle=True,
+                )
+                message = f"@{user} channels OHM and heals {healed_total} HP"
+                if resurrected_users:
+                    message += f" while resurrecting {', '.join(resurrected_users)}"
+                message += "!"
+                await self._send_battle_message(message)
                 continue
             
             # Process transform actions - Meatwad transformation (form already saved)
@@ -3276,13 +4343,19 @@ class RpgState:
                 # Message already sent in command, just continue
                 continue
             
-            # Process streamer stream_heal - heals entire party
+            # Process party heal (streamer/healer) - heals entire party
             if action_name == "stream_heal":
                 participants = session.get("participants", [])
                 user_data = self.state.get_user(user)
-                streamer_level = self._get_level_from_xp(int(user_data.get("xp", 0)), user_data)
-                heal_amount = STREAMER_HEAL_BASE + ((max(1, streamer_level) - 1) // STREAMER_HEAL_PER_LEVEL_STEP)
-                heal_amount = max(1, int(heal_amount * self._get_donut_effectiveness_multiplier(session)))
+                user_class = str(user_data.get("class_name", "")).strip()
+                user_level = self._get_level_from_xp(int(user_data.get("xp", 0)), user_data)
+
+                if user_class == "Healer":
+                    heal_amount = 4 + (max(1, user_level) - 1) * HEALING_BONUS_PER_LEVEL
+                else:
+                    heal_amount = STREAMER_HEAL_BASE + ((max(1, user_level) - 1) // STREAMER_HEAL_PER_LEVEL_STEP)
+
+                heal_amount = max(1, int(heal_amount * self._get_donut_effectiveness_multiplier(session) * self._get_monk_passive_multiplier(session)))
                 
                 healed_count = 0
                 total_healed = 0
@@ -3322,7 +4395,16 @@ class RpgState:
                 continue
     
             if action_name == "barbarian_shout":
+                if int(session.get("barbarian_shout_rounds_remaining", 0)) > 0:
+                    await self._send_battle_message("Shout is already active and cannot stack.")
+                    self._log_event(f"Shout: @{user} tried to stack shout but it is already active.", battle=True)
+                    continue
+
                 session["barbarian_shout_rounds_remaining"] = BARBARIAN_SHOUT_DURATION_TURNS
+                for username in session.get("participants", []):
+                    target_user = self.state.get_user(username)
+                    target_user["barbarian_shout_icon"] = 1
+
                 self._log_event(
                     f"Shout: @{user} increased party damage by 10% for {BARBARIAN_SHOUT_DURATION_TURNS} turns.",
                     battle=True,
@@ -3466,6 +4548,128 @@ class RpgState:
                 if defeated > 0:
                     await self._send_battle_message(f"@{user}'s whirlwind dropped {defeated} enemy(ies)!")
                 continue
+
+            if action_name in {"slash", "high_stick", "cross_check", "fight"}:
+                alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
+                if not alive_monsters:
+                    continue
+
+                enforcer_level = self._get_level_from_xp(int(user_data.get("xp", 0)), user_data)
+                level_bonus = max(0, enforcer_level - 1)
+                base_damage_map = {
+                    "slash": ENFORCER_SLASH_BASE_DAMAGE,
+                    "high_stick": ENFORCER_HIGHSTICK_BASE_DAMAGE,
+                    "cross_check": ENFORCER_CROSSCHECK_BASE_DAMAGE,
+                    "fight": ENFORCER_FIGHT_BASE_DAMAGE,
+                }
+                raw_damage = base_damage_map.get(action_name, 0) + (level_bonus * ENFORCER_DAMAGE_PER_LEVEL)
+                raw_damage = max(1, int(raw_damage))
+
+                bleed_stacks_bonus = level_bonus // 5
+                bleed_duration_bonus = level_bonus // 10
+                stun_duration = 1 + (level_bonus // 8)
+
+                def _apply_bleed(monster: dict, stacks: int, duration: int):
+                    monster["bleed_stacks"] = int(monster.get("bleed_stacks", 0)) + stacks
+                    monster["bleed_rounds_remaining"] = max(
+                        int(monster.get("bleed_rounds_remaining", 0)),
+                        duration,
+                    )
+
+                if action_name == "fight":
+                    targets = random.sample(alive_monsters, k=min(ENFORCER_FIGHT_TARGETS, len(alive_monsters)))
+                else:
+                    if target_index:
+                        target_monster = self._get_monster_by_index(session, target_index)
+                    else:
+                        target_monster = self._get_active_monster(session)
+                    if not target_monster or not target_monster.get("alive"):
+                        target_monster = random.choice(alive_monsters)
+                    targets = [target_monster]
+
+                total_dealt = 0
+                defeated = 0
+                bleed_hits = 0
+                stun_hits = 0
+
+                for target_monster in targets:
+                    actual_damage, did_crit = self._calculate_damage_with_scaling(
+                        raw_damage,
+                        user_data,
+                        session,
+                        include_crit_meta=True,
+                    )
+                    actual_damage = max(1, int(actual_damage))
+
+                    hp_before = int(target_monster.get("hp", 0))
+                    dealt = min(actual_damage, hp_before)
+                    target_monster["hp"] = max(0, hp_before - actual_damage)
+                    total_dealt += dealt
+
+                    if action_name in {"slash", "high_stick"} and target_monster.get("alive"):
+                        chance_bonus = min(0.25, level_bonus * 0.01)
+                        bleed_chance = ENFORCER_SLASH_BLEED_CHANCE if action_name == "slash" else ENFORCER_HIGHSTICK_BLEED_CHANCE
+                        if random.random() < bleed_chance + chance_bonus:
+                            base_stacks = 1 if action_name == "slash" else 2
+                            bleed_stacks = base_stacks + bleed_stacks_bonus
+                            bleed_duration = BLEED_DURATION + bleed_duration_bonus
+                            _apply_bleed(target_monster, bleed_stacks, bleed_duration)
+                            bleed_hits += 1
+
+                    if action_name == "cross_check" and target_monster.get("alive"):
+                        chance_bonus = min(0.2, level_bonus * 0.01)
+                        if random.random() < ENFORCER_CROSSCHECK_STUN_CHANCE + chance_bonus:
+                            target_monster["stun_turns_remaining"] = max(
+                                int(target_monster.get("stun_turns_remaining", 0)),
+                                stun_duration,
+                            )
+                            stun_hits += 1
+
+                    if target_monster.get("hp", 0) <= 0 and target_monster.get("alive"):
+                        target_monster["alive"] = False
+                        target_monster["killed_by"] = user
+                        user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
+                        user_data["killing_blows"] = int(user_data.get("killing_blows", 0)) + 1
+                        defeated += 1
+                        if target_monster.get("is_loot_goblin"):
+                            await self._award_loot_goblin_rewards(session, user, int(target_monster.get("level", 1)))
+
+                user_data["lifetime_monster_damage"] = int(user_data.get("lifetime_monster_damage", 0)) + total_dealt
+                user_data["damage_done"] = int(user_data.get("damage_done", 0)) + total_dealt
+
+                if action_name == "cross_check":
+                    self._log_event(
+                        f"Cross Check: @{user} dealt {total_dealt} damage to {len(targets)} target(s) and stunned {stun_hits}.",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"ðŸ¤– @{user} CROSS CHECKS {len(targets)} foe(s) for {total_dealt} total damage; stuns on {stun_hits}."
+                    )
+                elif action_name == "fight":
+                    self._log_event(
+                        f"Fight: @{user} brawled {len(targets)} enemy(ies) for {total_dealt} total damage.",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"ðŸ’ª @{user} starts a FIGHT! {len(targets)} targets take {total_dealt} total damage."
+                    )
+                elif action_name == "high_stick":
+                    self._log_event(
+                        f"High Stick: @{user} dealt {total_dealt} and applied bleed to {bleed_hits} target(s).",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"ðŸ›™ï¸ @{user} HIGH STICKS for {total_dealt} total damage; bleed on {bleed_hits}."
+                    )
+                else:
+                    self._log_event(
+                        f"Slash: @{user} dealt {total_dealt} and applied bleed to {bleed_hits} target(s).",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"ðŸ§Š @{user} SLASHES for {total_dealt} damage; bleed on {bleed_hits}."
+                    )
+                continue
     
             if action_name == "jdam":
                 if target_index:
@@ -3549,21 +4753,123 @@ class RpgState:
                 )
                 continue
     
+            if action_name == "napalm":
+                if target_index:
+                    primary = self._get_monster_by_index(session, target_index)
+                else:
+                    primary = self._get_active_monster(session)
+                if not primary:
+                    continue
+
+                napalm_damage, did_crit = self._calculate_damage_with_scaling(
+                    int(action.get("damage", BUFF_NAPALM_BASE_DAMAGE)),
+                    user_data,
+                    session,
+                    include_crit_meta=True,
+                )
+
+                crit_charges = int(user_data.get("buff_jdam_forced_crit_charges", 0))
+                force_crit = False
+                if crit_charges > 0 and not did_crit:
+                    napalm_damage = max(1, int(napalm_damage * CRIT_MULTIPLIER))
+                    did_crit = True
+                    force_crit = True
+                elif (not did_crit) and bool(user_data.get("buff_franklin_crit_triggered")):
+                    if random.random() < BUFF_FRANKLIN_JDAM_CRIT_CHANCE_BONUS:
+                        napalm_damage = max(1, int(napalm_damage * CRIT_MULTIPLIER))
+                        did_crit = True
+                if force_crit:
+                    user_data["buff_jdam_forced_crit_charges"] = max(0, crit_charges - 1)
+                if did_crit:
+                    user_data["buff_napalm_crit_triggered"] = True
+
+                napalm_damage = max(1, int(napalm_damage))
+                splash_damage = max(1, int(napalm_damage * BUFF_NAPALM_SPLASH_RATIO))
+
+                total_dealt = 0
+                impacted = []
+
+                hp_before = int(primary.get("hp", 0))
+                dealt_primary = min(napalm_damage, hp_before)
+                primary["hp"] = max(0, hp_before - napalm_damage)
+                total_dealt += dealt_primary
+                impacted.append(primary)
+
+                secondary_candidates = [
+                    m for m in session.get("monsters", [])
+                    if m.get("alive") and m.get("id") != primary.get("id")
+                ]
+                secondary_targets = random.sample(secondary_candidates, k=min(BUFF_NAPALM_SPLASH_TARGETS, len(secondary_candidates)))
+                for secondary in secondary_targets:
+                    hp_before = int(secondary.get("hp", 0))
+                    dealt = min(splash_damage, hp_before)
+                    secondary["hp"] = max(0, hp_before - splash_damage)
+                    total_dealt += dealt
+                    impacted.append(secondary)
+
+                for enemy in impacted:
+                    if enemy.get("hp", 0) > 0 and enemy.get("alive"):
+                        enemy["napalm_burn_damage"] = max(
+                            int(enemy.get("napalm_burn_damage", 0)),
+                            BUFF_NAPALM_DOT_DAMAGE,
+                        )
+                        enemy["napalm_burn_rounds_remaining"] = max(
+                            int(enemy.get("napalm_burn_rounds_remaining", 0)),
+                            BUFF_NAPALM_DOT_DURATION,
+                        )
+                        enemy["napalm_burn_owner"] = user
+
+                for enemy in impacted:
+                    if enemy.get("hp", 0) > 0:
+                        continue
+                    if enemy.get("alive"):
+                        enemy["alive"] = False
+                        enemy["killed_by"] = user
+                        user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
+                        user_data["killing_blows"] = int(user_data.get("killing_blows", 0)) + 1
+                        if enemy.get("is_loot_goblin"):
+                            await self._award_loot_goblin_rewards(
+                                session,
+                                user,
+                                int(enemy.get("level", 1)),
+                            )
+
+                user_data["lifetime_monster_damage"] = int(user_data.get("lifetime_monster_damage", 0)) + total_dealt
+                user_data["damage_done"] = int(user_data.get("damage_done", 0)) + total_dealt
+
+                crit_text = " (CRIT)" if did_crit else ""
+                buff_text = " [Franklin buff consumed]" if force_crit else ""
+                splash_count = max(0, len(impacted) - 1)
+                self._log_event(
+                    f"Napalm: @{user} scorched {len(impacted)} foes for {total_dealt} total damage{crit_text}.",
+                    battle=True,
+                )
+                await self._send_battle_message(
+                    f"🔥 @{user} Napalms {primary.get('name')} + {splash_count} more for {total_dealt} total damage{crit_text}{buff_text} and burns them for {BUFF_NAPALM_DOT_DAMAGE}/turn ({BUFF_NAPALM_DOT_DURATION} turns)."
+                )
+                continue
+
             if action_name == "nuke":
                 alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
                 if not alive_monsters:
                     continue
                 total_dealt = 0
                 defeated = 0
+                extra_executes = 0
                 for target_monster in alive_monsters:
                     max_hp = int(target_monster.get("max_hp", max(1, int(target_monster.get("hp", 1)))))
                     nuke_damage = max(1, int(max_hp * BUFF_NUKE_HP_PERCENT))
                     hp_before = int(target_monster.get("hp", 0))
                     dealt = min(nuke_damage, hp_before)
-                    target_monster["hp"] = max(0, hp_before - nuke_damage)
+                    hp_after = max(0, hp_before - nuke_damage)
+                    target_monster["hp"] = hp_after
                     total_dealt += dealt
-    
-                    if target_monster.get("hp", 0) <= 0 and target_monster.get("alive"):
+                    if hp_after > 0 and random.random() < BUFF_NUKE_EXECUTE_CHANCE:
+                        total_dealt += hp_after
+                        target_monster["hp"] = 0
+                        extra_executes += 1
+
+                    if (target_monster.get("hp", 0) <= 0 and target_monster.get("alive")):
                         target_monster["alive"] = False
                         target_monster["killed_by"] = user
                         user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
@@ -3582,25 +4888,33 @@ class RpgState:
                 user_data["buff_franklin_crit_triggered"] = False
                 user_data["buff_franklin_jdam_buff_triggered"] = False
                 user_data["buff_jdam_crit_triggered"] = False
+                user_data["buff_napalm_crit_triggered"] = False
                 user_data["buff_jdam_forced_crit_charges"] = 0
     
+                execute_suffix = f" (+{extra_executes} executes)" if extra_executes else ""
                 self._log_event(
-                    f"NUKE: @{user} dealt {total_dealt} total damage to all enemies ({defeated} defeated).",
+                    f"NUKE: @{user} dealt {total_dealt} total damage to all enemies ({defeated} defeated{execute_suffix}).",
                     battle=True,
                 )
                 await self._send_battle_message(
-                    f"â˜¢ï¸ @{user} launches NUKE! All enemies take 90% of max HP ({defeated} defeated)."
+                    f"â˜¢ï¸ @{user} launches NUKE! All enemies take {int(BUFF_NUKE_HP_PERCENT * 100)}% of max HP ({defeated} defeated{execute_suffix})."
                 )
                 continue
     
             # Process streamer gamba - chance-based AoE with occasional self-backfire
             if action_name == "gamba":
+                self.logger.info(
+                    "[RPG][gamba] resolving user=%s turn=%s monsters=%s", user, session.get("turn_number"), len([m for m in session.get("monsters", []) if m.get("alive")])
+                )
                 streamer_level = self._get_level_from_xp(int(user_data.get("xp", 0)), user_data)
                 gamba_damage = 3 + max(0, streamer_level - 1)
                 gamba_damage = max(1, int(gamba_damage * self._get_donut_effectiveness_multiplier(session)))
                 hit_chance = min(
                     GAMBA_MAX_HIT_CHANCE,
                     GAMBA_BASE_HIT_CHANCE + ((streamer_level - 1) * GAMBA_HIT_CHANCE_PER_LEVEL),
+                )
+                self.logger.info(
+                    "[RPG][gamba] stats user=%s level=%s dmg=%s hit_chance=%.3f backfire_base=%.3f", user, streamer_level, gamba_damage, hit_chance, GAMBA_BASE_BACKFIRE_CHANCE
                 )
     
                 alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
@@ -3621,6 +4935,10 @@ class RpgState:
                         user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
                         user_data["killing_blows"] = int(user_data.get("killing_blows", 0)) + 1
                         self._log_event(f"Monster down: {target_monster.get('name')} defeated by @{user}.", battle=True)
+
+                self.logger.info(
+                    "[RPG][gamba] damage user=%s hits=%s total_damage=%s alive_after=%s", user, hits, total_damage, len([m for m in session.get("monsters", []) if m.get("alive")])
+                )
     
                 user_data["lifetime_monster_damage"] = int(user_data.get("lifetime_monster_damage", 0)) + total_damage
                 user_data["damage_done"] = int(user_data.get("damage_done", 0)) + total_damage
@@ -3645,6 +4963,10 @@ class RpgState:
                                 f"ðŸ’¨ {', '.join(despawned)} vanish as @{user} is knocked out!"
                             )
                     self_damage = actual_self_damage
+
+                self.logger.info(
+                    "[RPG][gamba] resolve_done user=%s hits=%s total_damage=%s backfire=%s self_damage=%s hp_after=%s", user, hits, total_damage, backfired, self_damage, user_data.get("hp_current")
+                )
     
                 self._log_event(
                     f"Gamba: @{user} hit {hits}/{len(alive_monsters)} enemies for {gamba_damage} each"
@@ -3944,10 +5266,63 @@ class RpgState:
                 )
     
                 alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
-                eligible_targets = [
-                    m for m in alive_monsters
-                    if self._monster_has_revenant_doom_status(m)
-                ]
+
+                def _apply_doom_status(monster: dict, applied: set[str]):
+                    status_pool = ["bleed", "poison", "corruption", "gross_out", "stun"]
+                    choices = [s for s in status_pool if s not in applied] or status_pool
+                    choice = random.choice(choices)
+                    if choice == "bleed":
+                        monster["bleed_stacks"] = max(1, int(monster.get("bleed_stacks", 0)) + 1)
+                        monster["bleed_rounds_remaining"] = max(3, int(monster.get("bleed_rounds_remaining", 0)), 3)
+                    elif choice == "poison":
+                        monster["ghoul_poison_damage"] = max(2, int(monster.get("ghoul_poison_damage", 0)), 2)
+                        monster["ghoul_poison_rounds_remaining"] = max(3, int(monster.get("ghoul_poison_rounds_remaining", 0)), 3)
+                        monster["ghoul_poison_owner"] = user
+                    elif choice == "corruption":
+                        monster["corruption_damage"] = max(2, int(monster.get("corruption_damage", 0)), 2)
+                        monster["corruption_rounds_remaining"] = max(3, int(monster.get("corruption_rounds_remaining", 0)), 3)
+                    elif choice == "gross_out":
+                        monster["gross_out_damage"] = max(1, int(monster.get("gross_out_damage", 0)), 1)
+                        monster["gross_out_rounds_remaining"] = max(3, int(monster.get("gross_out_rounds_remaining", 0)), 3)
+                    elif choice == "stun":
+                        monster["stun_turns_remaining"] = max(1, int(monster.get("stun_turns_remaining", 0)))
+                    applied.add(choice)
+                    return choice
+
+                status_counts = {"wave1": 0, "wave2": 0, "wave3": 0}
+                applied_statuses: dict[str, set[str]] = {}
+
+                # Wave 1: guarantee one status per monster
+                for mon in alive_monsters:
+                    key = mon.get("id") or mon.get("name", "?")
+                    applied = set()
+                    _apply_doom_status(mon, applied)
+                    applied_statuses[key] = applied
+                    status_counts["wave1"] += 1
+
+                # Wave 2: chance for a second status on ~half the monsters
+                half_targets = random.sample(alive_monsters, k=max(1, len(alive_monsters) // 2)) if alive_monsters else []
+                for mon in half_targets:
+                    if random.random() < 0.6:
+                        key = mon.get("id") or mon.get("name", "?")
+                        applied = applied_statuses.get(key, set())
+                        _apply_doom_status(mon, applied)
+                        applied_statuses[key] = applied
+                        status_counts["wave2"] += 1
+
+                # Wave 3: chance for a third status on ~one-third of remaining
+                remaining_pool = [m for m in alive_monsters if m not in half_targets]
+                third_pool = remaining_pool or alive_monsters
+                third_targets = random.sample(third_pool, k=max(1, max(1, len(alive_monsters) // 3))) if third_pool else []
+                for mon in third_targets:
+                    if random.random() < 0.3:
+                        key = mon.get("id") or mon.get("name", "?")
+                        applied = applied_statuses.get(key, set())
+                        _apply_doom_status(mon, applied)
+                        applied_statuses[key] = applied
+                        status_counts["wave3"] += 1
+
+                eligible_targets = alive_monsters
     
                 total_dealt = 0
                 hits = 0
@@ -3991,6 +5366,9 @@ class RpgState:
                     )
                     await self._send_battle_message(
                         f"â˜ ï¸ @{user} unleashed DOOM on {hits} afflicted enemies for {total_dealt} total damage!"
+                    )
+                    await self._send_battle_message(
+                        f"ðŸ”¥ DOOM spread statuses: {status_counts['wave1']} got 1, {status_counts['wave2']} got 2, {status_counts['wave3']} got 3."
                     )
                     await self._send_battle_message(
                         f"ðŸ”¥ DOOM applied BERZERK to {hits} enemy(ies) for {REVENANT_BERZERK_DURATION_TURNS} turn(s)."
@@ -4335,7 +5713,7 @@ class RpgState:
                 
                 self._log_event(f"Expel: @{user} dealt {aoe_damage} to {len(alive_monsters)} enemies and healed party for {total_healed} HP total.", battle=True)
                 await self._send_battle_message(
-                    f"âœ¨ @{user} EXPELS! {aoe_damage} dmg to all enemies | {total_healed} HP healed | Power now {int(user_data.get('archangel_power', 0))}"
+                    f"✨ @{user} EXPELS! {aoe_damage} dmg to all enemies | {total_healed} HP healed | Power now {int(user_data.get('archangel_power', 0))}"
                 )
                 continue
             
@@ -4453,7 +5831,93 @@ class RpgState:
                 session,
                 include_crit_meta=True,
             )
-    
+
+            if action_name == "harvest":
+                alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
+                user_data["revenant_harvest_cooldown"] = REVENANT_HARVEST_COOLDOWN_TURNS
+                if not alive_monsters:
+                    self._log_event(f"Harvest: @{user} found no enemies to reap.", battle=True)
+                    await self._send_battle_message(f"@{user} harvests, but there are no enemies.")
+                    continue
+
+                target_monster = self._get_monster_by_index(session, target_index) if target_index is not None else None
+                if target_monster is None or not target_monster.get("alive"):
+                    target_monster = random.choice(alive_monsters)
+
+                kill_chance = HARVEST_EXEC_BASE_CHANCE
+                executed: list[tuple[dict, float, float]] = []
+                total_dealt = 0
+
+                available = {m.get("id"): m for m in alive_monsters if m.get("alive")}
+                while available and kill_chance >= HARVEST_EXEC_MIN_CHANCE:
+                    candidate = target_monster if target_monster and target_monster.get("alive") else random.choice(list(available.values()))
+                    target_monster = None  # only honor explicit target on first pass
+                    roll = random.random()
+                    if roll < kill_chance:
+                        hp_before = int(candidate.get("hp", 0))
+                        dealt = hp_before
+                        candidate["hp"] = 0
+                        if candidate.get("alive"):
+                            candidate["alive"] = False
+                            candidate["killed_by"] = user
+                            user_data["monsters_killed"] = int(user_data.get("monsters_killed", 0)) + 1
+                            user_data["killing_blows"] = int(user_data.get("killing_blows", 0)) + 1
+                        total_dealt += dealt
+                        executed.append((candidate, kill_chance, roll))
+                        available.pop(candidate.get("id"), None)
+
+                        if candidate.get("is_loot_goblin"):
+                            await self._award_loot_goblin_rewards(
+                                session,
+                                user,
+                                int(candidate.get("level", 1)),
+                            )
+                    else:
+                        break
+
+                    kill_chance = max(HARVEST_EXEC_MIN_CHANCE, kill_chance - HARVEST_EXEC_DECAY)
+
+                user_data["lifetime_monster_damage"] = int(user_data.get("lifetime_monster_damage", 0)) + total_dealt
+                user_data["damage_done"] = int(user_data.get("damage_done", 0)) + total_dealt
+
+                if executed:
+                    details = []
+                    for idx, (killed, chance_used, roll_used) in enumerate(executed, start=1):
+                        label = f"{killed.get('name')}#{killed.get('index', '?')}"
+                        details.append(f"{label} (roll {roll_used:.2f} < {chance_used:.2f})")
+                    summary = "; ".join(details)
+                    self._log_event(
+                        f"Harvest: @{user} executed {len(executed)} foe(s): {summary}.",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"☠️ @{user} harvests souls! Executed {len(executed)}: {summary}."
+                    )
+
+                    usage = user_data.setdefault("stream_usage", {})
+                    if not usage.get("revenant_kill_reward"):
+                        user_data["class_change_tokens"] = int(user_data.get("class_change_tokens", 0)) + REVENANT_KILL_GACHA
+                        raffle_cog = self._get_raffle_cog()
+                        if raffle_cog:
+                            raffle_cog.state.add_entries(user, REVENANT_KILL_ENTRIES)
+                        usage["revenant_kill_reward"] = True
+                        self._log_event(
+                            f"Revenant kill reward: @{user} +{REVENANT_KILL_GACHA} gacha tokens, +{REVENANT_KILL_ENTRIES} entries.",
+                            battle=True,
+                        )
+                        await self._send_battle_message(
+                            f"@{user} claimed the revenant kill reward: +{REVENANT_KILL_GACHA} gacha tokens, +{REVENANT_KILL_ENTRIES} entries."
+                        )
+                else:
+                    self._log_event(
+                        f"Harvest: @{user} failed to execute any foes (roll >= {kill_chance:.2f}).",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"@{user}'s harvest found no willing souls."
+                    )
+                continue
+
             if action_name == "reap":
                 alive_monsters = [m for m in session.get("monsters", []) if m.get("alive")]
                 if not alive_monsters:
@@ -4789,6 +6253,14 @@ class RpgState:
         # Now let monsters attack
         self._refresh_party_shields_from_totem(session)
         await self._monster_actions()
+
+        for username in session.get("participants", []):
+            user_obj = self.state.get_user(username)
+            patience_turns = int(user_obj.get("patience_turns_remaining", 0))
+            if patience_turns > 0:
+                user_obj["patience_turns_remaining"] = max(0, patience_turns - 1)
+
+        await self._cleanup_princes_for_ko(session)
     
         await self._apply_healing_totem_pulse(session)
         
@@ -4805,7 +6277,7 @@ class RpgState:
             
             # Calculate healer's level and heal amount early (needed for both healing and smite fallback)
             healer_level = self._get_level_from_xp(int(user_data.get("xp", 0)))
-            heal_amount = 3 + (healer_level - 1) * HEALING_BONUS_PER_LEVEL
+            heal_amount = 5 + (healer_level - 1) * HEALING_BONUS_PER_LEVEL
             
             # Determine target: specific party member, lowest HP, or none
             if target_party_index is not None:
@@ -4880,7 +6352,8 @@ class RpgState:
         session["action_queue"] = []
         session["taunted_warriors"] = []
         session["turn_number"] = int(session.get("turn_number", 0)) + 1
-        session["action_window_end"] = _now_ts() + ACTION_WINDOW_SECONDS
+        duration = int(session.get("action_window_seconds") or ACTION_WINDOW_SECONDS)
+        session["action_window_end"] = _now_ts() + duration
         self.state.save_state()
         self._broadcast_state()
         if await self._check_party_defeat():
@@ -4892,12 +6365,16 @@ class RpgState:
         participants = session.get("participants", [])
         if not participants:
             return
-        
+
+        taunted_warrior_targets = []
+
         # Build list of all alive targets (players, totems, summons)
         alive_targets = []
         for username in participants:
             user = self.state.get_user(username)
             if int(user.get("hp_current", DEFAULT_PLAYER_HP)) > 0:
+                if int(user.get("patience_turns_remaining", 0)) > 0:
+                    continue
                 alive_targets.append({"type": "player", "name": username})
         
         # Add alive totems
@@ -4932,9 +6409,18 @@ class RpgState:
     
         # Add alive buff pets
         for pet in session.get("buff_pets", []):
-            if pet.get("alive"):
-                alive_targets.append({"type": "buff_pet", "data": pet})
+            if not pet.get("alive"):
+                continue
+            pet_type = str(pet.get("pet_type", "")).strip().lower()
+            if pet_type in {"kid", "franklin"}:
+                continue
+            alive_targets.append({"type": "buff_pet", "data": pet})
     
+        # Add alive prince summons (Elder/Younger)
+        for summon in session.get("prince_summons", []):
+            if summon.get("alive"):
+                alive_targets.append({"type": "prince", "data": summon})
+
         # Add alive spirit wells
         for well in session.get("spirit_wells", []):
             if well.get("alive"):
@@ -4987,10 +6473,40 @@ class RpgState:
                 monster["goldrpg_bleed_damage"] = 0
             if monster.get("hp", 0) <= 0 and monster.get("alive"):
                 monster["alive"] = False
+
+        # Napalm burn ticks once per monster phase
+        for monster in [m for m in session.get("monsters", []) if m.get("alive")]:
+            burn_damage = int(monster.get("napalm_burn_damage", 0))
+            burn_rounds = int(monster.get("napalm_burn_rounds_remaining", 0))
+            if burn_damage <= 0 or burn_rounds <= 0:
+                continue
+            hp_before = int(monster.get("hp", 0))
+            dealt = min(burn_damage, hp_before)
+            monster["hp"] = max(0, hp_before - burn_damage)
+            if dealt > 0:
+                self._log_event(
+                    f"Napalm burn: {monster.get('name')} takes {dealt} damage.",
+                    battle=True,
+                )
+                await self._send_battle_message(
+                    f"{monster.get('name')} takes {dealt} Napalm burn damage."
+                )
+            owner = str(monster.get("napalm_burn_owner", "")).strip().lower()
+            if owner:
+                owner_data = self.state.get_user(owner)
+                owner_data["lifetime_monster_damage"] = int(owner_data.get("lifetime_monster_damage", 0)) + dealt
+                owner_data["damage_done"] = int(owner_data.get("damage_done", 0)) + dealt
+            monster["napalm_burn_rounds_remaining"] = burn_rounds - 1
+            if int(monster.get("napalm_burn_rounds_remaining", 0)) <= 0:
+                monster["napalm_burn_damage"] = 0
+            if monster.get("hp", 0) <= 0 and monster.get("alive"):
+                monster["alive"] = False
     
         # Summoner corruption-like DoT ticks on players once per monster phase
         for username in participants:
             user_data = self.state.get_user(username)
+            if int(user_data.get("patience_turns_remaining", 0)) > 0:
+                continue
             rounds = int(user_data.get("summoner_dot_rounds_remaining", 0))
             dot_damage = int(user_data.get("summoner_dot_damage", 0))
             if rounds <= 0 or dot_damage <= 0:
@@ -5018,12 +6534,12 @@ class RpgState:
                         await self._send_battle_message(
                             f"ðŸ’¨ {', '.join(despawned)} vanish as @{username} is knocked out!"
                         )
-        
-        # Check if any warriors taunted - prioritize them for first two attacks
-        taunted_warriors = session.get("taunted_warriors", [])
-        taunted_warrior_targets = []
-        if taunted_warriors:
-            for username in taunted_warriors:
+                    if str(user_data.get("class_name", "")).strip().lower() == "younger prince":
+                        removed_princes = self._despawn_princes_for_owner(session, username)
+                        if removed_princes:
+                            await self._send_battle_message(
+                                f"💨 {', '.join(removed_princes)} vanish as @{username} falls!"
+                            )
                 user = self.state.get_user(username)
                 if int(user.get("hp_current", DEFAULT_PLAYER_HP)) > 0:
                     taunted_warrior_targets.append({"type": "player", "name": username})
@@ -5039,6 +6555,11 @@ class RpgState:
                 await self._maybe_action_delay(session)
             if not monster.get("alive"):
                 continue
+
+            sponge_taunt_targets = [
+                t for t in alive_targets
+                if t.get("type") == "totem" and t.get("data", {}).get("auto_taunt")
+            ]
     
             drunk_turns = int(monster.get("drunk_turns_remaining", 0))
             if drunk_turns > 0:
@@ -5143,6 +6664,7 @@ class RpgState:
                 candidates = [
                     name for name in participants
                     if int(self.state.get_user(name).get("hp_current", DEFAULT_PLAYER_HP)) > 0
+                    and int(self.state.get_user(name).get("patience_turns_remaining", 0)) == 0
                 ]
                 if candidates:
                     target_name = random.choice(candidates)
@@ -5164,6 +6686,7 @@ class RpgState:
                 candidates = [
                     name for name in participants
                     if int(self.state.get_user(name).get("hp_current", DEFAULT_PLAYER_HP)) > 0
+                    and int(self.state.get_user(name).get("patience_turns_remaining", 0)) == 0
                 ]
                 if candidates:
                     target_name = random.choice(candidates)
@@ -5216,6 +6739,7 @@ class RpgState:
                 candidates = [
                     name for name in participants
                     if int(self.state.get_user(name).get("hp_current", DEFAULT_PLAYER_HP)) > 0
+                    and int(self.state.get_user(name).get("patience_turns_remaining", 0)) == 0
                 ]
                 if candidates:
                     target_name = random.choice(candidates)
@@ -5234,7 +6758,10 @@ class RpgState:
             
             # Pick target - first attack always hits a green arrow if any
             alive_green_arrows = [t for t in alive_targets if t.get("type") == "green_arrow"]
-            if first_attack_forced_arrow and alive_green_arrows:
+            if sponge_taunt_targets:
+                target = random.choice(sponge_taunt_targets)
+                first_attack_forced_arrow = False
+            elif first_attack_forced_arrow and alive_green_arrows:
                 target = random.choice(alive_green_arrows)
                 first_attack_forced_arrow = False
             elif blob_taunt_targets:
@@ -5271,6 +6798,7 @@ class RpgState:
                     await self._send_battle_message(f"Monster #{monster_index} {monster.get('name')} destroyed @{owner}'s totem!")
                     # Remove from alive_targets
                     alive_targets = [t for t in alive_targets if not (t["type"] == "totem" and t["data"]["id"] == totem_data["id"])]
+                    sponge_taunt_targets = [t for t in sponge_taunt_targets if not (t["type"] == "totem" and t["data"]["id"] == totem_data["id"])]
             
             elif target["type"] == "imp":
                 # Attack imp
@@ -5382,7 +6910,7 @@ class RpgState:
                 pet_data = target["data"]
                 owner = pet_data.get("owner", "?")
                 pet_type = str(pet_data.get("pet_type", "streamer_pet")).lower()
-                pet_name = "Timberwolf" if pet_type == "timberwolf" else "Gordie Howe"
+                pet_name = pet_data.get("mech_name") or ("Timberwolf" if pet_type == "timberwolf" else "Gordie Howe")
                 if pet_data.get("totem_shield_available"):
                     pet_data["totem_shield_available"] = False
                     self._log_event(f"Shield Totem: prevented damage to @{owner}'s {pet_name}.", battle=True)
@@ -5401,6 +6929,7 @@ class RpgState:
                     continue
     
                 pet_data["alive"] = False
+                self._deactivate_mech_for_owner(owner)
                 self._log_event(
                     f"Monster: {monster.get('name')} destroyed @{owner}'s {pet_name}!",
                     battle=True,
@@ -5425,6 +6954,44 @@ class RpgState:
                 await self._send_battle_message(
                     f"ðŸ›¡ï¸ Monster #{monster_index} {monster.get('name')} tried to hit @{owner}'s {pet_name}, but it is invulnerable!"
                 )
+                continue
+
+            elif target["type"] == "prince":
+                prince = target.get("data", {})
+                owner = prince.get("owner", "?")
+                prince_label = str(prince.get("type", "Prince")).title() + " Prince"
+                if prince.get("totem_shield_available"):
+                    prince["totem_shield_available"] = False
+                    self._log_event(f"Shield Totem: prevented damage to @{owner}'s {prince_label}.", battle=True)
+                    await self._send_battle_message(f"ðŸ›¡ï¸ Shield Totem blocks the hit on @{owner}'s {prince_label}!")
+                    continue
+
+                hp_before = int(prince.get("hp", 0))
+                prince["hp"] = max(0, hp_before - damage)
+                if prince["hp"] > 0:
+                    self._log_event(
+                        f"Monster: {monster.get('name')} hit @{owner}'s {prince_label} for {damage}.",
+                        battle=True,
+                    )
+                    await self._send_battle_message(
+                        f"Monster #{monster_index} {monster.get('name')} hit @{owner}'s {prince_label} for {damage}."
+                    )
+                    continue
+
+                prince["alive"] = False
+                if str(prince.get("type", "")).strip().lower() == "elder":
+                    self._lock_patience_for_owner(owner)
+                self._log_event(
+                    f"Monster: {monster.get('name')} defeated @{owner}'s {prince_label}!",
+                    battle=True,
+                )
+                await self._send_battle_message(
+                    f"Monster #{monster_index} {monster.get('name')} defeated @{owner}'s {prince_label}!"
+                )
+                alive_targets = [
+                    t for t in alive_targets
+                    if not (t.get("type") == "prince" and t.get("data", {}).get("id") == prince.get("id"))
+                ]
                 continue
     
             elif target["type"] == "spirit_well":
@@ -5500,7 +7067,7 @@ class RpgState:
                             battle=True,
                         )
                         await self._send_battle_message(
-                            f"âœˆï¸ KID INTERCEPT! @{target_name}'s Kid splashes {intercept_target.get('name') if intercept_target else 'a mob'} out of the sky."
+                            f"✈️ KID INTERCEPT! @{target_name}'s Kid splashes {intercept_target.get('name') if intercept_target else 'a mob'} out of the sky."
                         )
                         continue
     
@@ -5517,7 +7084,7 @@ class RpgState:
                     if random.random() < evasion_chance:
                         form_name = form_data.get("name", "Unknown")
                         await self._send_battle_message(
-                            f"âœ¨ {form_name}: @{target_name} evades the attack!"
+                            f"✨ {form_name}: @{target_name} evades the attack!"
                         )
                         self._log_event(f"Meatwad evasion: @{target_name} as {form_name} evaded attack.", battle=True)
                         continue
@@ -5542,6 +7109,11 @@ class RpgState:
                     elif effect_type == "party_defense":
                         # Party-wide defense (Bridge)
                         damage = max(1, damage - int(effect_value))
+                    elif effect_type == "party_super_buff":
+                        mitigation = 0
+                        if isinstance(effect_value, dict):
+                            mitigation = int(effect_value.get("mitigation", 0))
+                        damage = max(1, damage - mitigation)
                     elif effect_type == "balanced":
                         # Balanced form (Humanoid 3) - defense + damage
                         damage = max(1, damage - int(effect_value))
@@ -5734,6 +7306,58 @@ class RpgState:
                     break
                 owner = pet.get("owner", "?")
                 pet_type = str(pet.get("pet_type", "")).lower()
+
+                if pet_type == "mech":
+                    attacks = max(1, int(pet.get("attacks_per_turn", 1)))
+                    pet_label = pet.get("mech_name") or "Mech"
+                    total_dealt = 0
+                    kills = 0
+                    for _ in range(attacks):
+                        if not alive_monsters:
+                            break
+                        target_monster = random.choice(alive_monsters)
+                        mech_damage = max(1, int(pet.get("damage", 20)))
+                        hp_before = int(target_monster.get("hp", 0))
+                        dealt = min(mech_damage, hp_before)
+                        target_monster["hp"] = max(0, hp_before - mech_damage)
+                        total_dealt += dealt
+                        self._add_pet_owner_damage(owner, dealt)
+                        if target_monster.get("hp", 0) <= 0 and target_monster.get("alive"):
+                            target_monster["alive"] = False
+                            alive_monsters.remove(target_monster)
+                            kills += 1
+                            self._log_event(
+                                f"{pet_label}: @{owner}'s mech destroyed {target_monster.get('name')}",
+                                battle=True,
+                            )
+                            if target_monster.get("is_loot_goblin"):
+                                await self._award_loot_goblin_rewards(
+                                    session,
+                                    owner,
+                                    int(target_monster.get("level", 1)),
+                                )
+                    if total_dealt > 0:
+                        self._log_event(
+                            f"{pet_label}: @{owner}'s mech dealt {total_dealt} damage ({kills} kills).",
+                            battle=True,
+                        )
+                        await self._send_battle_message(
+                            f"@{owner}'s {pet_label} blasts for {total_dealt} damage!"
+                        )
+
+                    turns = int(pet.get("turns_remaining", 0))
+                    if turns > 0:
+                        pet["turns_remaining"] = turns - 1
+                    if int(pet.get("turns_remaining", 0)) <= 0:
+                        pet["alive"] = False
+                        owner_user = self.state.get_user(owner)
+                        mech_state = owner_user.get("mech_pet") if isinstance(owner_user, dict) else None
+                        if mech_state:
+                            mech_state["active"] = False
+                            mech_state["turns_remaining"] = 0
+                        self._log_event(f"{pet_label}: @{owner}'s mech has departed.", battle=True)
+                        self._deactivate_mech_for_owner(owner)
+                    continue
     
                 if pet_type == "timberwolf":
                     if random.random() < 0.5:
@@ -5926,7 +7550,7 @@ class RpgState:
                             battle=True,
                         )
                         await self._send_battle_message(
-                            f"âœ¨ @{owner}'s Franklin CRITS {target_monster.get('name')}! +{jdam_bonus_pct}% JDAM crit chance and +{intercept_bonus_pct}% Kid intercept chance."
+                            f"✨ @{owner}'s Franklin CRITS {target_monster.get('name')}! +{jdam_bonus_pct}% JDAM crit chance and +{intercept_bonus_pct}% Kid intercept chance."
                         )
     
                     self._log_event(
@@ -6109,6 +7733,7 @@ class RpgState:
             return False
         if any(w.get("alive") for w in session.get("spirit_wells", [])):
             return False
+        stat_summary = self._build_battle_stat_summary(session)
         for username in participants:
             user = self.state.get_user(username)
             if int(user.get("hp_current", DEFAULT_PLAYER_HP)) > 0:
@@ -6122,6 +7747,7 @@ class RpgState:
             user["buff_franklin_crit_triggered"] = False
             user["buff_franklin_jdam_buff_triggered"] = False
             user["buff_jdam_crit_triggered"] = False
+            user["buff_napalm_crit_triggered"] = False
             user["buff_jdam_forced_crit_charges"] = 0
         self._reset_deputy_battle_cooldowns(participants)
         self._clear_alchemist_brew_bonuses(participants)
@@ -6145,6 +7771,8 @@ class RpgState:
         session["battle_stat_baseline"] = {}
         self._log_event("Battle ended: party defeated.", battle=True)
         await self._send_battle_message("The party has fallen. Battle lost.")
+        self._record_battle_report(session, status="defeat", loot_summary=[], stat_summary=stat_summary)
+        session["battle_start_ts"] = None
         self.state.save_state()
         self._broadcast_state()
         return True
@@ -6157,6 +7785,8 @@ class RpgState:
         if not participants:
             logging.warning("Battle end check triggered but no participants found")
             return
+        loot_summary_data = []
+        reward_multiplier = int(session.get("reward_multiplier", 1)) or 1
         for username in participants:
             user = self.state.get_user(username)
             user["summoner_dot_damage"] = 0
@@ -6166,10 +7796,12 @@ class RpgState:
             user["buff_franklin_crit_triggered"] = False
             user["buff_franklin_jdam_buff_triggered"] = False
             user["buff_jdam_crit_triggered"] = False
+            user["buff_napalm_crit_triggered"] = False
             user["buff_jdam_forced_crit_charges"] = 0
         self._reset_deputy_battle_cooldowns(participants)
         self._clear_alchemist_brew_bonuses(participants)
         session["barbarian_shout_rounds_remaining"] = 0
+        stat_summary = self._build_battle_stat_summary(session)
         
         total_xp = 0
         for monster in session.get("monsters", []):
@@ -6178,26 +7810,8 @@ class RpgState:
             xp_from_monster = monster_level * monster_level
             total_xp += xp_from_monster
         
-        # Check if a Monk is in the party for reward doubling
-        has_monk = False
-        for user in participants:
-            user_data = self.state.get_user(user)
-            if user_data.get("class_name") == "Monk":
-                has_monk = True
-                break
-        
-        reward_multiplier = 2 if has_monk else 1
-        if has_monk:
-            self._log_event("Monk blessing active: All rewards doubled!", battle=True)
-            await self._send_battle_message("Monk blessing active: All rewards are DOUBLED!")
-        
-        # Collect loot for each participant before applying it
-        loot_summary_data = []
-        
-        # --- XP Totem Bonus Logic ---
-        totems = session.get("totems", [])
-        # Map: username -> highest XP bonus from their alive XP totem(s)
         xp_totem_bonus = {}
+        totems = session.get("totems", [])
         for t in totems:
             if t.get("alive") and t.get("buff_type") == "xp_buff" and t.get("owner"):
                 owner = t["owner"].lower()
@@ -6215,16 +7829,19 @@ class RpgState:
             bonus_pct = xp_totem_bonus.get(user.lower(), 0)
             if bonus_pct > 0:
                 xp_earned = int(base_xp_earned * (1 + bonus_pct / 100))
-                self._log_event(f"XP Totem: @{user} received +{bonus_pct}% XP bonus ({base_xp_earned} -> {xp_earned})", battle=True)
+                self._log_event(
+                    f"XP Totem: @{user} received +{bonus_pct}% XP bonus ({base_xp_earned} -> {xp_earned})",
+                    battle=True,
+                )
             else:
                 xp_earned = base_xp_earned
             user_data["xp"] = int(user_data.get("xp", 0)) + xp_earned
             if self._is_user_revenant(user_data):
                 session["revenant_class_xp"] = int(user_data.get("xp", 0))
-    
+
             # Check for level-ups after XP is awarded
             await self._check_for_levelup(user, user_data)
-    
+
             # Award base gacha tokens
             gacha_tokens_earned = reward_multiplier  # Base victory bonus (multiplied)
             user_data["class_change_tokens"] = int(user_data.get("class_change_tokens", 0)) + gacha_tokens_earned
@@ -6268,64 +7885,27 @@ class RpgState:
                 "xp": xp_earned,
             })
     
-        # Award top DPS and top healing (ties allowed)
-        top_dps = []
-        top_heal = []
-        max_damage = 0
-        max_heal = 0
-        stat_rows = []
-        baseline_map = session.get("battle_stat_baseline", {})
-        battle_stats = {}
-        for user in participants:
-            user_data = self.state.get_user(user)
-            baseline = baseline_map.get(user, {})
-            baseline_damage = int(baseline.get("damage", int(user_data.get("damage_done", 0))))
-            baseline_healing = int(baseline.get("healing", int(user_data.get("healing_done", 0))))
-            damage_done = max(0, int(user_data.get("damage_done", 0)) - baseline_damage)
-            healing_done = max(0, int(user_data.get("healing_done", 0)) - baseline_healing)
-            battle_stats[user] = {
-                "damage": damage_done,
-                "healing": healing_done,
-            }
-            stat_rows.append({
-                "name": user,
-                "damage": damage_done,
-                "healing": healing_done,
-            })
-            if damage_done > max_damage:
-                max_damage = damage_done
-                top_dps = [user]
-            elif damage_done == max_damage and damage_done > 0:
-                top_dps.append(user)
-            if healing_done > max_heal:
-                max_heal = healing_done
-                top_heal = [user]
-            elif healing_done == max_heal and healing_done > 0:
-                top_heal.append(user)
-    
+        battle_stats = stat_summary.get("battle_stats", {})
+        stat_rows = stat_summary.get("stat_rows", [])
+        top_dps = stat_summary.get("top_dps", [])
+        top_heal = stat_summary.get("top_heal", [])
+        top_dps_rankings = stat_summary.get("top_dps_rankings", [])
+        top_heal_rankings = stat_summary.get("top_heal_rankings", [])
+
         if top_dps:
             for user in top_dps:
                 user_data = self.state.get_user(user)
                 user_data["class_change_tokens"] = int(user_data.get("class_change_tokens", 0)) + 1
             self._log_event(f"Top DPS: {', '.join(top_dps)} (+1 gacha token each).", battle=True)
             await self._send_battle_message(f"Top DPS: {', '.join(top_dps)} (+1 gacha token).")
-    
+
         if top_heal:
             for user in top_heal:
                 user_data = self.state.get_user(user)
                 user_data["class_change_tokens"] = int(user_data.get("class_change_tokens", 0)) + 1
             self._log_event(f"Top Healing: {', '.join(top_heal)} (+1 gacha token each).", battle=True)
             await self._send_battle_message(f"Top Healing: {', '.join(top_heal)} (+1 gacha token).")
-    
-        top_dps_rankings = sorted(
-            stat_rows,
-            key=lambda row: (-int(row.get("damage", 0)), str(row.get("name", ""))),
-        )[:3]
-        top_heal_rankings = sorted(
-            stat_rows,
-            key=lambda row: (-int(row.get("healing", 0)), str(row.get("name", ""))),
-        )[:3]
-    
+
         debug_stat_rows = ", ".join(
             f"@{row.get('name', '?')}: dmg={int(row.get('damage', 0))}, heal={int(row.get('healing', 0))}"
             for row in stat_rows
@@ -6348,6 +7928,7 @@ class RpgState:
                     "current": damage,
                     "threshold": DERP_CLONE_ASCEND_THRESHOLD,
                 })
+        self._record_battle_report(session, status="victory", loot_summary=loot_summary_data, stat_summary=stat_summary)
         
         session["battle_active"] = False
         session["battle_id"] = None
@@ -6359,6 +7940,7 @@ class RpgState:
         session["action_queue"] = []
         session["buff_pets"] = []
         session["battle_stat_baseline"] = {}
+        session["battle_start_ts"] = None
         
         # Log individual rewards for each player
         for loot in loot_summary_data:
@@ -6528,13 +8110,11 @@ class RpgState:
         username = ctx.author.name.lower()
         self.logger.info("[RPG] skills invoked user=%s", username)
         user = state_obj.get_user(username)
+        class_name = user.get("class_name", "Derp Clone")
         if user.get("is_revenant"):
             class_name = "Revenant"
-            base_name = user.get("previous_class") or user.get("base_class") or "Derp Clone"
-            class_display = f"{class_name} (base: {base_name})"
-        else:
-            class_name = user.get("class_name", "Derp Clone")
-            class_display = class_name
+        public_class_name = "Derp Clone"
+        class_display = "Derp Clone"
         self.logger.info(
             "[RPG] skills user=%s class=%s revenant=%s active=%s",
             username,
@@ -6545,75 +8125,96 @@ class RpgState:
         
         # Build skill message dynamically
         msg_parts = [f"@{username} Class: {class_display}"]
+        msg_parts.append(f"Level: 1/{DERP_CLONE_LEVEL_CAP} | HP: {DERP_CLONE_RESET_HP}")
+
+        def _safe_int(value, default=0):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
         
         # Stream skills
-        stream_skill = CLASS_STREAM_SKILLS.get(class_name)
+        stream_skill = CLASS_STREAM_SKILLS.get(public_class_name)
         if stream_skill:
             msg_parts.append(f"Stream: {stream_skill}")
         
         # Battle/Monster skills
-        if class_name == "Warlock":
+        if public_class_name == "Warlock":
             msg_parts.append("Battle: corruption, sb")
-        elif class_name == "Revenant":
+        elif public_class_name == "Revenant":
             msg_parts.append("Battle: reap, harvest, doom")
-        elif class_name == "Khajiit":
+        elif public_class_name == "Khajiit":
             msg_parts.append("Battle: scratch, hairball, meow")
-        elif class_name == "Archangel":
+        elif public_class_name == "Archangel":
             msg_parts.append("Battle: pray, touch, expel, judgement")
-        elif class_name == "Alchemist":
+        elif public_class_name == "Alchemist":
             msg_parts.append("Battle: brew, bottle")
-        elif class_name == "Meatwad":
+        elif public_class_name == "Younger Prince":
+            msg_parts.append("Battle: Patience (until Elder falls) | Then: Holy_Blade, Our_Curse, Divine_Missiles")
+        elif public_class_name == "Meatwad":
             current_form = user.get("meatwad_form")
             if current_form:
                 form_name = current_form.get("name", "None")
                 msg_parts.append(f"Battle: gun, transform, crack | Current form: {form_name}")
             else:
                 msg_parts.append("Battle: gun, transform, crack")
-        elif class_name == "Deputy":
+        elif public_class_name == "Deputy":
             msg_parts.append("Battle: tazer, teargass, donut, tommygun")
-        elif class_name == "Barbarian":
+        elif public_class_name == "Barbarian":
             msg_parts.append("Battle: cleave, shout, whirlwind")
-        elif class_name == "Buff":
+        elif public_class_name == "Buff":
             msg_parts.append("Battle: kid, franklin, jdam, nuke")
-        elif class_name == "Enforcer":
+        elif public_class_name == "Enforcer":
             skills = _get_enforcer_skills(user.get("player_level", 1))
             if skills:
                 msg_parts.append(f"Battle: {', '.join(skills)}")
         else:
-            monster_skill = CLASS_MONSTER_SKILLS.get(class_name)
+            monster_skill = CLASS_MONSTER_SKILLS.get(public_class_name)
             if monster_skill and monster_skill[0] != "none":
                 msg_parts.append(f"Battle: {monster_skill[0]}")
         
         # Party skills
         party_skills = []
-        if class_name == "Healer":
-            party_skills.append("heal")
-        elif class_name == "Warrior":
+        if public_class_name == "Healer":
+            party_skills.extend(["heal", "partyheal", "rez"])
+        elif public_class_name == "Warrior":
             party_skills.append("taunt")
-        elif class_name == "Monk":
+        elif public_class_name == "Monk":
             party_skills.append("ohm")
-        elif class_name == "Revenant":
+        elif public_class_name == "Revenant":
             party_skills.extend(["summon", "doom"])
-        elif class_name == "Streamer":
+        elif public_class_name == "Streamer":
             # Add dropship to battle skills for Streamer
             msg_parts.append("Battle: dropship")
-            party_skills.extend(["heal", "totem", "rez", "gamba"])
-        elif class_name == "Warlock":
+            party_skills.extend(["heal", "partyheal", "totem", "rez", "gamba"])
+        elif public_class_name == "Warlock":
             party_skills.extend(["summon_imp", "dragon"])
-        elif class_name == "Hop":
+        elif public_class_name == "Hop":
             party_skills.extend(["sap", "deagle", "c4", "greenarrow", "goldrpg"])
-        elif class_name == "Deputy":
+        elif public_class_name == "Deputy":
             party_skills.extend(["tazer", "teargass", "donut", "tommygun"])
-        elif class_name == "Barbarian":
+        elif public_class_name == "Barbarian":
             party_skills.extend(["cleave", "shout", "whirlwind"])
-        elif class_name == "Alchemist":
+        elif public_class_name == "Alchemist":
             party_skills.extend(["brew", "bottle"])
-        elif class_name == "Buff":
+        elif public_class_name == "Buff":
             party_skills.extend(["kid", "franklin", "jdam", "nuke"])
         
         if party_skills:
             msg_parts.append(f"Party: {', '.join(party_skills)}")
         
+        kills = _safe_int(user.get("killing_blows", 0))
+        deaths = _safe_int(user.get("times_knocked_out", 0))
+        if deaths > 0:
+            kdr = f"{kills / deaths:.2f}"
+        elif kills > 0:
+            kdr = str(kills)
+        else:
+            kdr = "0"
+        msg_parts.append(f"Killing blows: {kills}")
+        msg_parts.append(f"Deaths: {deaths}")
+        msg_parts.append(f"KDR: {kdr}")
+
         await ctx.send(" | ".join(msg_parts))
     
     @commands.command(name="ascend")
@@ -6760,7 +8361,7 @@ class RpgState:
     @commands.command(name="shout")
     async def shout(self, ctx):
         username = ctx.author.name.lower()
-        await self._maybe_trigger_media("shout", ctx)
+        await self._play_media_fallback("shout", ctx)
         user = self.state.get_user(username)
         session = self.state.session()
     
@@ -7013,6 +8614,67 @@ class RpgState:
         alive_participants = self._get_alive_participants(session)
         if alive_participants and all(user in queued_users for user in alive_participants):
             await self._resolve_turn()
+
+    @commands.command(name="partyheal")
+    async def partyheal(self, ctx):
+        """Healer/Streamer skill: Heal the entire party."""
+        username = ctx.author.name.lower()
+        user = self.state.get_user(username)
+        class_name = str(user.get("class_name", "")).strip()
+
+        if self._is_user_revenant(user):
+            await ctx.send("Revenants cannot heal.")
+            return
+        if class_name not in {"Healer", "Streamer"}:
+            await ctx.send("Only Healers and the Streamer can use partyheal.")
+            return
+
+        session = self.state.session()
+        if int(user.get("hp_current", DEFAULT_PLAYER_HP)) <= 0:
+            await ctx.send("You are knocked out and cannot act.")
+            return
+        if not user.get("active_player"):
+            await ctx.send("You must join the battle first.")
+            return
+        if not session.get("battle_active"):
+            await ctx.send("No active battle.")
+            return
+        if session.get("phase") != "action":
+            await ctx.send("Action window is closed.")
+            return
+
+        participants = session.setdefault("participants", [])
+        if username not in participants:
+            await ctx.send("You must !join before acting.")
+            return
+
+        action_queue = session.get("action_queue", [])
+        if any(entry.get("user") == username for entry in action_queue):
+            await ctx.send("You already queued an action this turn.")
+            return
+
+        session.setdefault("action_queue", []).append({
+            "user": username,
+            "action": "stream_heal",
+            "damage": 0,
+            "target_index": None,
+            "target_party_index": None,
+            "ts": _now_ts(),
+        })
+
+        self.state.save_state()
+        self._log_event(f"Queued: @{username} queued party heal.", battle=True)
+        await ctx.send(f"@{username} queued party heal.")
+        media_cog = self.bot.get_cog("MediaOverlayCog")
+        if media_cog:
+            await media_cog.play_media_command("heal", ctx)
+        self._broadcast_state()
+
+        action_queue = session.get("action_queue", [])
+        queued_users = {entry.get("user") for entry in action_queue}
+        alive_participants = self._get_alive_participants(session)
+        if alive_participants and all(user in queued_users for user in alive_participants):
+            await self._resolve_turn()
     
     @commands.command(name="ohm")
     async def ohm(self, ctx):
@@ -7157,10 +8819,18 @@ class RpgState:
     
     @commands.command(name="harvest")
     async def harvest(self, ctx, target_index: str = None):
+        username = ctx.author.name.lower()
+        user = self.state.get_user(username)
+        if int(user.get("revenant_harvest_cooldown", 0)) > 0:
+            await ctx.send(
+                f"Harvest cooldown: {int(user.get('revenant_harvest_cooldown', 0))} turn(s) remaining."
+            )
+            return
+
         await self._queue_monster_action(
             ctx,
             "harvest",
-            10,
+            0,
             required_class="Revenant",
             consume_revenant=False,
             target_index=target_index,
@@ -7312,7 +8982,7 @@ class RpgState:
         session = state_obj.session()
     
         if allow_media_fallback:
-            await self._maybe_trigger_media(action, ctx)
+            await self._play_media_fallback(action, ctx)
 
         # If no active battle, allow SFX fallback and exit quietly
         if not session.get("battle_active"):
@@ -7358,6 +9028,9 @@ class RpgState:
                 return
             await ctx.send("Action window is closed.")
             return
+        user_class_name = str(user.get("class_name", "")).strip()
+        if not user_class_name:
+            user_class_name = "Derp Clone"
         if required_class == "Revenant" and not user.get("is_revenant"):
             if silent_on_class_mismatch:
                 if allow_media_fallback:
@@ -7365,7 +9038,7 @@ class RpgState:
                 return
             await ctx.send("You cannot use that command.")
             return
-        if required_class != "Revenant" and user.get("class_name") != required_class:
+        if required_class != "Revenant" and user_class_name.lower() != required_class.lower():
             if silent_on_class_mismatch:
                 if allow_media_fallback:
                     return
@@ -7416,6 +9089,8 @@ class RpgState:
             "target_index": target_index,
             "ts": _now_ts(),
         })
+        if action == "harvest":
+            user["revenant_harvest_cooldown"] = REVENANT_HARVEST_COOLDOWN_TURNS
         self.state.save_state()
         target_note = f" on monster {target_index}" if target_index else ""
         self._log_event(f"Queued: @{username} {action} ({damage}){target_note}.", battle=True)
@@ -7486,15 +9161,36 @@ class RpgState:
         ref_parts = [arg for arg in args if str(arg).lower() != "auto"]
         if self._is_user_revenant(user) and self._is_revenant_pass_due(user, now_ts):
             pass_target_raw = self._extract_referrer_name(ref_parts)
-            if not pass_target_raw:
-                await ctx.send("Your 7-day Revenant term has ended. Pass it with: !passrevenant @username")
-                return
-            pass_target = self._parse_target(pass_target_raw)
-            passed, pass_message = self._transfer_revenant(username, pass_target)
-            await ctx.send(pass_message)
-            if not passed:
-                return
-            user = state_obj.get_user(username)
+            if pass_target_raw:
+                pass_target = self._parse_target(pass_target_raw)
+                passed, pass_message = self._transfer_revenant(username, pass_target)
+                await ctx.send(pass_message)
+                if not passed:
+                    return
+                user = state_obj.get_user(username)
+            else:
+                eligible_targets = [
+                    name
+                    for name, candidate in state_obj.state.get("users", {}).items()
+                    if name != username and self._eligible_for_revenant(name, candidate)
+                ]
+                if eligible_targets:
+                    await ctx.send("Your 7-day Revenant term has ended. Pass it with: !passrevenant @username")
+                    return
+
+                gained_xp = self._expire_revenant(user)
+                state_obj.save_state()
+                user = state_obj.get_user(username)
+                class_name = user.get("class_name", "Derp Clone")
+                self._log_event(
+                    f"Revenant expiry: @{username} returned to {class_name} after no eligible targets.",
+                    battle=True,
+                )
+                msg = (
+                    f"@{username}'s Revenant term expired with no eligible targets, so you return to {class_name}."
+                    + (" You kept your Revenant XP bonus." if gained_xp > 0 else "")
+                )
+                await ctx.send(msg)
 
         join_mode = "auto" if any(str(arg).lower() == "auto" for arg in args) else None
         referrer_raw = self._extract_referrer_name(ref_parts)
@@ -7557,6 +9253,13 @@ class RpgState:
         auto_join_modes = session.setdefault("auto_join_modes", {})
         joined_turns = session.setdefault("joined_turns", {})
         baseline_map = session.setdefault("battle_stat_baseline", {})
+        prince_joined = False
+        if str(user.get("class_name", "")).strip() == "Younger Prince":
+            elder = self._spawn_elder_prince(session, username)
+            if elder and elder.get("alive"):
+                prince_joined = True
+                self._log_event(f"Join: Elder Prince answers @{username}.", battle=True)
+                response_msgs.append(f"@{username}'s Elder Prince takes the field!")
 
         if username in participants:
             if join_mode == "auto":
@@ -7568,7 +9271,8 @@ class RpgState:
             else:
                 response_msgs.append("You have already joined this battle.")
         else:
-            user["hp_current"] = int(user.get("hp_max", DEFAULT_PLAYER_HP))
+            user["hp_max"] = DEFAULT_PLAYER_HP
+            user["hp_current"] = DEFAULT_PLAYER_HP
             user["hop_goldrpg_ready"] = False
             user["barbarian_whirlwind_cooldown"] = 0
             user["buff_takeoff_used"] = False
@@ -7576,6 +9280,7 @@ class RpgState:
             user["buff_franklin_crit_triggered"] = False
             user["buff_franklin_jdam_buff_triggered"] = False
             user["buff_jdam_crit_triggered"] = False
+            user["buff_napalm_crit_triggered"] = False
             user["buff_jdam_forced_crit_charges"] = 0
             if user.get("class_name") == "Archangel":
                 user["archangel_power"] = 0
@@ -7598,11 +9303,21 @@ class RpgState:
             else:
                 joined_turns.pop(username, None)
 
-            self._log_event(f"Join: @{username} entered the battle.", battle=True)
-            if join_mode == "auto":
-                response_msgs.append(f"@{username} joined the fight in AUTO mode (half-strength primary skill if no action is queued).")
-            else:
-                response_msgs.append(f"@{username} joined the fight.")
+            if not prince_joined:
+                self._log_event(f"Join: @{username} entered the battle.", battle=True)
+                if join_mode == "auto":
+                    response_msgs.append(f"@{username} joined the fight in AUTO mode (half-strength primary skill if no action is queued).")
+                else:
+                    response_msgs.append(f"@{username} joined the fight.")
+            class_is_buff = str(user.get("class_name", "")).strip().lower() == "buff"
+            if not class_is_buff:
+                despawned = self._despawn_buff_pets_for_owner(session, username)
+                if despawned:
+                    self._log_event(
+                        f"Buff pets cleared: @{username} is not Buff, removing {', '.join(despawned)}.",
+                        battle=True,
+                    )
+            await self._ensure_buff_pets_for_owner(session, username, announce=True)
 
         state_obj.save_state()
         self._broadcast_state()
@@ -7896,21 +9611,49 @@ class RpgState:
             state_obj._reset_battle_on_startup()
         except Exception:
             self.logger.warning("[RPG] spawn: failed to reset battle state", exc_info=True)
-        parts = [str(arg).strip() for arg in args if str(arg).strip()]
+        invisible_chars = {
+            "\u200b",  # zero width space
+            "\u200c",  # zero width non-joiner
+            "\u200d",  # zero width joiner
+            "\ufeff",  # BOM
+            "\u034f",  # combining grapheme joiner (seen from chat)
+        }
+
+        def _clean_token(token: str) -> str:
+            cleaned = "".join(ch for ch in token if ch not in invisible_chars)
+            return cleaned.strip()
+
+        parts = []
+        for raw in args:
+            token = _clean_token(str(raw))
+            if token:
+                parts.append(token)
         if len(parts) < 3:
             self.logger.info("[RPG] spawn failed: insufficient args parts=%s", parts)
-            await ctx.send("Usage: !spawn <monster> <level> <count> [slow]")
+            await ctx.send("Usage: !spawn <monster> <level> <count> [slow] [test]")
             return
-    
+
         slow_mode = False
-        if parts and parts[-1].lower() == "slow":
-            slow_mode = True
-            parts = parts[:-1]
-    
+        test_mode = False
+        while parts:
+            flag = parts[-1].lower()
+            if flag == "slow":
+                slow_mode = True
+                parts = parts[:-1]
+                continue
+            if flag == "test":
+                test_mode = True
+                parts = parts[:-1]
+                continue
+            break
+
         if len(parts) < 3:
-            self.logger.info("[RPG] spawn failed: insufficient args after slow parts=%s", parts)
-            await ctx.send("Usage: !spawn <monster> <level> <count> [slow]")
+            self.logger.info("[RPG] spawn failed: insufficient args after flags parts=%s", parts)
+            await ctx.send("Usage: !spawn <monster> <level> <count> [slow] [test]")
             return
+
+        join_window_seconds = 10 if test_mode else JOIN_WINDOW_FIRST_SECONDS
+        action_window_seconds = ACTION_WINDOW_TEST_SECONDS if test_mode else ACTION_WINDOW_SECONDS
     
         level_token = parts[-2]
         count_token = parts[-1]
@@ -7918,7 +9661,7 @@ class RpgState:
     
         if not monster_name:
             self.logger.info("[RPG] spawn failed: empty monster name parts=%s", parts)
-            await ctx.send("Usage: !spawn <monster> <level> <count> [slow]")
+            await ctx.send("Usage: !spawn <monster> <level> <count> [slow] [test]")
             return
     
         try:
@@ -7926,7 +9669,7 @@ class RpgState:
             count = int(count_token)
         except Exception:
             self.logger.info("[RPG] spawn failed: bad int level=%s count=%s", level_token, count_token)
-            await ctx.send("Usage: !spawn <monster> <level> <count> [slow]")
+            await ctx.send("Usage: !spawn <monster> <level> <count> [slow] [test]")
             return
         if level < 1 or count < 1:
             self.logger.info("[RPG] spawn failed: nonpositive level=%s count=%s", level, count)
@@ -7934,9 +9677,23 @@ class RpgState:
             return
     
         if monster_name.lower() == "pack":
-            self.logger.info("[RPG] spawn pack level=%s count=%s slow=%s", level, count, slow_mode)
+            self.logger.info(
+                "[RPG] spawn pack level=%s count=%s slow=%s test=%s",
+                level,
+                count,
+                slow_mode,
+                test_mode,
+            )
             try:
-                await self._spawn_pack(ctx, level, count, slow_mode=slow_mode, state_obj=state_obj)
+                await self._spawn_pack(
+                    ctx,
+                    level,
+                    count,
+                    slow_mode=slow_mode,
+                    state_obj=state_obj,
+                    join_window_seconds=join_window_seconds,
+                    action_window_seconds=action_window_seconds,
+                )
             except Exception:
                 self.logger.error("[RPG] spawn pack failed", exc_info=True)
                 await ctx.send("Spawn pack failed; see logs.")
@@ -7969,7 +9726,17 @@ class RpgState:
         )
         session["battle_active"] = True
         session["battle_id"] = battle_id
+        session["battle_start_ts"] = _now_ts()
+        session["battle_start_ts"] = _now_ts()
         session["channel"] = getattr(ctx.channel, "name", None)
+        self.logger.info(
+            "[RPG] spawn start channel=%s join_window=%s action_window=%s test=%s slow=%s",
+            session.get("channel"),
+            join_window_seconds,
+            action_window_seconds,
+            test_mode,
+            slow_mode,
+        )
         session["monsters"] = []
         session["turn_number"] = 1
         session["phase"] = "join"
@@ -7987,8 +9754,10 @@ class RpgState:
         session["barbarian_shout_rounds_remaining"] = 0
         session["battle_stat_baseline"] = {}
         session["slow_actions"] = bool(slow_mode)
-        session["join_window_end"] = _now_ts() + JOIN_WINDOW_FIRST_SECONDS
+        session["join_window_end"] = _now_ts() + join_window_seconds
         session["action_window_end"] = None
+        session["action_window_seconds"] = action_window_seconds
+        session["reward_multiplier"] = 1
         for i in range(count):
             if is_explicit_loot_goblin:
                 session["monsters"].append(self._build_loot_goblin_entry(i + 1, level))
@@ -8022,7 +9791,7 @@ class RpgState:
             await ctx.send(f"Spawned {count} loot goblin(s) at level {level}.{slow_note}")
         else:
             await ctx.send(f"Spawned {count} {monster_key}(s) at level {level}.{slow_note}")
-        await ctx.send(f"Join window open for {JOIN_WINDOW_FIRST_SECONDS} seconds. Use !join to fight!")
+        await ctx.send(f"Join window open for {join_window_seconds} seconds. Use !join to fight!")
 
         try:
             asyncio.create_task(self._ensure_action_window_open(battle_id, session.get("join_window_end")))
@@ -8047,7 +9816,16 @@ class RpgState:
             self.logger.warning("[RPG] spawn: failed to broadcast state (sync)", exc_info=True)
         self._broadcast_state()
     
-    async def _spawn_pack(self, ctx, level: int, count: int, slow_mode: bool = False, state_obj=None):
+    async def _spawn_pack(
+        self,
+        ctx,
+        level: int,
+        count: int,
+        slow_mode: bool = False,
+        state_obj=None,
+        join_window_seconds: int | None = None,
+        action_window_seconds: int | None = None,
+    ):
         state_obj = state_obj or self._state_obj()
         if state_obj is None:
             await ctx.send("RPG state unavailable; try !reloadrpg.")
@@ -8058,10 +9836,19 @@ class RpgState:
             self.logger.warning("[RPG] spawn pack: failed to reset battle state", exc_info=True)
         session = state_obj.session()
         self._clear_alchemist_brew_bonuses()
+        self._deactivate_mech_pets()
         battle_id = f"battle_{_now_ts()}"
         session["battle_active"] = True
         session["battle_id"] = battle_id
         session["channel"] = getattr(ctx.channel, "name", None)
+        self.logger.info(
+            "[RPG] spawn pack start battle_id=%s level=%s count=%s slow=%s",
+            battle_id,
+            level,
+            count,
+            slow_mode,
+        )
+        self._deactivate_mech_pets()
         session["monsters"] = []
         session["turn_number"] = 1
         session["phase"] = "join"
@@ -8079,8 +9866,19 @@ class RpgState:
         session["barbarian_shout_rounds_remaining"] = 0
         session["battle_stat_baseline"] = {}
         session["slow_actions"] = bool(slow_mode)
-        session["join_window_end"] = _now_ts() + JOIN_WINDOW_FIRST_SECONDS
+        jw_seconds = join_window_seconds or JOIN_WINDOW_FIRST_SECONDS
+        aw_seconds = action_window_seconds or ACTION_WINDOW_SECONDS
+        self.logger.info(
+            "[RPG] spawn pack channel=%s join_window=%s action_window=%s slow=%s",
+            session.get("channel"),
+            jw_seconds,
+            aw_seconds,
+            slow_mode,
+        )
+        session["join_window_end"] = _now_ts() + jw_seconds
         session["action_window_end"] = None
+        session["action_window_seconds"] = aw_seconds
+        session["reward_multiplier"] = 1
     
         squirrel_count = 0
         non_squirrel = [name for name in BESTIARY if name != SQUIRREL_NAME]
@@ -8131,7 +9929,7 @@ class RpgState:
         self._log_event(f"Battle start: pack ({summary}) level {level}.", battle=True)
         slow_note = " Slow mode ON (1s action delay)." if slow_mode else ""
         await ctx.send(f"Spawned pack: {summary} (level {level}).{slow_note}")
-        await ctx.send(f"Join window open for {JOIN_WINDOW_FIRST_SECONDS} seconds. Use !join to fight!")
+        await ctx.send(f"Join window open for {jw_seconds} seconds. Use !join to fight!")
         try:
             payload = self._build_overlay_payload()
             if payload:
@@ -8284,28 +10082,10 @@ class RpgState:
     
     @commands.command(name="classchange")
     async def classchange(self, ctx, class_name: str = None):
-        username = ctx.author.name.lower()
-        user = self.state.get_user(username)
-        if not class_name:
-            await ctx.send("Usage: !classchange warrior | rogue | mage | healer")
-            return
-        if int(user.get("class_tier", 0)) != 1:
-            await ctx.send("Class change is only available for base classes right now.")
-            return
-        tokens = int(user.get("class_change_tokens", 0))
-        if tokens <= 0:
-            await ctx.send("You have no class change tokens.")
-            return
-        class_name = class_name.strip().capitalize()
-        if class_name not in BASE_CLASSES:
-            await ctx.send("Usage: !classchange warrior | rogue | mage | healer")
-            return
-        user["class_change_tokens"] = tokens - 1
-        user["class_name"] = class_name
-        user["base_class"] = class_name
-        self.state.save_state()
-        self._log_event(f"Class change: @{username} became {class_name}.")
-        await ctx.send(f"@{username} changed class to {class_name}.")
+        await ctx.send(
+            "Class changes now use !redeem class <name> once you meet the Derp Clone level 10 requirement. "
+            "Check !tokens class to view your class tokens."
+        )
     
     @commands.command(name="stats")
     async def stats(self, ctx):
@@ -8332,9 +10112,12 @@ class RpgState:
                 bool(user.get("is_revenant")),
             )
             class_name = user.get("class_name", "Derp Clone")
-            entries = [f"Class: {class_name}", f"HP:{_safe_int(user.get('hp_max', DEFAULT_PLAYER_HP), DEFAULT_PLAYER_HP)}"]
-    
-            is_ascended = _safe_int(user.get("class_tier", 0), 0) > 0
+            is_ascended = _safe_int(user.get("class_tier", 0), 0) > 0    
+            forced_derp_clone_view = True
+            display_class = "Derp Clone"
+            hp_max = _safe_int(user.get("hp_max", DEFAULT_PLAYER_HP), DEFAULT_PLAYER_HP)
+            display_hp = DERP_CLONE_RESET_HP if forced_derp_clone_view else hp_max
+            entries = [f"Class: {display_class}", f"HP:{display_hp}"]    
     
             deaths = _safe_int(user.get("times_knocked_out", 0), 0)
             kills = _safe_int(user.get("killing_blows", 0), 0)
@@ -8353,7 +10136,7 @@ class RpgState:
                     if value > 0 or (label in ("Deaths", "KDR") and value != "0"):
                         entries.append(f"{label}: {value}")
     
-                if class_name not in ("Monk", "Derp Clone", None) and class_name in BASE_CLASSES:
+                if not forced_derp_clone_view and class_name not in ("Monk", "Derp Clone", None) and class_name in BASE_CLASSES:
                     total_xp = _safe_int(user.get("xp", 0), 0)
                     level = self._get_level_from_xp(total_xp, user)
                     xp_at_level, xp_needed = self._get_xp_at_level(total_xp, level, user)
@@ -8383,6 +10166,13 @@ class RpgState:
                 entries.append(f"Deaths: {deaths}")
                 entries.append(f"KDR: {kdr}")
     
+            if forced_derp_clone_view:
+                entries = [entry for entry in entries if not entry.startswith("Level:")]
+                _, display_xp_needed = self._get_xp_at_level(0, 1, user)
+                entries.append(f"Level: 1/{DERP_CLONE_LEVEL_CAP} | XP: 0/{display_xp_needed} (skills +0 effectiveness)")
+            xp_tokens = int(user.get("xp_token_balance", 0))
+            if xp_tokens > 0:
+                entries.append(f"XP tokens stored: {xp_tokens}")
             if not entries:
                 await ctx.send(f"@{username} has no RPG stats yet.")
                 return
@@ -8396,12 +10186,17 @@ class RpgState:
         username = ctx.author.name.lower()
         user = self.state.get_user(username)
         tokens = int(user.get("class_change_tokens", 0))
-        
+        xp_balance = int(user.get("xp_token_balance", 0))
+        class_tokens = user.setdefault("class_tokens", {})
+
         if action is None or action.lower() != "draw":
-            # Show token count
-            await ctx.send(f"@{username} has {tokens} gacha tokens.")
+            class_summary = self._format_class_token_summary(class_tokens)
+            await ctx.send(
+                f"@{username} has {tokens} gacha tokens, {xp_balance} XP tokens stored. "
+                f"Class tokens: {class_summary}. Use !gacha draw <count|all> to spend draw tokens."
+            )
             return
-    
+
         draw_count = 1
         if amount is not None:
             raw_amount = str(amount).strip().lower()
@@ -8416,89 +10211,106 @@ class RpgState:
                 if draw_count <= 0:
                     await ctx.send("Draw amount must be a positive integer.")
                     return
-    
+
         if draw_count <= 0:
             await ctx.send(f"@{username} has no gacha tokens to draw.")
             return
-    
+
         if tokens < draw_count:
             await ctx.send(f"@{username} needs {draw_count} gacha token(s) to draw (you have {tokens}).")
             return
-    
+
         rare_draws = 0
         common_draws = 0
-        xp_gained = 0
-        bonus_tokens_earned = 0
+        xp_tokens_awarded = 0
+        bonus_xp_tokens = 0
+        class_tokens_awarded = {}
         bonus_entries_earned = 0
-    
+
         for _ in range(draw_count):
-            roll = random.random()
-            if roll < GACHA_RARE_CHANCE:
-                xp_gained += GACHA_RARE_XP
+            is_rare = random.random() < GACHA_RARE_CHANCE
+            if is_rare:
+                xp_tokens_awarded += GACHA_RARE_XP
                 rare_draws += 1
+                class_choice = random.choice(LEGENDARY_CLASSES)
             else:
-                xp_gained += GACHA_COMMON_XP
+                xp_tokens_awarded += GACHA_COMMON_XP
                 common_draws += 1
-    
+                class_choice = random.choice(BASE_CLASSES)
+
+            class_tokens[class_choice] = class_tokens.get(class_choice, 0) + 1
+            class_tokens_awarded[class_choice] = class_tokens_awarded.get(class_choice, 0) + 1
+
             if random.random() < GACHA_BONUS_TOKEN_PROC_CHANCE:
                 token_roll = random.random()
                 cumulative = 0.0
                 awarded = 1
-                for token_amount, chance in GACHA_BONUS_TOKEN_DISTRIBUTION:
+                for token_amount, chance in GACHA_BONUS_XP_DISTRIBUTION:
                     cumulative += chance
                     if token_roll <= cumulative:
                         awarded = token_amount
                         break
-                bonus_tokens_earned += awarded
-    
+                bonus_xp_tokens += awarded * GACHA_BONUS_XP_VALUE
+
             if random.random() < GACHA_ENTRY_BONUS_CHANCE:
                 bonus_entries_earned += 1
-    
-        user["class_change_tokens"] = tokens - draw_count + bonus_tokens_earned
-        user["xp"] = int(user.get("xp", 0)) + xp_gained
-    
+
+        total_xp = xp_tokens_awarded + bonus_xp_tokens
+        xp_balance += total_xp
+        user["xp_token_balance"] = xp_balance
+        user["class_change_tokens"] = tokens - draw_count
+
         if bonus_entries_earned > 0:
             raffle_cog = self._get_raffle_cog()
             if raffle_cog:
                 raffle_cog.state.add_entries(username, bonus_entries_earned)
-    
-        if self._is_user_revenant(user):
-            self.state.session()["revenant_class_xp"] = int(user.get("xp", 0))
-        await self._check_for_levelup(username, user)
-        
+
+        class_award_summary = self._format_class_token_summary(class_tokens_awarded)
         self.state.save_state()
+        entry_bonus_log = (
+            f" Bonus entries: +{bonus_entries_earned}." if bonus_entries_earned > 0 else ""
+        )
         self._log_event(
-            f"Gacha draw: @{username} drew {draw_count}x for +{xp_gained} XP "
-            f"({rare_draws} rare, {common_draws} common)"
-            f" | bonus: +{bonus_tokens_earned} gacha, +{bonus_entries_earned} entries."
+            f"Gacha draw: @{username} drew {draw_count}x for +{total_xp} XP tokens "
+            f"({rare_draws} rare, {common_draws} common; bonus +{bonus_xp_tokens}). "
+            f"Class tokens: {class_award_summary}.{entry_bonus_log}"
         )
         self._broadcast_state()
-    
+
+        bonus_parts = []
+        if bonus_entries_earned > 0:
+            bonus_parts.append(
+                f"+{bonus_entries_earned} bonus entr{'y' if bonus_entries_earned == 1 else 'ies'}"
+            )
+        bonus_text = f" Bonus: {', '.join(bonus_parts)}." if bonus_parts else ""
+
         if draw_count == 1:
             rarity = "RARE" if rare_draws == 1 else "COMMON"
-            bonus_parts = []
-            if bonus_tokens_earned > 0:
-                bonus_parts.append(f"+{bonus_tokens_earned} bonus gacha")
-            if bonus_entries_earned > 0:
-                bonus_parts.append(f"+{bonus_entries_earned} bonus entr{'y' if bonus_entries_earned == 1 else 'ies'}")
-            bonus_text = f" | {'; '.join(bonus_parts)}" if bonus_parts else ""
+            xp_text = f"+{xp_tokens_awarded} XP tokens"
+            if bonus_xp_tokens > 0:
+                xp_text += f" (+{bonus_xp_tokens} bonus XP)"
+            sole_class = next(iter(class_tokens_awarded), "unknown")
             await ctx.send(
-                f"@{username} drew [{rarity}] +{xp_gained} XP! "
-                f"(remaining tokens: {user['class_change_tokens']}){bonus_text}"
+                f"@{username} drew [{rarity}] {xp_text}. Class token: {sole_class}. "
+                f"XP tokens left: {xp_balance}. Gacha tokens left: {user['class_change_tokens']}.{bonus_text}"
             )
             return
-    
-        bonus_summary = []
-        if bonus_tokens_earned > 0:
-            bonus_summary.append(f"+{bonus_tokens_earned} bonus gacha")
-        if bonus_entries_earned > 0:
-            bonus_summary.append(f"+{bonus_entries_earned} bonus entr{'y' if bonus_entries_earned == 1 else 'ies'}")
-        bonus_text = f" Bonus: {', '.join(bonus_summary)}." if bonus_summary else ""
+
+        draw_summary = f"+{total_xp} XP tokens ({rare_draws} rare, {common_draws} common)"
+        if bonus_xp_tokens > 0:
+            draw_summary += f" +{bonus_xp_tokens} bonus XP"
         await ctx.send(
-            f"@{username} drew {draw_count} gacha pulls: +{xp_gained} XP total "
-            f"({rare_draws} rare, {common_draws} common). "
-            f"Tokens left: {user['class_change_tokens']}.{bonus_text}"
+            f"@{username} drew {draw_count} gacha pulls: {draw_summary}. "
+            f"Class tokens gained: {class_award_summary}. XP tokens left: {xp_balance}. "
+            f"Gacha tokens left: {user['class_change_tokens']}.{bonus_text}"
         )
+
+    def _format_class_token_summary(self, tokens: dict[str, int]) -> str:
+        entries = [(name, count) for name, count in tokens.items() if count > 0]
+        if not entries:
+            return "none"
+        entries.sort()
+        return ", ".join(f"{name} x{count}" for name, count in entries)
     
     @commands.command(name="loottable")
     async def loottable(self, ctx):
@@ -8508,18 +10320,138 @@ class RpgState:
         entry_bonus_pct = GACHA_ENTRY_BONUS_CHANCE * 100
     
         weighted_parts = []
-        for token_amount, chance in GACHA_BONUS_TOKEN_DISTRIBUTION:
+        for token_amount, chance in GACHA_BONUS_XP_DISTRIBUTION:
             weighted_parts.append(f"{token_amount}: {chance * 100:.2f}%")
     
         await ctx.send(
             "Gacha loot table | "
-            f"RARE: {rare_pct:.2f}% (+{GACHA_RARE_XP} XP) | "
-            f"COMMON: {common_pct:.2f}% (+{GACHA_COMMON_XP} XP) | "
-            f"Bonus gacha proc: {bonus_proc_pct:.2f}% (awards 1-10) | "
+            f"RARE: {rare_pct:.2f}% (+{GACHA_RARE_XP} XP token + legendary class token) | "
+            f"COMMON: {common_pct:.2f}% (+{GACHA_COMMON_XP} XP token + base-class token) | "
+            f"Bonus XP proc: {bonus_proc_pct:.2f}% (awards 1-10 XP tokens) | "
             f"Bonus entry proc: {entry_bonus_pct:.3f}% | "
-            f"Bonus gacha split: {'; '.join(weighted_parts)}"
+            f"Bonus XP split: {'; '.join(weighted_parts)}"
         )
-    
+
+    @commands.command(name="tokens")
+    async def tokens(self, ctx, category: str | None = None):
+        username = ctx.author.name.lower()
+        user = self.state.get_user(username)
+        xp_balance = int(user.get("xp_token_balance", 0))
+        class_tokens = user.get("class_tokens", {})
+        category = (category or "").strip().lower()
+        if not category or category in ("all",):
+            summary = self._format_class_token_summary(class_tokens)
+            await ctx.send(
+                f"@{username} has {xp_balance} XP tokens stored. Class tokens: {summary}. "
+                "Use !redeem xp [amount|all] or !redeem class <name>."
+            )
+            return
+
+        if category in ("xp", "xp_tokens", "xp-token"):
+            await ctx.send(
+                f"@{username} has {xp_balance} XP tokens ready to redeem. "
+                "Use !redeem xp [amount|all] to add them to your current class."
+            )
+            return
+
+        if category in ("class", "class_tokens", "class-token"):
+            summary = self._format_class_token_summary(class_tokens)
+            await ctx.send(f"@{username} has class tokens: {summary}. Use !redeem class <name>.")
+            return
+
+        await ctx.send("Usage: !tokens [xp|class|all]")
+
+    @commands.command(name="redeem")
+    async def redeem(self, ctx, category: str | None = None, target: str | None = None):
+        username = ctx.author.name.lower()
+        user = self.state.get_user(username)
+        if not category:
+            await ctx.send("Usage: !redeem xp [amount|all] | !redeem class <name>")
+            return
+
+        token_type = category.strip().lower()
+        if token_type in ("xp", "xp_tokens", "xp-token"):
+            await self._redeem_xp_tokens(ctx, username, user, target)
+            return
+
+        if token_type in ("class", "class_tokens", "class-token"):
+            if not target:
+                await ctx.send("Usage: !redeem class <base|legendary class name>")
+                return
+            await self._redeem_class_token(ctx, username, user, target)
+            return
+
+        await ctx.send("Usage: !redeem xp [amount|all] | !redeem class <name>")
+
+    async def _redeem_xp_tokens(self, ctx, username: str, user: dict, amount: str | None):
+        xp_balance = int(user.get("xp_token_balance", 0))
+        if xp_balance <= 0:
+            await ctx.send(f"@{username} has no XP tokens to redeem.")
+            return
+
+        amount_str = (amount or "").strip().lower()
+        if not amount_str or amount_str == "all":
+            redeem_amount = xp_balance
+        else:
+            try:
+                redeem_amount = int(amount_str)
+            except ValueError:
+                await ctx.send("Usage: !redeem xp [amount|all]")
+                return
+            if redeem_amount <= 0:
+                await ctx.send("Redeem amount must be positive.")
+                return
+            redeem_amount = min(redeem_amount, xp_balance)
+
+        user["xp_token_balance"] = xp_balance - redeem_amount
+        user["xp"] = int(user.get("xp", 0)) + redeem_amount
+        await self._check_for_levelup(username, user)
+        self.state.save_state()
+        self._broadcast_state()
+        self._log_event(f"XP tokens redeemed: @{username} +{redeem_amount} XP.")
+        await ctx.send(
+            f"@{username} redeemed {redeem_amount} XP tokens. {user['xp_token_balance']} XP tokens remain."
+        )
+
+    async def _redeem_class_token(self, ctx, username: str, user: dict, class_query: str):
+        normalized = " ".join(class_query.strip().split()).lower()
+        target_name = CLASS_TOKEN_LOOKUP.get(normalized)
+        if not target_name:
+            await ctx.send("Unknown class token. Try one of the base or legendary classes.")
+            return
+
+        if user.get("class_name") == target_name:
+            await ctx.send(f"@{username} is already {target_name}.")
+            return
+
+        if self._is_user_revenant(user):
+            await ctx.send("Revenants cannot redeem class tokens right now.")
+            return
+
+        class_tokens = user.setdefault("class_tokens", {})
+        available = int(class_tokens.get(target_name, 0))
+        if available <= 0:
+            await ctx.send(f"@{username} has no {target_name} class tokens.")
+            return
+
+        total_xp = int(user.get("xp", 0))
+        current_level = self._get_level_from_xp(total_xp, user)
+        if user.get("class_name") == "Derp Clone" and current_level < 10:
+            await ctx.send("Derp Clone must reach level 10 before ascending.")
+            return
+
+        class_tokens[target_name] = available - 1
+        if class_tokens[target_name] <= 0:
+            del class_tokens[target_name]
+
+        user["class_name"] = target_name
+        user["base_class"] = target_name
+        user["class_tier"] = 1
+        self.state.save_state()
+        self._broadcast_state()
+        self._log_event(f"Class token redeemed: @{username} became {target_name}.")
+        await ctx.send(f"@{username} redeemed a {target_name} class token and is now {target_name}.")
+
     # ===== STREAMER CLASS COMMANDS (iAmDar only) =====
     
     @commands.command(name="totem")
@@ -8572,15 +10504,13 @@ class RpgState:
             await ctx.send("You already queued an action this turn.")
             return
         
-        # Check totem limit
+        # Check totem limit (total count only)
         totems = session.get("totems", [])
         active_totems = [t for t in totems if t.get("owner") == username and t.get("alive")]
         if len(active_totems) >= STREAMER_TOTEM_MAX_ACTIVE:
             self.logger.info("[RPG] totem blocked for %s: totem cap reached (%s)", username, len(active_totems))
             await ctx.send(f"You already have {STREAMER_TOTEM_MAX_ACTIVE} totems active!")
             return
-    
-        active_types = {t.get("buff_type") for t in active_totems}
     
         choice_map = {
             "killshot": "killshot",
@@ -8603,6 +10533,7 @@ class RpgState:
             "+1": "damage_1",
             "+1 dmg": "damage_1",
             "damage_1": "damage_1",
+            "sponge": "sponge",
             "xp": "xp_buff",
             "xp totem": "xp_buff",
             "xp buff": "xp_buff",
@@ -8619,10 +10550,7 @@ class RpgState:
             ("damage_1", TOTEM_DAMAGE_1_CHANCE),
             ("xp_buff", 0.25),  # 25% chance to see XP totem in random pool
         ]
-        available = [(t, w) for (t, w) in options if t not in active_types]
-        if not available:
-            await ctx.send("You already have every totem type active.")
-            return
+        available = list(options)
     
         normalized_choice = " ".join(str(totem_choice or "").strip().lower().split())
         chosen_type = choice_map.get(normalized_choice) if normalized_choice else None
@@ -8635,11 +10563,6 @@ class RpgState:
             return
     
         if chosen_type:
-            if chosen_type in active_types:
-                self.logger.info("[RPG] totem blocked for %s: choice already active (%s)", username, chosen_type)
-                chosen_label = self._get_totem_label({"buff_type": chosen_type, "owner": username})
-                await ctx.send(f"You already have a {chosen_label} totem active.")
-                return
             buff_type = chosen_type
         else:
             total_weight = sum(w for _, w in available)
@@ -8651,14 +10574,20 @@ class RpgState:
                     break
                 roll -= weight
         totem_id = f"totem_{username}_{_now_ts()}"
+        base_hp = TOTEM_BASE_HP
+        if buff_type == "sponge":
+            streamer_hp = max(1, int(user.get("hp_current", DEFAULT_PLAYER_HP)))
+            base_hp = streamer_hp * 2
         new_totem = {
             "id": totem_id,
             "owner": username,
-            "hp": 1,
-            "max_hp": 1,
+            "hp": base_hp,
+            "max_hp": base_hp,
             "alive": True,
             "buff_type": buff_type,
         }
+        if buff_type == "sponge":
+            new_totem["auto_taunt"] = True
         if buff_type == "xp_buff":
             new_totem["xp_bonus"] = _pick_xp_buff()
         session.setdefault("totems", []).append(new_totem)
@@ -8696,7 +10625,10 @@ class RpgState:
         username = ctx.author.name.lower()
         await self._play_media_fallback("rez", ctx)
         user = self.state.get_user(username)
-        if username != STREAMER_NAME.lower() or self._is_user_revenant(user):
+        class_name = str(user.get("class_name", "")).strip().lower()
+        if self._is_user_revenant(user):
+            return
+        if username != STREAMER_NAME.lower() and class_name != "healer":
             return
         
         if not target:
@@ -8780,69 +10712,98 @@ class RpgState:
     @commands.command(name="gamba")
     async def gamba(self, ctx):
         """Streamer skill: Chance-based AoE that can occasionally backfire on the streamer."""
-        self.logger.info("[RPG] gamba invoked by %s", ctx.author.name.lower())
-        username = ctx.author.name.lower()
-        user = self.state.get_user(username)
-        await self._play_media_fallback("gamba", ctx)
-        if self._is_user_revenant(user):
-            await ctx.send("Revenants cannot use Streamer skills.")
-            return
+        try:
+            self.logger.info("[RPG][gamba] invoked by %s", ctx.author.name.lower())
+            username = ctx.author.name.lower()
+            user = self.state.get_user(username)
+            await self._play_media_fallback("gamba", ctx)
+            if self._is_user_revenant(user):
+                self.logger.info("[RPG][gamba] blocked revenant user=%s", username)
+                await ctx.send("Revenants cannot use Streamer skills.")
+                return
 
-        class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "streamer" and username != STREAMER_NAME.lower():
-            await ctx.send("Only the Streamer can use gamba.")
-            return
+            class_name = str(user.get("class_name", "")).strip().lower()
+            if class_name != "streamer" and username != STREAMER_NAME.lower():
+                self.logger.info("[RPG][gamba] blocked class user=%s class=%s", username, class_name)
+                await ctx.send("Only the Streamer can use gamba.")
+                return
 
-        if not user.get("active_player"):
-            await ctx.send("You must join the battle first.")
-            return
+            if not user.get("active_player"):
+                self.logger.info("[RPG][gamba] blocked inactive user=%s", username)
+                await ctx.send("You must join the battle first.")
+                return
 
-        session = self.state.session()
+            session = self.state.session()
+            self.logger.info(
+                "[RPG][gamba] session phase=%s battle_active=%s action_end=%s action_secs=%s participants=%s queued=%s hp=%s",
+                session.get("phase"),
+                session.get("battle_active"),
+                session.get("action_window_end"),
+                session.get("action_window_seconds"),
+                len(session.get("participants", [])),
+                len(session.get("action_queue", [])),
+                user.get("hp_current"),
+            )
 
-        current_hp = int(user.get("hp_current", DEFAULT_PLAYER_HP))
-        if current_hp <= 0:
-            await ctx.send("You are knocked out and cannot act.")
-            return
+            current_hp = int(user.get("hp_current", DEFAULT_PLAYER_HP))
+            if current_hp <= 0:
+                self.logger.info("[RPG][gamba] blocked knocked_out user=%s hp=%s", username, current_hp)
+                await ctx.send("You are knocked out and cannot act.")
+                return
 
-        if not session.get("battle_active"):
-            await ctx.send("No active battle.")
-            return
-        if session.get("phase") != "action":
-            await ctx.send("Action window is closed.")
-            return
+            if not session.get("battle_active"):
+                self.logger.info("[RPG][gamba] blocked no_battle user=%s", username)
+                await ctx.send("No active battle.")
+                return
+            if session.get("phase") != "action":
+                self.logger.info("[RPG][gamba] blocked wrong_phase user=%s phase=%s", username, session.get("phase"))
+                await ctx.send("Action window is closed.")
+                return
 
-        participants = session.setdefault("participants", [])
-        if username not in participants:
-            await ctx.send("You must !join before acting.")
-            return
-    
-        action_queue = session.get("action_queue", [])
-        existing_entry = next((entry for entry in action_queue if entry.get("user") == username), None)
-    
-        if existing_entry:
-            previous_action = str(existing_entry.get("action", "action"))
-            existing_entry["action"] = "gamba"
-            existing_entry["damage"] = 0
-            existing_entry["target_index"] = None
-            existing_entry["ts"] = _now_ts()
-            action_msg = f"@{username} switched from {previous_action} to gamba! Will it pop off... or backfire?"
-            log_msg = f"Queued: @{username} switched from {previous_action} to gamba."
-        else:
-            session.setdefault("action_queue", []).append({
-                "user": username,
-                "action": "gamba",
-                "damage": 0,
-                "target_index": None,
-                "ts": _now_ts(),
-            })
-            action_msg = f"@{username} rolled gamba! Will it pop off... or backfire?"
-            log_msg = f"Queued: @{username} rolled gamba."
-    
-        self.state.save_state()
-        self._log_event(log_msg, battle=True)
-        await ctx.send(action_msg)
-        self._broadcast_state()
-        await self._resolve_turn_if_ready(session)
+            participants = session.setdefault("participants", [])
+            if username not in participants:
+                self.logger.info("[RPG][gamba] blocked not_joined user=%s participants=%s", username, participants)
+                await ctx.send("You must !join before acting.")
+                return
+
+            action_queue = session.get("action_queue", [])
+            existing_entry = next((entry for entry in action_queue if entry.get("user") == username), None)
+
+            if existing_entry:
+                previous_action = str(existing_entry.get("action", "action"))
+                existing_entry["action"] = "gamba"
+                existing_entry["damage"] = 0
+                existing_entry["target_index"] = None
+                existing_entry["ts"] = _now_ts()
+                action_msg = f"@{username} switched from {previous_action} to gamba! Will it pop off... or backfire?"
+                log_msg = f"Queued: @{username} switched from {previous_action} to gamba."
+            else:
+                session.setdefault("action_queue", []).append({
+                    "user": username,
+                    "action": "gamba",
+                    "damage": 0,
+                    "target_index": None,
+                    "ts": _now_ts(),
+                })
+                action_msg = f"@{username} rolled gamba! Will it pop off... or backfire?"
+                log_msg = f"Queued: @{username} rolled gamba."
+
+            self.state.save_state()
+            self._log_event(log_msg, battle=True)
+            self.logger.info(
+                "[RPG][gamba] queued user=%s queue_len=%s phase=%s action_end=%s action_secs=%s",
+                username,
+                len(session.get("action_queue", [])),
+                session.get("phase"),
+                session.get("action_window_end"),
+                session.get("action_window_seconds"),
+            )
+            await ctx.send(action_msg)
+            self._broadcast_state()
+            await self._resolve_turn_if_ready(session)
+        except Exception:
+            self.logger.exception("[RPG][gamba] command crashed", exc_info=True)
+            await ctx.send("gamba failed; check logs.")
     
     # ===== WARLOCK CLASS COMMANDS (fal_the_warlock only) =====
     
@@ -9737,6 +11698,31 @@ class RpgState:
             allow_media_fallback=False,
             silent_on_class_mismatch=True,
         )
+
+    @commands.command(name="napalm")
+    async def napalm(self, ctx, target_index: str = None):
+        self.logger.info("[RPG] napalm invoked by %s target=%s", ctx.author.name.lower(), target_index)
+        username = ctx.author.name.lower()
+        await self._play_media_fallback("napalm", ctx)
+        user = self.state.get_user(username)
+        session = self.state.session()
+
+        if not await self._can_use_buff_command(ctx, username, user, "napalm"):
+            return
+
+        if not await self._validate_buff_turn_rule(ctx, "napalm", session):
+            self.logger.info("[RPG] napalm blocked for %s: turn rule", username)
+            return
+
+        await self._queue_monster_action(
+            ctx,
+            "napalm",
+            BUFF_NAPALM_BASE_DAMAGE,
+            required_class="Buff",
+            target_index=target_index,
+            allow_media_fallback=False,
+            silent_on_class_mismatch=True,
+        )
     
     @commands.command(name="nuke")
     async def nuke(self, ctx):
@@ -9757,8 +11743,8 @@ class RpgState:
         if not bool(user.get("buff_franklin_crit_triggered")):
             await ctx.send("Nuke locked: Franklin has not landed a crit yet.")
             return
-        if not bool(user.get("buff_jdam_crit_triggered")):
-            await ctx.send("Nuke locked: JDAM has not landed a crit yet.")
+        if not (bool(user.get("buff_jdam_crit_triggered")) or bool(user.get("buff_napalm_crit_triggered"))):
+            await ctx.send("Nuke locked: JDAM or Napalm has not landed a crit yet.")
             return
     
         await self._queue_monster_action(
@@ -9961,7 +11947,7 @@ class RpgState:
         
         recipients = ", ".join(f"@{name}" for name in active_others)
         self._log_event(f"Coin: @{username} gave {entries} entries to {len(active_others)} players.")
-        await ctx.send(f"ðŸª™ @{username} flips coins! Everyone gets {entries} raffle entr{'y' if entries == 1 else 'ies'}! ({recipients})")
+        await ctx.send(f"@{username} flips coins! Everyone gets {entries} raffle entr{'y' if entries == 1 else 'ies'}! ({recipients})")
         self._broadcast_state()
     
     # ===== ALCHEMIST CLASS COMMANDS =====
@@ -10011,7 +11997,7 @@ class RpgState:
     
         self.state.save_state()
         self._log_event(f"Queued: @{username} mixed a volatile brew.", battle=True)
-        await ctx.send(f"ðŸ§ª @{username} mixes a brew!")
+        await ctx.send(f"@{username} mixes a volatile brew!")
         self._broadcast_state()
         await self._resolve_turn_if_ready(session)
     
@@ -10043,7 +12029,7 @@ class RpgState:
         user = self.state.get_user(username)
         await self._play_media_fallback("pray", ctx)
         class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "archangel" and username != ARCHANGEL_NAME.lower():
+        if class_name != "archangel":
             return
     
         session = self.state.session()
@@ -10097,7 +12083,7 @@ class RpgState:
         user = self.state.get_user(username)
         await self._play_media_fallback("touch", ctx)
         class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "archangel" and username != ARCHANGEL_NAME.lower():
+        if class_name != "archangel":
             return
         await self._queue_monster_action(
             ctx,
@@ -10116,7 +12102,7 @@ class RpgState:
         user = self.state.get_user(username)
         await self._play_media_fallback("expel", ctx)
         class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "archangel" and username != ARCHANGEL_NAME.lower():
+        if class_name != "archangel":
             return
     
         session = self.state.session()
@@ -10163,7 +12149,7 @@ class RpgState:
         
         self.state.save_state()
         self._log_event(f"Queued: @{username} expels with {power} power.", battle=True)
-        await ctx.send(f"âœ¨ @{username} prepares to expel with {power} power!")
+        await ctx.send(f"✨ @{username} prepares to expel with {power} power!")
         self._broadcast_state()
     
         await self._resolve_turn_if_ready(session)
@@ -10175,7 +12161,7 @@ class RpgState:
         user = self.state.get_user(username)
         await self._play_media_fallback("judgement", ctx)
         class_name = str(user.get("class_name", "")).strip().lower()
-        if class_name != "archangel" and username != ARCHANGEL_NAME.lower():
+        if class_name != "archangel":
             return
     
         session = self.state.session()
@@ -10251,7 +12237,7 @@ class RpgState:
         """Meatwad skill: Basic direct damage attack that scales with level/crit."""
         username = ctx.author.name.lower()
         user = self.state.get_user(username)
-        await self._maybe_trigger_media("gun", ctx)
+        await self._play_media_fallback("gun", ctx)
         class_name = str(user.get("class_name", "")).strip().lower()
         if class_name != "meatwad" and username not in MEATWAD_ALIASES:
             return
@@ -10340,7 +12326,7 @@ class RpgState:
         # Determine rarity label for display
         weight = selected_form[1]
         if weight <= 0.5:
-            rarity = "âœ¨ MYTHICAL âœ¨"
+            rarity = "✨ MYTHICAL ✨"
         elif weight <= 2.0:
             rarity = "ðŸ”® RARE"
         elif weight <= 5.0:

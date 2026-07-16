@@ -38,6 +38,7 @@ def format_playlist_for_sheets(songs: List[Dict]) -> List[Dict]:
             'Artist': song['artist'],
             'Duration': duration_str,
             'Play Count': song.get('play_count', 0),
+            'Last Played': song.get('last_played', ''),
             'YouTube URL': song.get('youtube_url', ''),
             'Request Command': f"!srx {song['number']}"
         }

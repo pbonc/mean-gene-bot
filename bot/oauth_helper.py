@@ -12,6 +12,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _get_redirect_uri() -> str:
+    """Return redirect URI used for Twitch OAuth authorization."""
+    redirect_uri = (os.getenv('TWITCH_REDIRECT_URI') or '').strip()
+    if redirect_uri:
+        return redirect_uri
+    # Keep a localhost default, but make it easy to override in .env.
+    return 'http://localhost:3000'
+
 def generate_oauth_url():
     """Generate the OAuth URL for getting a new token"""
     client_id = os.getenv('TWITCH_CLIENT_ID')
@@ -25,6 +34,7 @@ def generate_oauth_url():
         'chat:edit', 
         'whispers:read',
         'whispers:edit',
+        'moderator:read:followers',
         'channel:moderate',
         'channel:read:subscriptions',
         'bits:read',
@@ -32,7 +42,8 @@ def generate_oauth_url():
     ]
     
     scope_string = quote(' '.join(scopes))
-    redirect_uri = quote('http://localhost:3000')  # You'll need to add this to your Twitch app
+    redirect_uri_raw = _get_redirect_uri()
+    redirect_uri = quote(redirect_uri_raw, safe='')
     
     oauth_url = (
         f"https://id.twitch.tv/oauth2/authorize"
@@ -47,12 +58,17 @@ def generate_oauth_url():
     print(oauth_url)
     print("=" * 60)
     print()
+    print(f"Redirect URI in use: {redirect_uri_raw}")
+    print("⚠️ This MUST exactly match one OAuth Redirect URL configured in your Twitch app settings.")
+    print("⚠️ This is unrelated to Twitch username capitalization (meangenebot vs MeanGeneBot).")
+    print("   Twitch Dev Console: https://dev.twitch.tv/console/apps")
+    print()
     print("📋 Instructions:")
-    print("1. Copy the URL above")
-    print("2. Open it in a browser while logged into your MEANGENEBOT account")
+    print("1. Set TWITCH_REDIRECT_URI in .env to a redirect URL allowed in your Twitch app")
+    print("2. Open the URL above while logged into your MEANGENEBOT account")
     print("3. Authorize the application")
     print("4. Copy the 'code' parameter from the redirect URL")
-    print("5. Use that code to get your OAuth token")
+    print("5. Exchange that code for access/refresh tokens")
     print()
     print("🌐 Opening URL in browser...")
     

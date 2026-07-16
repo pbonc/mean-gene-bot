@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MLB Break Board</title>
+  <style>
+    @font-face {
+      font-family: 'BreakSans';
+      src: local('Trebuchet MS');
+    }
+
+    :root {
+      --bg: #0d1520;
+      --ink: #f6f8fb;
+      --accent: #7fd0ff;
+      --accent2: #ff8a3d;
+      --muted: #b3bfd2;
+      --border: #263346;
+      --tile: #182232;
+      --tile2: #243247;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(circle at top, #16314d 0%, #0f1724 38%, #08101b 100%);
+      color: var(--ink);
+      font-family: 'BreakSans', 'Trebuchet MS', Arial, sans-serif;
+    }
+
+    .frame {
+      max-width: 1800px;
+      margin: 12px auto;
+      padding: 18px 20px;
+      background: rgba(9, 16, 26, 0.94);
+      border: 3px solid var(--border);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .title {
+      font-size: 36px;
+      letter-spacing: 2px;
+      color: var(--accent);
+      font-weight: 900;
+      text-transform: uppercase;
+      text-shadow: 0 3px 16px rgba(127, 208, 255, 0.25);
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .btn {
+      padding: 8px 12px;
+      border: 2px solid var(--accent2);
+      background: rgba(255, 138, 61, 0.12);
+      color: var(--ink);
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 120ms ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 138, 61, 0.22);
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+
+    .legend .swatch {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      background: rgba(120, 143, 178, 0.25);
+    }
+
+    .legend .line {
+      height: 2px;
+      width: 40px;
+      background: var(--accent2);
+    }
+
+    .section-title {
+      font-size: 20px;
+      margin: 12px auto 6px;
+      padding-bottom: 4px;
+      border-bottom: 3px solid var(--accent2);
+      color: var(--accent);
+      font-weight: 700;
+      max-width: 1080px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      width: min(100%, 1080px);
+      margin: 10px auto 0;
+    }
+
+    #picklist {
+      font-size: 18px;
+      color: var(--ink);
+    }
+
+    .tile {
+      position: relative;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, var(--tile), var(--tile2));
+      border: 3px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+      color: #ffffff;
+    }
+
+    .tile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    .tile h4 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.15;
+      font-weight: 700;
+      color: inherit;
+      padding-right: 60px;
+    }
+
+    .tile small {
+      display: block;
+      margin-top: 4px;
+      color: inherit;
+      opacity: 0.94;
+    }
+
+    .tile .badge {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      font-size: 11px;
+      padding: 3px 6px;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .tile .assign {
+      display: block;
+      margin-top: 5px;
+      font-size: 12px;
+      color: inherit;
+      font-weight: 700;
+    }
+
+    .tile.struck h4,
+    .tile.struck small,
+    .tile.struck .assign {
+      text-decoration: line-through;
+      text-decoration-thickness: 4px;
+      text-decoration-color: rgba(220, 30, 30, 0.88);
+    }
+
+    .tile[data-team="Baltimore Orioles"] { background: linear-gradient(135deg, #df4601, #111111); color: #ffffff; }
+    .tile[data-team="Boston Red Sox"] { background: linear-gradient(135deg, #bd3039, #0d0d0d); color: #ffffff; }
+    .tile[data-team="New York Yankees"] { background: linear-gradient(135deg, #132448, #c4ced4); color: #ffffff; }
+    .tile[data-team="Tampa Bay Rays"] { background: linear-gradient(135deg, #092c5c, #7cbeff); color: #ffffff; }
+    .tile[data-team="Toronto Blue Jays"] { background: linear-gradient(135deg, #134a8e, #e8291c); color: #ffffff; }
+
+    .tile[data-team="Chicago White Sox"] { background: linear-gradient(135deg, #111111, #495057); color: #ffffff; }
+    .tile[data-team="Cleveland Guardians"] { background: linear-gradient(135deg, #0a2342, #e50022); color: #ffffff; }
+    .tile[data-team="Detroit Tigers"] { background: linear-gradient(135deg, #0c2340, #fa4616); color: #ffffff; }
+    .tile[data-team="Kansas City Royals"] { background: linear-gradient(135deg, #004687, #7c878e); color: #ffffff; }
+    .tile[data-team="Minnesota Twins"] { background: linear-gradient(135deg, #002b5c, #cf3341); color: #ffffff; }
+
+    .tile[data-team="Houston Astros"] { background: linear-gradient(135deg, #002d62, #eb6e1f); color: #ffffff; }
+    .tile[data-team="Los Angeles Angels"] { background: linear-gradient(135deg, #ba0021, #862633); color: #ffffff; }
+    .tile[data-team="Athletics"] { background: linear-gradient(135deg, #003831, #efb21e); color: #ffffff; }
+    .tile[data-team="Seattle Mariners"] { background: linear-gradient(135deg, #0c2c56, #005c5c); color: #ffffff; }
+    .tile[data-team="Texas Rangers"] { background: linear-gradient(135deg, #003278, #c0111f); color: #ffffff; }
+
+    .tile[data-team="Atlanta Braves"] { background: linear-gradient(135deg, #13274f, #ce1141); color: #ffffff; }
+    .tile[data-team="Miami Marlins"] { background: linear-gradient(135deg, #00a3e0, #f5d130); color: #ffffff; }
+    .tile[data-team="New York Mets"] { background: linear-gradient(135deg, #002d72, #ff5910); color: #ffffff; }
+    .tile[data-team="Philadelphia Phillies"] { background: linear-gradient(135deg, #e81828, #003278); color: #ffffff; }
+    .tile[data-team="Washington Nationals"] { background: linear-gradient(135deg, #ab0003, #14225a); color: #ffffff; }
+
+    .tile[data-team="Chicago Cubs"] { background: linear-gradient(135deg, #0e3386, #cc3433); color: #ffffff; }
+    .tile[data-team="Cincinnati Reds"] { background: linear-gradient(135deg, #c6011f, #111111); color: #ffffff; }
+    .tile[data-team="Milwaukee Brewers"] { background: linear-gradient(135deg, #12284b, #ffc52f); color: #ffffff; }
+    .tile[data-team="Pittsburgh Pirates"] { background: linear-gradient(135deg, #27251f, #fdb827); color: #ffffff; }
+    .tile[data-team="St. Louis Cardinals"] { background: linear-gradient(135deg, #c41e3a, #0c2340); color: #ffffff; }
+
+    .tile[data-team="Arizona Diamondbacks"] { background: linear-gradient(135deg, #a71930, #000000); color: #ffffff; }
+    .tile[data-team="Colorado Rockies"] { background: linear-gradient(135deg, #333366, #c4ced4); color: #ffffff; }
+    .tile[data-team="Los Angeles Dodgers"] { background: linear-gradient(135deg, #005a9c, #0c2c56); color: #ffffff; }
+    .tile[data-team="San Diego Padres"] { background: linear-gradient(135deg, #2f241d, #ffc425); color: #ffffff; }
+    .tile[data-team="San Francisco Giants"] { background: linear-gradient(135deg, #fd5a1e, #27251f); color: #ffffff; }
+
+    @media (max-width: 1200px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .frame {
+        padding: 14px;
+      }
+
+      .title {
+        font-size: 30px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tile h4 {
+        padding-right: 54px;
+      }
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="title">MLB Break Board</div>
+      <div class="subtitle">Click a team, enter a username, and apply. Reassignments replace the old owner, and you can clear a single team from the modal.</div>
+      <div class="controls">
+        <button class="btn" id="clear">Clear All</button>
+        <button class="btn" id="export">Export Hits</button>
+      </div>
+      <div class="legend">
+        <div class="swatch" title="Tile"></div>
+        <div class="line" title="Border"></div>
+        <div>Struck items = hit/claimed</div>
+      </div>
+    </header>
+
+    <section>
+      <div class="section-title">American League East</div>
+      <div class="grid" id="al-east"></div>
+    </section>
+
+    <section>
+      <div class="section-title">American League Central</div>
+      <div class="grid" id="al-central"></div>
+    </section>
+
+    <section>
+      <div class="section-title">American League West</div>
+      <div class="grid" id="al-west"></div>
+    </section>
+
+    <section>
+      <div class="section-title">National League East</div>
+      <div class="grid" id="nl-east"></div>
+    </section>
+
+    <section>
+      <div class="section-title">National League Central</div>
+      <div class="grid" id="nl-central"></div>
+    </section>
+
+    <section>
+      <div class="section-title">National League West</div>
+      <div class="grid" id="nl-west"></div>
+    </section>
+
+    <section>
+      <div class="section-title">Pick List (Grouped by Name)</div>
+      <div id="picklist"></div>
+    </section>
+
+    <footer>
+      MLB Break Board - Current MLB teams only, grouped by division.
+    </footer>
+  </div>
+
+  <div id="assignModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);">
+    <div style="max-width:520px; margin:10% auto; background:#141a26; border:3px solid var(--accent2); border-radius:8px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+      <div style="font-size:18px; color:var(--accent); margin-bottom:8px; font-weight:700;">Assign Picker</div>
+      <div id="assignTarget" style="color:var(--muted); margin-bottom:8px;">Selected: (none)</div>
+      <label for="pickerName" style="display:block; margin-bottom:4px; font-weight:600; color:var(--ink);">Picker name</label>
+      <input id="pickerName" list="pickerNames" type="text" style="width:100%; padding:8px; border:2px solid var(--border); background:#232c3d; color:var(--ink); border-radius:6px; box-sizing:border-box;" placeholder="Type name..." />
+      <datalist id="pickerNames"></datalist>
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button class="btn" id="assignClear">Clear Team</button>
+        <button class="btn" id="assignCancel">Cancel</button>
+        <button class="btn" id="assignSave" style="background:var(--accent2); color:#ffffff; border-color:var(--accent2);">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const AL_EAST = [
+      'Baltimore Orioles',
+      'Boston Red Sox',
+      'New York Yankees',
+      'Tampa Bay Rays',
+      'Toronto Blue Jays'
+    ];
+
+    const AL_CENTRAL = [
+      'Chicago White Sox',
+      'Cleveland Guardians',
+      'Detroit Tigers',
+      'Kansas City Royals',
+      'Minnesota Twins'
+    ];
+
+    const AL_WEST = [
+      'Houston Astros',
+      'Los Angeles Angels',
+      'Athletics',
+      'Seattle Mariners',
+      'Texas Rangers'
+    ];
+
+    const NL_EAST = [
+      'Atlanta Braves',
+      'Miami Marlins',
+      'New York Mets',
+      'Philadelphia Phillies',
+      'Washington Nationals'
+    ];
+
+    const NL_CENTRAL = [
+      'Chicago Cubs',
+      'Cincinnati Reds',
+      'Milwaukee Brewers',
+      'Pittsburgh Pirates',
+      'St. Louis Cardinals'
+    ];
+
+    const NL_WEST = [
+      'Arizona Diamondbacks',
+      'Colorado Rockies',
+      'Los Angeles Dodgers',
+      'San Diego Padres',
+      'San Francisco Giants'
+    ];
+
+    const hits = new Set();
+    let selectedKey = null;
+    const assignments = new Map();
+    const assignedNames = new Set();
+
+    function makeTile(label, division, league, note) {
+      const div = document.createElement('div');
+      div.className = 'tile';
+      const key = `${league} - ${division}:${label}`;
+      div.dataset.key = key;
+      div.dataset.team = label;
+
+      const h4 = document.createElement('h4');
+      h4.textContent = label;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = division;
+
+      div.appendChild(h4);
+      if (note) {
+        const sm = document.createElement('small');
+        sm.textContent = note;
+        div.appendChild(sm);
+      }
+      div.appendChild(badge);
+
+      div.addEventListener('click', () => {
+        selectedKey = key;
+        document.querySelectorAll('.tile').forEach(el => {
+          el.style.outline = '';
+        });
+        div.style.outline = '3px solid var(--accent2)';
+        openAssignModal(key);
+      });
+
+      return div;
+    }
+
+    function render() {
+      const divisions = {
+        'al-east': { teams: AL_EAST, league: 'American League', division: 'East' },
+        'al-central': { teams: AL_CENTRAL, league: 'American League', division: 'Central' },
+        'al-west': { teams: AL_WEST, league: 'American League', division: 'West' },
+        'nl-east': { teams: NL_EAST, league: 'National League', division: 'East' },
+        'nl-central': { teams: NL_CENTRAL, league: 'National League', division: 'Central' },
+        'nl-west': { teams: NL_WEST, league: 'National League', division: 'West' }
+      };
+
+      Object.entries(divisions).forEach(([id, group]) => {
+        const root = document.getElementById(id);
+        root.innerHTML = '';
+        group.teams.forEach(team => {
+          root.appendChild(makeTile(team, group.division, group.league, 'Team'));
+        });
+      });
+
+      restore();
+    }
+
+    function persist() {
+      try {
+        localStorage.setItem('mlb_hits', JSON.stringify([...hits]));
+      } catch {}
+      try {
+        const obj = {};
+        assignments.forEach((set, name) => {
+          obj[name] = [...set];
+        });
+        localStorage.setItem('mlb_assignments', JSON.stringify(obj));
+      } catch {}
+    }
+
+    function restore() {
+      try {
+        const raw = localStorage.getItem('mlb_hits');
+        if (raw) {
+          const arr = JSON.parse(raw);
+          arr.forEach(k => hits.add(k));
+          document.querySelectorAll('.tile').forEach(el => {
+            if (hits.has(el.dataset.key)) {
+              el.classList.add('struck');
+            }
+          });
+        }
+      } catch {}
+
+      try {
+        const rawA = localStorage.getItem('mlb_assignments');
+        if (rawA) {
+          const obj = JSON.parse(rawA);
+          Object.keys(obj).forEach(name => assignments.set(name, new Set(obj[name])));
+        }
+        syncAllTiles();
+        renderPickList();
+        refreshPickerNames();
+      } catch {}
+    }
+
+    document.getElementById('clear').addEventListener('click', () => {
+      hits.clear();
+      document.querySelectorAll('.tile').forEach(el => {
+        el.classList.remove('struck');
+        const assignEl = el.querySelector('.assign');
+        if (assignEl) {
+          assignEl.remove();
+        }
+      });
+      assignments.clear();
+      try {
+        localStorage.removeItem('mlb_hits');
+      } catch {}
+      try {
+        localStorage.removeItem('mlb_assignments');
+      } catch {}
+      renderPickList();
+      refreshPickerNames();
+    });
+
+    document.getElementById('export').addEventListener('click', () => {
+      const exportText = buildPickListExport();
+      navigator.clipboard.writeText(exportText).then(() => {
+        alert('Exported pick list to clipboard.');
+      }).catch(() => {
+        alert('Could not copy pick list to clipboard.');
+      });
+    });
+
+    const modal = document.getElementById('assignModal');
+    const assignTarget = document.getElementById('assignTarget');
+    const pickerNameInput = document.getElementById('pickerName');
+    const pickerNamesDL = document.getElementById('pickerNames');
+
+    function getAssignedName(key) {
+      for (const [name, set] of assignments.entries()) {
+        if (set.has(key)) {
+          return name;
+        }
+      }
+      return null;
+    }
+
+    function removeAssignment(key) {
+      [...assignments.entries()].forEach(([name, set]) => {
+        if (set.delete(key) && set.size === 0) {
+          assignments.delete(name);
+        }
+      });
+    }
+
+    function syncTileAssignment(key) {
+      const tile = document.querySelector(`.tile[data-key="${CSS.escape(key)}"]`);
+      if (!tile) {
+        return;
+      }
+
+      const assignedName = getAssignedName(key);
+      let assignEl = tile.querySelector('.assign');
+
+      if (assignedName) {
+        hits.add(key);
+        tile.classList.add('struck');
+        if (!assignEl) {
+          assignEl = document.createElement('span');
+          assignEl.className = 'assign';
+          tile.appendChild(assignEl);
+        }
+        assignEl.textContent = assignedName;
+        return;
+      }
+
+      hits.delete(key);
+      tile.classList.remove('struck');
+      if (assignEl) {
+        assignEl.remove();
+      }
+    }
+
+    function syncAllTiles() {
+      document.querySelectorAll('.tile').forEach(el => {
+        syncTileAssignment(el.dataset.key);
+      });
+    }
+
+    function openAssignModal(key) {
+      const assignedName = getAssignedName(key);
+      assignTarget.textContent = assignedName
+        ? `Selected: ${key} | Assigned to: ${assignedName}`
+        : 'Selected: ' + key;
+      pickerNameInput.value = '';
+      refreshPickerNames();
+      modal.style.display = 'block';
+      pickerNameInput.focus();
+    }
+
+    document.getElementById('assignCancel').addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('assignClear').addEventListener('click', () => {
+      if (!selectedKey) {
+        return;
+      }
+
+      removeAssignment(selectedKey);
+      syncTileAssignment(selectedKey);
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    document.getElementById('assignSave').addEventListener('click', () => {
+      const name = (pickerNameInput.value || '').trim();
+      if (!name) {
+        alert('Enter a picker name.');
+        return;
+      }
+
+      removeAssignment(selectedKey);
+      if (!assignments.has(name)) {
+        assignments.set(name, new Set());
+      }
+
+      const set = assignments.get(name);
+      set.add(selectedKey);
+      assignedNames.add(name);
+
+      syncTileAssignment(selectedKey);
+
+      persist();
+      renderPickList();
+      refreshPickerNames();
+      modal.style.display = 'none';
+    });
+
+    function renderPickList() {
+      const root = document.getElementById('picklist');
+      root.innerHTML = '';
+
+      const names = [...assignments.keys()].sort((a, b) => a.localeCompare(b));
+      if (names.length === 0) {
+        root.textContent = 'No picks yet.';
+        return;
+      }
+
+      names.forEach(name => {
+        const group = document.createElement('div');
+        group.style.marginBottom = '10px';
+
+        const heading = document.createElement('div');
+        heading.textContent = name;
+        heading.style.fontWeight = '700';
+        heading.style.color = 'var(--accent)';
+        heading.style.marginBottom = '6px';
+
+        const list = document.createElement('ul');
+        list.style.margin = '0';
+        list.style.paddingLeft = '18px';
+
+        [...assignments.get(name)].sort().forEach(k => {
+          const li = document.createElement('li');
+          li.textContent = k;
+          list.appendChild(li);
+        });
+
+        group.appendChild(heading);
+        group.appendChild(list);
+        root.appendChild(group);
+      });
+    }
+
+    function buildPickListExport() {
+      const names = [...assignments.keys()].sort((a, b) => a.localeCompare(b));
+      if (names.length === 0) {
+        return 'No picks yet.';
+      }
+
+      const lines = [];
+      names.forEach(name => {
+        const items = [...assignments.get(name)].sort();
+        lines.push(`${name}:`);
+        items.forEach(item => lines.push(`  - ${item}`));
+        lines.push('');
+      });
+
+      return lines.join('\n');
+    }
+
+    function refreshPickerNames() {
+      pickerNamesDL.innerHTML = '';
+      const names = new Set([...assignments.keys(), ...assignedNames]);
+      names.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        pickerNamesDL.appendChild(opt);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>

@@ -1,6 +1,26 @@
 import shutil
 import signal
 from bot.audio_manager import AudioManager
+
+_SINGLE_INSTANCE_MUTEX = None
+
+
+def _acquire_single_instance_lock() -> bool:
+    """Prevent multiple bot.main processes from running simultaneously on Windows."""
+    global _SINGLE_INSTANCE_MUTEX
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        mutex_name = "Local\\MeanGeneBotMainSingleton"
+        _SINGLE_INSTANCE_MUTEX = kernel32.CreateMutexW(None, False, mutex_name)
+        ERROR_ALREADY_EXISTS = 183
+        return kernel32.GetLastError() != ERROR_ALREADY_EXISTS
+    except Exception:
+        # If lock creation fails, do not block startup.
+        return True
+
+
 def backup_raffle_state():
     src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "raffle_state.json")
     if os.path.isfile(src):
@@ -16,6 +36,7 @@ import logging
 from datetime import datetime
 import importlib
 import asyncio
+import time
 from twitchio.ext import commands
 from dotenv import load_dotenv
 try:
@@ -94,25 +115,54 @@ TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 TWITCH_BOT_ID = os.getenv("TWITCH_BOT_ID")
 TWITCH_CHANNELS = os.getenv("TWITCH_CHANNELS", "").split(",")
 
+
+def _normalize_twitch_token(token: str | None) -> str | None:
+    if not token:
+        return token
+    return token.replace("oauth:", "")
+
+
+TWITCH_TOKEN = _normalize_twitch_token(TWITCH_TOKEN)
+
+YOUTUBE_PROMO_URL = "https://www.youtube.com/@iamdartv"
+YOUTUBE_PROMO_INTERVAL_SECONDS = 15 * 60
+YOUTUBE_PROMO_MESSAGE = f"Check out my YouTube channel: {YOUTUBE_PROMO_URL}"
+
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
+
+
+def _prune_old_log_files(log_dir: str, keep_count: int = 10):
+    """Keep only the newest log files to prevent unbounded growth."""
+    try:
+        log_files = [
+            os.path.join(log_dir, name)
+            for name in os.listdir(log_dir)
+            if name.lower().endswith(".log") and os.path.isfile(os.path.join(log_dir, name))
+        ]
+        log_files.sort(key=os.path.getmtime, reverse=True)
+        for old_log in log_files[keep_count:]:
+            os.remove(old_log)
+    except Exception as e:
+        # Logging may not be initialized yet; avoid crashing startup over cleanup.
+        print(f"[LOG CLEANUP] Failed to prune log files: {e}")
+
+
 LOG_FILE = os.path.join(LOG_DIR, f"bot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+DISABLED_COMMANDS = set()
 logging.basicConfig(
     filename=LOG_FILE,
     filemode='a',
     format='%(asctime)s %(levelname)s %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    force=True,
 )
+_prune_old_log_files(LOG_DIR, keep_count=10)
 
 class Bot(commands.Bot):
 
     # Track last AI usage per user (username: datetime)
     _ai_cooldowns = {}
-
-    def __init__(self):
-        super().__init__(token=TWITCH_TOKEN, client_id=TWITCH_CLIENT_ID, nick=TWITCH_BOT_ID, prefix='!', initial_channels=TWITCH_CHANNELS)
-        self.discord_client = None
-
 
     @commands.command(name='afk')
     async def afk(self, ctx):
@@ -127,14 +177,25 @@ class Bot(commands.Bot):
             await ctx.send("AFK ticker is already running.")
     async def afk_ticker_cycle_task(self):
         import random
-        from bot.twitch_stats import get_stream_info, get_sub_points
-        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
+        from bot.twitch_stats import get_stream_info
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement, read_follower_count
+        refresh_interval = 30
+        last_refresh = 0.0
+        cached_info = None
+        cached_raffle_odds = None
+        cached_raffle_enc = None
         while True:
             try:
-                info = await get_stream_info()
-                sub_points = await get_sub_points()
-                raffle_odds = await get_raffle_odds_message()
-                raffle_enc = await get_raffle_encouragement()
+                now = time.monotonic()
+                if (now - last_refresh) >= refresh_interval:
+                    cached_info = await get_stream_info()
+                    cached_raffle_odds = await get_raffle_odds_message()
+                    cached_raffle_enc = await get_raffle_encouragement()
+                    last_refresh = now
+
+                info = cached_info
+                raffle_odds = cached_raffle_odds
+                raffle_enc = cached_raffle_enc
                 # Truncate uptime to minutes
                 raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
                 if raw_uptime and raw_uptime != 'N/A':
@@ -154,6 +215,8 @@ class Bot(commands.Bot):
                 labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
                 latest_sub = "N/A"
                 latest_follower = "N/A"
+                follower_count = "N/A"
+                sub_points = "N/A"
                 try:
                     sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
                     if os.path.isfile(sub_path):
@@ -168,6 +231,17 @@ class Bot(commands.Bot):
                             latest_follower = f.read().strip() or "N/A"
                 except Exception:
                     pass
+                try:
+                    follower_count = read_follower_count()
+                except Exception:
+                    pass
+                try:
+                    sub_points_path = os.path.join(labels_dir, "total_subscriber_score.txt")
+                    if os.path.isfile(sub_points_path):
+                        with open(sub_points_path, "r", encoding="utf-8") as f:
+                            sub_points = f.read().strip() or "N/A"
+                except Exception:
+                    pass
                 # Build core info (ordered, no duplicates)
                 core_messages = [
                     f"Title: {info.get('title', 'N/A') if info else 'N/A'}",
@@ -177,8 +251,8 @@ class Bot(commands.Bot):
                     uptime_str,
                     f"Latest Subscriber: {latest_sub}",
                     f"Latest Follower: {latest_follower}",
-                    f"Followers: {info.get('followers', 'N/A') if info else 'N/A'}",
-                    f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
+                    f"Followers: {follower_count}",
+                    f"Sub Points: {sub_points}"
                 ]
                 # Get extra messages (modnews, quotes, derpism, tics, weather)
                 extra_messages = await get_ticker_messages()
@@ -200,15 +274,18 @@ class Bot(commands.Bot):
                 # Monitor performance; if this proves noisy we can dial back to 2-3s
                 # or implement a burst-on-start plus a steadier cadence.
                 await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                logging.info("[AFK TICKER] Cancelled via shutdown request")
+                raise
             except Exception as e:
                 logging.error(f"[AFK TICKER ERROR] {e}", exc_info=True)
+
     async def ticker_cycle_task(self):
-        from bot.twitch_stats import get_stream_info, get_sub_points
-        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement
+        from bot.twitch_stats import get_stream_info
+        from bot.labels_stats import get_ticker_messages, get_raffle_odds_message, get_raffle_encouragement, read_follower_count
         while True:
             try:
                 info = await get_stream_info()
-                sub_points = await get_sub_points()
                 raffle_odds = await get_raffle_odds_message()
                 raffle_enc = await get_raffle_encouragement()
                 raw_uptime = info.get('uptime', 'N/A') if info else 'N/A'
@@ -228,6 +305,8 @@ class Bot(commands.Bot):
                 labels_dir = os.path.join(workspace_root, "bot", "data", "labels")
                 latest_sub = "N/A"
                 latest_follower = "N/A"
+                follower_count = "N/A"
+                sub_points = "N/A"
                 try:
                     sub_path = os.path.join(labels_dir, "most_recent_resubscriber.txt")
                     if os.path.isfile(sub_path):
@@ -240,6 +319,17 @@ class Bot(commands.Bot):
                     if os.path.isfile(follower_path):
                         with open(follower_path, "r", encoding="utf-8") as f:
                             latest_follower = f.read().strip() or "N/A"
+                except Exception:
+                    pass
+                try:
+                    follower_count = read_follower_count()
+                except Exception:
+                    pass
+                try:
+                    sub_points_path = os.path.join(labels_dir, "total_subscriber_score.txt")
+                    if os.path.isfile(sub_points_path):
+                        with open(sub_points_path, "r", encoding="utf-8") as f:
+                            sub_points = f.read().strip() or "N/A"
                 except Exception:
                     pass
                 # Get extra messages (first three are always: encouragement, jackpot, odds, then follower count)
@@ -258,14 +348,17 @@ class Bot(commands.Bot):
                 follower_msg = next((m for m in extra_messages if m.startswith('Followers:')), None)
                 if follower_msg:
                     always_present.append(follower_msg)
+                else:
+                    always_present.append(f"Followers: {follower_count}")
 
                 # Core info: always present, never deduplicated out (but skip title)
                 core_messages = [
                     f"Latest Subscriber: {latest_sub}",
                     f"Latest Follower: {latest_follower}",
+                    f"Followers: {follower_count}",
                     f"Viewers: {info.get('viewers', 'N/A') if info else 'N/A'}",
                     uptime_str,
-                    f"Sub Points: {sub_points if sub_points is not None else 'N/A'}"
+                    f"Sub Points: {sub_points}"
                 ]
                 # Add label stats (top b/g/d, top 3 g, etc.)
                 from bot.labels_stats import read_label
@@ -327,6 +420,9 @@ class Bot(commands.Bot):
                     await broadcast_overlay_message({"type": "ticker", "text": full_ticker})
                 else:
                     await broadcast_overlay_message({"type": "ticker", "text": "No ticker data available."})
+            except asyncio.CancelledError:
+                logging.info("[TICKER] Cancelled via shutdown request")
+                raise
             except Exception as e:
                 logging.error(f"[TICKER ERROR] {e}", exc_info=True)
             # Wait ~60 seconds between full-ticker broadcasts to overlays
@@ -367,8 +463,13 @@ class Bot(commands.Bot):
             initial_channels=TWITCH_CHANNELS
         )
         self.discord_client = None
+        self._last_twitch_activity = time.monotonic()
+
+    def _touch_twitch_activity(self):
+        self._last_twitch_activity = time.monotonic()
 
     async def event_ready(self):
+        self._touch_twitch_activity()
         print(f"Logged in as | {self.nick}")
         # Don't broadcast an initial ticker on startup — overlays should
         # receive only canonical ticker strings produced by the ticker task.
@@ -376,6 +477,7 @@ class Bot(commands.Bot):
         logging.info("Bot ready — ticker task will produce overlay messages shortly.")
 
     async def event_message(self, message):
+        self._touch_twitch_activity()
         author_name = message.author.name if message.author else "Unknown"
         print(f"Message from {author_name}: {message.content}")
         try:
@@ -395,6 +497,9 @@ class Bot(commands.Bot):
                 parts = content.split()
                 command_name = parts[0][1:].lower() if parts else ""
                 command_args = parts[1:] if len(parts) > 1 else []
+                if command_name in DISABLED_COMMANDS:
+                    logging.info("[COMMAND] Blocked disabled command '%s' from %s", command_name, author_name)
+                    return
                 log_event(
                     "command_issued",
                     {
@@ -417,11 +522,11 @@ class Bot(commands.Bot):
             if any(name in content_lower for name in bot_names):
                 # AI functionality temporarily disabled. Code is preserved for future reactivation.
                 return
-        # Default: pass to cogs/commands
-        if message.author:
-            await self.handle_commands(message)
+        # Default: pass to base event so listeners/cogs fire
+        await super().event_message(message)
 
     async def event_command(self, ctx):
+        self._touch_twitch_activity()
         try:
             if ctx and ctx.command:
                 log_event(
@@ -437,6 +542,7 @@ class Bot(commands.Bot):
             logging.error(f"[TELEMETRY] Failed to log event_command: {exc}")
 
     async def event_command_error(self, ctx, error):
+        self._touch_twitch_activity()
         try:
             log_event(
                 "command_error",
@@ -452,9 +558,50 @@ class Bot(commands.Bot):
         except Exception as exc:
             logging.error(f"[TELEMETRY] Failed to log event_command_error: {exc}")
 
+    async def _send_youtube_promo(self, source: str = "manual", skip_channel_name: str | None = None):
+        sent_count = 0
+        channels = list(getattr(self, "connected_channels", None) or [])
+        for channel in channels:
+            channel_name = getattr(channel, "name", None)
+            if skip_channel_name and channel_name == skip_channel_name:
+                continue
+            try:
+                await channel.send(YOUTUBE_PROMO_MESSAGE)
+                sent_count += 1
+            except Exception as exc:
+                logging.warning("[YT PROMO] Failed to send in channel %s: %s", channel_name or "unknown", exc)
+
+        if sent_count == 0:
+            logging.info("[YT PROMO] Skipped (%s): no connected channels", source)
+        else:
+            logging.info("[YT PROMO] Sent (%s) to %s channel(s)", source, sent_count)
+
+        return sent_count
+
+    async def youtube_promo_cycle_task(self):
+        while True:
+            try:
+                await asyncio.sleep(YOUTUBE_PROMO_INTERVAL_SECONDS)
+                await self._send_youtube_promo(source="timer")
+            except asyncio.CancelledError:
+                logging.info("[YT PROMO] Cancelled via shutdown request")
+                raise
+            except Exception as exc:
+                logging.error("[YT PROMO] Unexpected error: %s", exc, exc_info=True)
+
     @commands.command(name='hello')
     async def hello(self, ctx):
         await ctx.send(f"Hello, {ctx.author.name}!")
+
+    @commands.command(name="yt")
+    async def yt_command(self, ctx):
+        await ctx.send(YOUTUBE_PROMO_MESSAGE)
+        sent_elsewhere = await self._send_youtube_promo(
+            source=f"command:{getattr(ctx.author, 'name', 'unknown')}",
+            skip_channel_name=getattr(getattr(ctx, "channel", None), "name", None),
+        )
+        if sent_elsewhere > 0:
+            logging.info("[YT PROMO] !yt triggered by %s; command message sent plus %s channel broadcast(s)", getattr(ctx.author, "name", "unknown"), sent_elsewhere)
 
     @commands.command(name='reviewlog', aliases=('latestlog',))
     async def reviewlog(self, ctx, count: str = "20", event_type: str = None):
@@ -508,65 +655,7 @@ class Bot(commands.Bot):
         if not ctx.author.is_mod:
             await ctx.send("Only mods can use this command.")
             return
-        try:
-            import sys
-            try:
-                from bot.commands.media_overlay import RESERVED_RPG_COMMANDS
-            except Exception:
-                RESERVED_RPG_COMMANDS = set()
-
-            rpg_cog_command_names = {
-                name
-                for name, command_obj in list(self.commands.items())
-                if getattr(command_obj, "cog", None)
-                and getattr(command_obj.cog, "__class__", type(None)).__name__ == "RpgCog"
-            }
-            for command_name in rpg_cog_command_names:
-                try:
-                    self.remove_command(command_name)
-                except Exception:
-                    pass
-
-            if self.get_cog("RpgCog"):
-                try:
-                    self.remove_cog("RpgCog")
-                except Exception:
-                    pass
-
-            # Remove any stale commands that may have been dynamically registered
-            # (e.g., media overlay command collisions like !crack).
-            for command_name in RESERVED_RPG_COMMANDS:
-                try:
-                    self.remove_command(command_name)
-                except Exception:
-                    pass
-
-            if "bot.commands.rpg_cog" in sys.modules:
-                del sys.modules["bot.commands.rpg_cog"]
-            module = importlib.import_module("bot.commands.rpg_cog")
-            if hasattr(module, "prepare"):
-                module.prepare(self)
-            reload_logger = logging.getLogger("reloadrpg")
-            command_names = sorted(self.commands.keys())
-            reserved_present = sorted(
-                name for name in RESERVED_RPG_COMMANDS if name in self.commands
-            )
-            rpg_cog_commands = sorted(
-                name
-                for name, command_obj in self.commands.items()
-                if getattr(command_obj, "cog", None)
-                and getattr(command_obj.cog, "__class__", type(None)).__name__ == "RpgCog"
-            )
-            reload_logger.info(
-                "RPG reload complete: %d commands registered, reserved present=%s",
-                len(command_names),
-                reserved_present,
-            )
-            reload_logger.info("RPG cog commands after reload: %s", rpg_cog_commands)
-            reload_logger.debug("All bot commands after reload: %s", command_names)
-            await ctx.send("RPG cog reloaded.")
-        except Exception as exc:
-            await ctx.send(f"RPG reload failed: {type(exc).__name__}: {exc}")
+        await ctx.send("RPG functionality has been archived; reload is no longer supported in this repository.")
 
 if DISCORD_AVAILABLE:
     class DiscordBot(discord_commands.Bot):
@@ -598,6 +687,10 @@ else:
             print(f'[DISCORD DISABLED] Would send: {message}')
 
 async def main():
+    if not _acquire_single_instance_lock():
+        print("[BOT] Another bot.main instance is already running. Exiting this duplicate process.")
+        return
+
     # Backup raffle state at startup
     backup_raffle_state()
 
@@ -632,6 +725,29 @@ async def main():
         success, auth_msg = auto_refresh_if_needed()
         if success:
             print(f"[BOT] Authentication OK: {auth_msg}")
+            # Re-read environment after possible refresh and normalize token format.
+            load_dotenv(override=True)
+            global TWITCH_TOKEN
+            TWITCH_TOKEN = _normalize_twitch_token(os.getenv("TWITCH_OAUTH_TOKEN"))
+
+            # Optional diagnostics: warn when token user does not match configured bot identity.
+            try:
+                from bot.oauth_refresh import get_twitch_token_details
+
+                token_ok, token_details = get_twitch_token_details(TWITCH_TOKEN)
+                if token_ok:
+                    token_login = (token_details.get("login") or "").strip().lower()
+                    configured_bot = (TWITCH_BOT_ID or "").strip().lower()
+                    if configured_bot and token_login and configured_bot != token_login:
+                        print(
+                            "[BOT] WARNING: TWITCH_BOT_ID does not match token owner "
+                            f"(configured='{configured_bot}', token='{token_login}')."
+                        )
+                        print("[BOT] Commands may fail if bot identity and token owner differ.")
+                else:
+                    print(f"[BOT] Token detail check warning: {token_details}")
+            except Exception as token_diag_error:
+                print(f"[BOT] Token diagnostics unavailable: {token_diag_error}")
         else:
             print(f"[BOT] Authentication issue: {auth_msg}")
             print("[BOT] Continuing startup, but Twitch connection may fail...")
@@ -639,9 +755,88 @@ async def main():
         print(f"[BOT] Error checking authentication: {auth_error}")
         print("[BOT] Continuing startup, but Twitch connection may fail...")
 
+    async def start_overlay_server_resilient():
+        host = (os.getenv("OVERLAY_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+        configured_port = (os.getenv("OVERLAY_PORT") or "8080").strip()
+        try:
+            base_port = int(configured_port)
+        except ValueError:
+            print(f"[OVERLAY] Invalid OVERLAY_PORT '{configured_port}', defaulting to 8080")
+            base_port = 8080
+
+        for port in (base_port, base_port + 1, base_port + 2):
+            try:
+                await start_overlay_server(host=host, port=port)
+                return
+            except OSError as overlay_error:
+                # WinError 10048: address already in use.
+                if getattr(overlay_error, "errno", None) == 10048:
+                    print(f"[OVERLAY] Port {port} is already in use, trying next port...")
+                    continue
+                raise
+
+        print(
+            f"[OVERLAY] Disabled: no available ports in range {base_port}-{base_port + 2}. "
+            "Twitch/Discord bot will continue without overlay server."
+        )
+
     # Start the overlay server in the background
-    overlay_task = asyncio.create_task(start_overlay_server())
-    
+    overlay_task = asyncio.create_task(start_overlay_server_resilient())
+    discord_bot = None
+    bot = None
+    ticker_task = None
+    afk_ticker_task = None
+    youtube_promo_task = None
+    connection_watchdog_task = None
+
+    async def _force_close_twitch(bot_instance):
+        connection = getattr(bot_instance, "_connection", None)
+        if connection:
+            keeper = getattr(connection, "_keeper", None)
+            if keeper and not getattr(keeper, "cancelled", lambda: False)():
+                keeper.cancel()
+            cleaner = getattr(connection, "_task_cleaner", None)
+            if cleaner and not cleaner.done():
+                cleaner.cancel()
+            for task in getattr(connection, "_background_tasks", []):
+                if task and not task.done():
+                    task.cancel()
+            websocket = getattr(connection, "_websocket", None)
+            if websocket and not websocket.closed:
+                await websocket.close()
+        http = getattr(bot_instance, "_http", None)
+        session = getattr(http, "session", None)
+        if session and not session.closed:
+            await session.close()
+
+    async def shutdown_cleanup():
+        print("[BOT] Cleaning up bot connections...")
+        if discord_bot:
+            try:
+                await discord_bot.close()
+            except Exception as close_error:
+                print(f"[DISCORD] Error during close: {close_error}")      
+        try:
+            if bot:
+                await bot.close()
+        except AttributeError as close_error:
+            print(f"[BOT] Twitch client already cleaned up: {close_error}")
+        except Exception as close_error:
+            print(f"[BOT] Error while closing Twitch bot: {close_error}")  
+        finally:
+            if bot:
+                await _force_close_twitch(bot)
+        for extra_task in (overlay_task, ticker_task, afk_ticker_task, youtube_promo_task, connection_watchdog_task):
+            if extra_task and not extra_task.done():
+                extra_task.cancel()
+        for extra_task in (overlay_task, ticker_task, afk_ticker_task, youtube_promo_task, connection_watchdog_task):
+            if not extra_task:
+                continue
+            try:
+                await extra_task
+            except asyncio.CancelledError:
+                pass
+
     # Create and start the bots
     try:
         print("[BOT] Initializing TwitchIO Bot...")
@@ -652,6 +847,7 @@ async def main():
         import traceback
         traceback.print_exc()
         print("[BOT] Bot initialization failed. Exiting.")
+        await shutdown_cleanup()
         raise
     
     # Initialize Discord bot if token is provided
@@ -674,58 +870,183 @@ async def main():
     # Start ticker cycle tasks
     ticker_task = asyncio.create_task(bot.ticker_cycle_task())
     afk_ticker_task = asyncio.create_task(bot.afk_ticker_cycle_task())
+    youtube_promo_task = asyncio.create_task(bot.youtube_promo_cycle_task())
 
     # Automatically load all cogs in bot/commands/
     commands_dir = os.path.join(os.path.dirname(__file__), "commands")
+    manual_exclusions = {"__init__.py", "base_command.py", "analytics_cog.py"}
+    archived_prefixes = ("rpg_cog",)
     if os.path.isdir(commands_dir):
         for filename in os.listdir(commands_dir):
-            if filename.endswith(".py") and filename not in ("__init__.py", "base_command.py", "analytics_cog.py"):
-                modulename = f"bot.commands.{filename[:-3]}"
-                try:
-                    print(f"[COG] Loading {modulename}...")
-                    module = importlib.import_module(modulename)
-                    if hasattr(module, "prepare"):
-                        module.prepare(bot)
-                        print(f"[COG] ✅ {filename} loaded successfully")
-                    else:
-                        print(f"[COG] ⚠️ {filename} has no prepare function")
-                except Exception as e:
-                    print(f"[COG] ❌ Failed to load {filename}: {e}")
-                    import traceback
-                    traceback.print_exc()
+            if not filename.endswith(".py"):
+                continue
+            if filename in manual_exclusions:
+                continue
+            if any(filename.startswith(prefix) for prefix in archived_prefixes):
+                print(f"[COG] Skipping archived cog {filename}")
+                continue
+            modulename = f"bot.commands.{filename[:-3]}"
+            try:
+                print(f"[COG] Loading {modulename}...")
+                module = importlib.import_module(modulename)
+                if hasattr(module, "prepare"):
+                    module.prepare(bot)
+                    print(f"[COG] ✅ {filename} loaded successfully")
+                else:
+                    print(f"[COG] ⚠️ {filename} has no prepare function")
+            except Exception as e:
+                print(f"[COG] ❌ Failed to load {filename}: {e}")
+                import traceback
+                traceback.print_exc()
     # Load modnews cog
     from bot.commands.modnews import prepare as modnews_prepare
     modnews_prepare(bot)
 
-    # Register signal handler for graceful shutdown (Ctrl-C)
+    main_task_ref = {"task": None, "shutting_down": False}
+
+    def cancel_main_task():
+        task = main_task_ref.get("task")
+        if task and not task.done():
+            task.cancel()
+
     def shutdown_handler(signum, frame):
+        if main_task_ref.get("shutting_down"):
+            return
+        main_task_ref["shutting_down"] = True
         print("[BOT] Caught shutdown signal, backing up raffle state...")
-        backup_raffle_state()
-        exit(0)
+        try:
+            backup_raffle_state()
+        except Exception as err:
+            print(f"[BOT] Failed to back up raffle state: {err}")
+        loop = asyncio.get_event_loop()
+        loop.call_soon_threadsafe(cancel_main_task)
+
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
+    # Helper that suppresses the TwitchIO keeper race on shutdown
+    async def run_bot_start(coro_factory, label):
+        try:
+            await coro_factory()
+            if not main_task_ref.get("shutting_down"):
+                raise RuntimeError(f"{label} stopped unexpectedly")
+        except AttributeError as err:
+            err_msg = err.args[0] if err.args else ""
+            if "NoneType' object has no attribute 'cancel'" in err_msg:
+                print(f"[BOT] {label} shutdown race suppressed: {err_msg}")
+                return
+            raise
+
+    async def twitch_connection_watchdog():
+        """Detect sustained Twitch disconnects without fighting TwitchIO reconnects."""
+        disconnected_since = None
+        reconnect_grace_seconds = max(
+            60,
+            int(os.getenv("TWITCH_RECONNECT_GRACE_SECONDS", "300")),
+        )
+        while True:
+            await asyncio.sleep(30)
+            if main_task_ref.get("shutting_down") or not bot:
+                continue
+            try:
+                idle_for = time.monotonic() - getattr(bot, "_last_twitch_activity", time.monotonic())
+                channels = getattr(bot, "connected_channels", None) or []
+                connection = getattr(bot, "_connection", None)
+                websocket = getattr(connection, "_websocket", None) if connection else None
+                websocket_closed = bool(websocket and getattr(websocket, "closed", False))
+
+                unhealthy_reason = None
+                if websocket_closed:
+                    unhealthy_reason = "Twitch websocket is closed"
+                elif idle_for > 180 and not channels:
+                    unhealthy_reason = f"No connected Twitch channels for {int(idle_for)}s"
+
+                if unhealthy_reason:
+                    now = time.monotonic()
+                    if disconnected_since is None:
+                        disconnected_since = now
+                        logging.warning(
+                            "[WATCHDOG] %s; allowing TwitchIO up to %ss to reconnect",
+                            unhealthy_reason,
+                            reconnect_grace_seconds,
+                        )
+                        continue
+
+                    disconnected_for = now - disconnected_since
+                    if disconnected_for >= reconnect_grace_seconds:
+                        raise RuntimeError(
+                            f"{unhealthy_reason}; reconnect grace exceeded "
+                            f"({int(disconnected_for)}s)"
+                        )
+                    continue
+
+                if disconnected_since is not None:
+                    logging.info("[WATCHDOG] Twitch connection recovered")
+                    disconnected_since = None
+            except Exception as watchdog_error:
+                logging.error("[WATCHDOG] Twitch health check failed: %s", watchdog_error, exc_info=True)
+                raise
+
+    def reload_twitch_token_for_retry():
+        global TWITCH_TOKEN
+        load_dotenv(override=True)
+        latest_token = os.getenv("TWITCH_OAUTH_TOKEN")
+        if not latest_token:
+            return False, "TWITCH_OAUTH_TOKEN is missing after refresh"
+
+        # Keep a normalized token shape for TwitchIO internals.
+        normalized_token = latest_token.replace("oauth:", "")
+        TWITCH_TOKEN = normalized_token
+
+        if bot:
+            http_client = getattr(bot, "_http", None)
+            if http_client is not None:
+                http_client.token = normalized_token
+
+            connection = getattr(bot, "_connection", None)
+            if connection is not None:
+                connection._token = normalized_token
+
+        return True, "Runtime token reloaded"
+
     # Start both bots concurrently
     print("[BOT] Starting Twitch bot...")
-    tasks = [bot.start()]
+    tasks = [run_bot_start(bot.start, "Twitch bot")]
     
     if discord_bot:
         print("[BOT] Adding Discord bot to tasks...")
-        tasks.append(discord_bot.start(DISCORD_TOKEN))
+        tasks.append(run_bot_start(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot"))
     
+    connection_watchdog_task = asyncio.create_task(twitch_connection_watchdog())
+
     print(f"[BOT] Running {len(tasks)} bot tasks + overlay + ticker...")
+    async def create_main_gather(task_group):
+        gather_task = asyncio.gather(
+            *task_group,
+            overlay_task,
+            ticker_task,
+            afk_ticker_task,
+            youtube_promo_task,
+            connection_watchdog_task,
+        )
+        main_task_ref["task"] = gather_task
+        return gather_task
+
     # Run all tasks concurrently, with a single automatic retry on auth errors
     try:
         print("[BOT] Starting overlay server...")
         print("[BOT] Starting ticker tasks...")
-        await asyncio.gather(*tasks, overlay_task, ticker_task)
+        main_gather = await create_main_gather(tasks)
+        await main_gather
+    except asyncio.CancelledError:
+        print("[BOT] Main gather cancelled due to shutdown signal.")
     except Exception as e:
         error_msg = str(e)
         print(f"[BOT] Error in main gather: {error_msg}")
         logging.error(f"[BOT] Main gather error: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
-        
+
         # Check if it's an authentication error and try to refresh token
         if "Invalid or unauthorized Access Token" in error_msg or "401" in error_msg:
             print("[BOT] Detected authentication error, attempting token refresh...")
@@ -733,26 +1054,38 @@ async def main():
                 success, refresh_msg = auto_refresh_if_needed()
                 if success:
                     print(f"[BOT] Token refresh successful: {refresh_msg}")
+                    token_reload_ok, token_reload_msg = reload_twitch_token_for_retry()
+                    if token_reload_ok:
+                        print(f"[BOT] {token_reload_msg}")
+                    else:
+                        print(f"[BOT] Token reload warning: {token_reload_msg}")
                     # Attempt an automatic restart of bot tasks once
                     print("[BOT] Attempting automatic restart of bot tasks...")
                     try:
                         # Recreate tasks to avoid reusing failed coroutines
-                        new_tasks = [bot.start()]
+                        new_tasks = [run_bot_start(bot.start, "Twitch bot retry")]
                         if discord_bot:
-                            new_tasks.append(discord_bot.start(DISCORD_TOKEN))
-                        await asyncio.gather(*new_tasks, overlay_task, ticker_task)
+                            new_tasks.append(run_bot_start(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot retry"))
+                        retry_gather = await create_main_gather(new_tasks)
+                        await retry_gather
                         return
                     except Exception as retry_error:
                         print(f"[BOT] Retry failed: {retry_error}")
                         logging.error(f"[BOT] Retry gather error: {retry_error}", exc_info=True)
                         print("[BOT] Please restart the bot to use the refreshed token.")
+                        raise
                 else:
                     print(f"[BOT] Token refresh failed: {refresh_msg}")
                     print("[BOT] Please manually refresh your Twitch OAuth token.")
+                    raise RuntimeError(refresh_msg)
             except Exception as refresh_error:
                 print(f"[BOT] Error during token refresh: {refresh_error}")
-        
-        raise
+                raise
+
+        if not main_task_ref.get("shutting_down"):
+            raise
+    finally:
+        await shutdown_cleanup()
 
 if __name__ == "__main__":
     try:
