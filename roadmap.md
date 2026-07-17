@@ -44,6 +44,8 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Objective:** Make the old and new RPG pathways unambiguous before implementation begins.
 
+**Status:** Complete — 2026-07-17
+
 - Treat `archive/rpg/` as read-only historical material.
 - Add an archive manifest classifying old concepts as keep, reinterpret, or retire.
 - Confirm that v2 will not import `archive/rpg/rpg_cog.py` or restore it as an active cog.
@@ -276,3 +278,12 @@ Add new ideas here before scheduling them. Each idea should eventually state the
 
 Move completed sprint summaries here with the completion date, relevant commit or pull request, and any deferred follow-up work.
 
+## 2026-07-17: RPG Sprint 0 — Archive boundary and decisions
+
+- Added a read-only archive manifest with keep, reinterpret, and retire decisions.
+- Established `bot/rpg_v2/` without dependencies on the archived RPG, Twitch, OBS, or file storage.
+- Added version 1 player, runtime snapshot, and sequenced animation-event contracts.
+- Locked the initial class roster, four-friendly/three-enemy limits, and ambient automatic battle phases.
+- Updated the detailed RPG specification to use chat for presence rather than required combat commands.
+- Added contract tests for defaults, retired legacy fields, class validation, actor limits, and ordered events.
+- Deferred the one-way legacy migration until the v2 persistence schema and progression policy are proven in later sprints.

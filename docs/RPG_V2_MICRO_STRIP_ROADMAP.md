@@ -2,9 +2,9 @@
 
 ## Product statement
 
-Stream RPG v2 is a persistent, transparent OBS browser overlay that stages small JRPG-style battles along the bottom of the stream. It should feel alive without competing with the stream. Viewers join once, make at most one choice per round, and see their character act on-screen. Missing choices resolve automatically.
+Stream RPG v2 is a persistent, transparent OBS browser overlay that stages small JRPG-style battles along the bottom of the stream. It should feel alive without competing with the stream. Viewers join once, ordinary chat activity maintains their presence, and their class selects actions automatically.
 
-The micro strip is the primary interface. Twitch chat is an input channel and an occasional announcement channel, not the combat log.
+The micro strip is the primary interface. Twitch chat supplies presence and occasional explicit interactions, not combat operations or a combat log.
 
 ## Initial scope
 
@@ -13,8 +13,8 @@ The first release includes:
 - One base class that advances into four distinct classes
 - Four visible friendly combatants and up to three enemies
 - Two common enemy types and one boss encounter
-- Join, command, action, check, and result phases
-- Automatic actions for viewers who do not enter a command
+- Wandering, encounter, automatic action, check, and result phases
+- Automatic class behavior with no required combat commands
 - Persistent XP, level, advanced class, and a small cosmetic identity
 - Transparent OBS output with compact battle and loot flourishes
 - A clean v2 code path that does not import the archived RPG
@@ -70,7 +70,7 @@ The acting character's name appears, the sprite moves into the center lane, an e
 Announcements temporarily occupy the top 32 px and retract automatically. Initial messages are:
 
 - Encounter name
-- Command phase and remaining time
+- Encounter or boss arrival
 - Boss or rare enemy arrival
 - Victory or defeat
 - Level-up or class advancement
@@ -117,36 +117,33 @@ Enemy mechanics should be legible through animation. The Ogre raises its weapon 
 ## Battle state machine
 
 ```text
-IDLE/TRAVEL
-    -> JOIN
+IDLE/WANDER
     -> ENCOUNTER_INTRO
-    -> COMMAND
     -> ACTION_PLAYBACK
     -> CHECK
-         -> COMMAND when both sides remain
+         -> ACTION_PLAYBACK when both sides remain
          -> VICTORY when enemies are defeated
          -> DEFEAT when friendlies are defeated
     -> RESULTS
-    -> IDLE/TRAVEL
+    -> IDLE/WANDER
 ```
 
-### Join phase
+### Wandering and presence
 
-- `!join` adds the viewer to the expedition.
-- The overlay acknowledges participation visually.
-- A battle can start on a timer, a moderator command, or a configured stream event.
+- `!join` creates or explicitly activates a viewer's character.
+- Ordinary chat messages refresh presence after a viewer has joined.
+- Characters wander quietly until an encounter starts on a timer, moderator command, or configured stream event.
+- An unseen viewer moves to reserve after a configurable interval and later walks off without losing progression.
 
-### Command phase
+### Automatic action selection
 
-- One action is accepted per active viewer.
-- Initial inputs: `!attack`, `!defend`, and `!special`.
-- Repeating a command replaces the previous choice silently.
-- No command means the class chooses an automatic action.
-- The overlay shows a small ready pip above each active character; it does not expose the chosen move unless desired for balance.
+- Every living actor selects an action from class or enemy behavior.
+- Warrior protects threatened allies, Mage prioritizes impact damage, Healer heals when necessary, Ranger targets weakened enemies, and Adventurer uses a balanced strike.
+- Viewer input is not required for a round to begin or resolve.
+- Future highlighted specials or community votes are optional event layers, not dependencies of the core loop.
 
 ### Action playback
 
-- Inputs lock at the deadline.
 - The engine calculates a deterministic ordered event list.
 - Speed, move priority, and a stable tie-breaker establish turn order.
 - The overlay plays the events one at a time.
@@ -155,7 +152,7 @@ IDLE/TRAVEL
 ### Check and results
 
 - After playback, the engine checks defeat conditions.
-- An unresolved battle returns to a fresh command phase.
+- An unresolved battle automatically resolves another round after a brief visual beat.
 - Results award XP, update progression, rotate the roster, and show a compact flourish.
 
 ## Progression
@@ -192,7 +189,6 @@ Examples include:
 
 - `actor_joined`
 - `encounter_started`
-- `command_opened`
 - `action_started`
 - `projectile_spawned`
 - `damage_applied`
@@ -220,7 +216,7 @@ bot/rpg_v2/
     progression.py     # XP, levels, advancement, cosmetics
     repository.py      # versioned persistence boundary
     service.py         # timers, battle lifecycle, event publication
-    commands.py        # thin Twitch command adapter
+    commands.py        # thin Twitch presence/operator adapter
 
 bot/overlay_static/rpg_micro/
     index.html
@@ -265,7 +261,7 @@ Suggested initial mapping:
 
 ### Milestone 0: Decisions and archive boundary
 
-- Approve strip height, active party size, class names, and initial commands.
+- Approve strip height, active party size, class names, and presence timers.
 - Add an archive manifest describing what may be consulted and what is retired.
 - Define versioned v2 player and runtime schemas.
 - Establish deterministic battle simulations and fixtures.
@@ -276,7 +272,7 @@ Suggested initial mapping:
 
 - Build the 1920x96 transparent browser source.
 - Use temporary geometric or silhouette sprites.
-- Render four friendlies, three enemies, health bars, name reveal, and ready pips.
+- Render four friendlies, three enemies, health bars, name reveal, and small status pips.
 - Demonstrate idle, lunge, projectile, hit, heal, knockout, victory, and loot animations using scripted events.
 - Verify in OBS at 1080p and on a downscaled stream preview.
 
@@ -287,13 +283,13 @@ Suggested initial mapping:
 - Implement the state machine and deterministic turn order.
 - Add Adventurer, Warrior, Mage, Healer, Ranger, Slime, Goblin, and Ogre.
 - Generate ordered animation events from resolved rounds.
-- Test timeout defaults, duplicate commands, knockouts, victory, and defeat.
+- Test automatic targeting, turn order, knockouts, victory, and defeat.
 
 **Exit condition:** complete battles can run in tests without Twitch or an overlay.
 
 ### Milestone 3: Twitch and overlay integration
 
-- Add `!join`, `!attack`, `!defend`, and `!special` through a thin command cog.
+- Add `!join`, ordinary-chat presence refresh, and operator controls through a thin adapter.
 - Publish snapshots and sequenced events through the current WebSocket infrastructure.
 - Add reconnect recovery without replaying the entire animation queue.
 - Suppress routine bot responses and add rate-limit protection.
@@ -311,8 +307,8 @@ Suggested initial mapping:
 
 ### Milestone 5: Stream tuning
 
-- Measure joins, commands per round, non-command participation, repeat players, and encounter duration.
-- Tune command windows and action playback speed.
+- Measure joins, active/reserve wait time, repeat players, and encounter duration.
+- Tune encounter cadence, presence windows, and action playback speed.
 - Add moderator controls for pause, start, abort, and quiet mode.
 - Decide whether full-screen boss presentation is worthwhile using the same engine and events.
 
@@ -324,6 +320,6 @@ Suggested initial mapping:
 2. Are 32x40 px actors distinguishable after Twitch compression and mobile playback?
 3. Should names appear only during actions, or remain as tiny initials?
 4. Does a four-character active party feel populated without becoming cluttered?
-5. Should the command phase be visible continuously or only announced at its start and final five seconds?
+5. How much pause between automatic rounds makes actions readable without making battles drag?
 
 These are visual tests, not architecture decisions. The prototype should make them inexpensive to change.
