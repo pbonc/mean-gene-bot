@@ -1,36 +1,31 @@
 {
   "slots": {
-    "tankahdelphia": 1
-  },
-  "scores": {
     "fal_the_warlock": 1,
-    "iamdar": 1,
-    "nate048": 1,
-    "persephone1161": 1,
-    "dod_bahamut": 1,
-    "deputydawg777": 1,
-    "hoplon5": 1,
-    "desktoppilotsociety": 1,
     "livesuieng": 1
   },
-  "last_winner": "livesuieng",
+  "scores": {
+    "nate048": 1,
+    "terminallynormal": 1,
+    "karnave": 1,
+    "tankahdelphia": 1,
+    "hoplon5": 1
+  },
+  "last_winner": "hoplon5",
   "remove_on_win": true,
   "wheel_locked": false,
   "last_man_standing": false,
   "order": [
-    "tankahdelphia"
+    "fal_the_warlock",
+    "livesuieng"
   ],
   "colors": {
     "hoplon5": "#ffffff",
-    "nate048": "#193cb8",
-    "desktoppilotsociety": "#6366f1",
-    "tankahdelphia": "#defec8",
-    "deputydawg777": "#fb7185",
-    "livesuieng": "#a0a0a0",
-    "iamdar": "#a3e635",
+    "karnave": "#38bdf8",
     "fal_the_warlock": "#fc0303",
-    "persephone1161": "#2f0b42",
-    "dod_bahamut": "#818cf8"
+    "tankahdelphia": "#f472b6",
+    "terminallynormal": "#bada55",
+    "nate048": "#f59e0b",
+    "livesuieng": "#455a55"
   },
   "multiplier": 1,
   "manual_users": []
