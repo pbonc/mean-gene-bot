@@ -31,7 +31,9 @@ The strip is persistent, transparent stream decoration. It shows the expedition 
 
 Major battles do not resolve inside the strip. When an encounter is ready, the party settles and a compact announcement appears. The encounter waits indefinitely for the streamer.
 
-During Sprint 3, a lightweight 90-second placeholder cycle previews journey, treasure, camp, merchant, and encounter-ready states before live services exist. Display modes can be previewed with `/rpg-micro?mode=normal`, `/rpg-micro?mode=quiet`, or `/rpg-micro?mode=hidden`. Quiet mode keeps the expedition while suppressing props and announcements; hidden mode renders nothing.
+The normal `/rpg-micro` page requests the current live expedition over WebSocket. `!join` adds an in-memory Adventurer, ordinary chat refreshes joined-viewer presence, and inactivity eventually removes the character from the visible strip without deleting membership. `/rpg-micro?demo=1` retains the fixed demonstration roster for visual testing.
+
+A lightweight 90-second placeholder cycle previews journey, treasure, camp, merchant, and encounter-ready states before the game service exists. Display modes can be selected with `/rpg-micro?mode=normal`, `/rpg-micro?mode=quiet`, or `/rpg-micro?mode=hidden`; these can be combined with `demo=1`. Quiet mode keeps the expedition while suppressing props and announcements; hidden mode renders nothing.
 
 Passive scenery such as sparse trees, rocks, and ruins crosses from right to left only during journey, creating movement without becoming an interactive event. Scenery and incoming gameplay events share one constant travel speed and full opacity; scenery is drawn behind party sprites so overlap creates natural depth. Meaningful events stop in a clear event area: treasure and merchants pause briefly and fade, while an encounter remains in place awaiting the streamer. Background travel freezes whenever the expedition stops for an event.
 
@@ -90,6 +92,19 @@ Every new viewer begins as an Adventurer and may advance at level 5.
 | Ranger | Quick Shot | Mark Target | Volley | Quick Shot |
 
 The first version uses automatic targeting. Viewers select a skill, not a target. Skill effects and balance are defined by the engine rather than the persistence or transport contracts.
+
+### Initial engine behavior
+
+- Turn order uses descending speed, friendly-before-enemy tie priority, and stable actor ID ordering.
+- Seeded damage variance is limited to -1, 0, or +1 so simulations are repeatable.
+- Adventurer Brace and Rally create shields.
+- Warrior Guard Ally protects the lowest-health ally.
+- Mage Focus adds power to the next damage skill; Fireball affects every living enemy.
+- Healer defaults to Heal when a living ally is wounded and Smite otherwise.
+- Ranger Mark Target increases the next damage received by the marked enemy; Volley affects every living enemy.
+- Slime always uses Bump. Goblin periodically Guards. Ogre alternates heavy single-target and sweeping group attacks.
+- All automatic and selected actions produce monotonically sequenced animation events.
+- A configurable maximum round count ends pathological encounters as a stalemate.
 
 ## Turn and timeout rules
 

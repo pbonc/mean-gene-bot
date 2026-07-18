@@ -175,6 +175,12 @@ async def websocket_handler(request):
                                 await ws.send_json(payload)
                             except Exception:
                                 pass
+                    if data.get('type') == 'request_rpg_v2_expedition':
+                        if latest_rpg_v2_expedition:
+                            try:
+                                await ws.send_json(latest_rpg_v2_expedition)
+                            except Exception:
+                                pass
                     if data.get('type') == 'request_grid_state':
                         payload = latest_grid_state
                         if not payload:
@@ -435,6 +441,7 @@ async def shutdown():
 latest_ticker_message = ""
 latest_wheel_state = None
 latest_rpg_state = None
+latest_rpg_v2_expedition = None
 latest_grid_state = None
 
 
@@ -477,13 +484,15 @@ async def as_overlay_task():
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
-    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_grid_state
+    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_rpg_v2_expedition, latest_grid_state
     if message.get("type") == "ticker" and "text" in message:
         latest_ticker_message = message["text"]
     if message.get("type") == "wheel_state":
         latest_wheel_state = message
     if message.get("type") == "rpg_state":
         latest_rpg_state = message
+    if message.get("type") == "rpg_v2_expedition":
+        latest_rpg_v2_expedition = message
     if message.get("type") == "grid_state":
         latest_grid_state = message
     

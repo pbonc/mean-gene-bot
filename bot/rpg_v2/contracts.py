@@ -18,6 +18,7 @@ PLAYER_SCHEMA = "rpg_v2.player"
 RUNTIME_SCHEMA = "rpg_v2.runtime"
 EVENT_SCHEMA = "rpg_v2.animation_event"
 TURN_PROMPT_SCHEMA = "rpg_v2.turn_prompt"
+EXPEDITION_SCHEMA = "rpg_v2.expedition"
 
 
 class CharacterClass(StrEnum):
@@ -53,6 +54,8 @@ class EventType(StrEnum):
     PROJECTILE_SPAWNED = "projectile_spawned"
     DAMAGE_APPLIED = "damage_applied"
     HEALING_APPLIED = "healing_applied"
+    SHIELD_APPLIED = "shield_applied"
+    STATUS_APPLIED = "status_applied"
     ACTOR_DEFEATED = "actor_defeated"
     BATTLE_FINISHED = "battle_finished"
     LOOT_AWARDED = "loot_awarded"
@@ -107,6 +110,45 @@ def validate_player_record(record: Mapping[str, Any]) -> None:
     _require(isinstance(history, Mapping), "history must be an object")
     for key in ("battles", "victories", "boss_victories"):
         _require(isinstance(history.get(key), int) and history[key] >= 0, f"history.{key} must be >= 0")
+
+
+def new_expedition_snapshot(
+    members: list[Mapping[str, Any]],
+    *,
+    active_window_seconds: int,
+    walkoff_window_seconds: int,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Create the live, non-persisted expedition payload used by the strip."""
+
+    record: dict[str, Any] = {
+        "type": "rpg_v2_expedition",
+        "schema": EXPEDITION_SCHEMA,
+        "version": CONTRACT_VERSION,
+        "generated_at": now or _utc_now(),
+        "active_window_seconds": active_window_seconds,
+        "walkoff_window_seconds": walkoff_window_seconds,
+        "members": [dict(member) for member in members],
+    }
+    validate_expedition_snapshot(record)
+    return record
+
+
+def validate_expedition_snapshot(record: Mapping[str, Any]) -> None:
+    _require_schema(record, EXPEDITION_SCHEMA)
+    _require(record.get("type") == "rpg_v2_expedition", "unexpected expedition payload type")
+    active_window = record.get("active_window_seconds")
+    walkoff_window = record.get("walkoff_window_seconds")
+    _require(isinstance(active_window, int) and active_window > 0, "active_window_seconds must be positive")
+    _require(isinstance(walkoff_window, int) and walkoff_window > active_window, "walkoff window must exceed active window")
+    members = record.get("members")
+    _require(isinstance(members, list), "members must be a list")
+    _require_unique_ids(members, "members")
+    for member_record in members:
+        _require(bool(str(member_record.get("display_name", "")).strip()), "member display_name is required")
+        _require(member_record.get("class") in {item.value for item in CharacterClass}, "unknown member class")
+        _require(member_record.get("presence") in ("active", "idle"), "member presence must be active or idle")
+        _require(isinstance(member_record.get("last_seen_at"), (int, float)), "member last_seen_at must be numeric")
 
 
 def new_runtime_snapshot(*, now: str | None = None) -> dict[str, Any]:

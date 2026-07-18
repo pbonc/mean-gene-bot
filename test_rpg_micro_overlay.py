@@ -40,6 +40,19 @@ class RpgMicroOverlayTests(unittest.TestCase):
         for mode in ("normal", "quiet", "hidden"):
             self.assertIn(f'"{mode}"', script)
 
+    def test_live_strip_requests_and_applies_expedition_snapshots(self):
+        script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
+
+        self.assertIn('params.get("demo") === "1"', script)
+        self.assertIn("function applyExpeditionSnapshot(payload)", script)
+        self.assertIn('type: "request_rpg_v2_expedition"', script)
+        self.assertIn('payload.type !== "rpg_v2_expedition"', script)
+        self.assertIn("connectExpeditionSocket()", script)
+
+        overlay_server = (ROOT / "bot" / "overlay_server.py").read_text(encoding="utf-8")
+        self.assertIn("request_rpg_v2_expedition", overlay_server)
+        self.assertIn("latest_rpg_v2_expedition", overlay_server)
+
     def test_strip_is_ambient_not_a_major_battle_demo(self):
         script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
 
@@ -56,7 +69,6 @@ class RpgMicroOverlayTests(unittest.TestCase):
         self.assertIn("TRAVEL_SPEED_PX_PER_SECOND = 26", script)
         self.assertIn("EVENT_APPROACH_SECONDS = EVENT_APPROACH_DISTANCE / TRAVEL_SPEED_PX_PER_SECOND", script)
         self.assertIn("item.x -= TRAVEL_SPEED_PX_PER_SECOND * elapsedSeconds", script)
-        self.assertNotIn("ctx.globalAlpha = 0.62", script)
 
     def test_game_events_enter_stop_and_fade(self):
         script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")

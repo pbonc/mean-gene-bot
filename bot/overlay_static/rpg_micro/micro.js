@@ -14,6 +14,7 @@
   const initialMode = ["normal", "quiet", "hidden"].includes(params.get("mode"))
     ? params.get("mode")
     : "normal";
+  const demoEnabled = params.get("demo") === "1";
 
   const colors = {
     ink: "#fff7d6",
@@ -26,7 +27,7 @@
     ground: "rgba(90, 142, 126, 0.32)",
   };
 
-  const expedition = [
+  const demoExpedition = [
     member("adventurer", "Newblood"),
     member("healer", "Mendly"),
     member("mage", "Hexa"),
@@ -38,6 +39,10 @@
     member("ranger", "Quill"),
     member("warrior", "Bulwark"),
   ];
+  const expedition = demoEnabled ? demoExpedition : [];
+  let hasReceivedSnapshot = false;
+  let socket = null;
+  let reconnectDelay = 1000;
 
   const state = {
     mode: initialMode,
@@ -114,6 +119,51 @@
     expedition.splice(index, 1);
     layoutExpedition();
     return true;
+  }
+
+  function applyExpeditionSnapshot(payload) {
+    if (!payload || payload.type !== "rpg_v2_expedition" || !Array.isArray(payload.members)) return false;
+    const previousIds = new Set(expedition.map((actor) => actor.actor_id));
+    const incoming = payload.members.map((item) => {
+      const actor = member(item.class || "adventurer", item.display_name || "Traveler");
+      actor.actor_id = String(item.actor_id);
+      actor.presence = item.presence === "idle" ? "idle" : "active";
+      return actor;
+    });
+    expedition.splice(0, expedition.length, ...incoming);
+    layoutExpedition();
+
+    if (hasReceivedSnapshot) {
+      const joined = incoming.find((actor) => !previousIds.has(actor.actor_id));
+      if (joined) {
+        state.joinHighlight = joined.actor_id;
+        state.joinHighlightUntil = performance.now() + 3200;
+        announce(`${joined.name.toUpperCase()} JOINS THE EXPEDITION`, "join", 3200);
+      }
+    }
+    hasReceivedSnapshot = true;
+    return true;
+  }
+
+  function connectExpeditionSocket() {
+    if (demoEnabled) return;
+    const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+    socket = new WebSocket(`${scheme}://${window.location.host}/ws`);
+    socket.addEventListener("open", () => {
+      reconnectDelay = 1000;
+      socket.send(JSON.stringify({ type: "request_rpg_v2_expedition" }));
+    });
+    socket.addEventListener("message", (event) => {
+      try {
+        applyExpeditionSnapshot(JSON.parse(event.data));
+      } catch (_error) {
+        // Other overlays share this socket; malformed/unrelated messages are ignored.
+      }
+    });
+    socket.addEventListener("close", () => {
+      window.setTimeout(connectExpeditionSocket, reconnectDelay);
+      reconnectDelay = Math.min(15000, reconnectDelay * 2);
+    });
   }
 
   function announce(text, tone = "normal", duration = 3200) {
@@ -230,6 +280,7 @@
       else if (state.ambient === "treasure" || state.ambient === "merchant") bob = Math.round(Math.sin(seconds * 2.2 + actor.phaseOffset) * 0.6);
 
       ctx.save();
+      if (actor.presence === "idle") ctx.globalAlpha = 0.62;
       ctx.translate(Math.round(actor.x), Math.round(actor.y + bob));
       ctx.scale(actor.scale, actor.scale);
       drawSprite(actor.kind);
@@ -410,7 +461,9 @@
     setAmbientState,
     setMode,
     announce,
+    applyExpeditionSnapshot,
     relayout: layoutExpedition,
   };
+  connectExpeditionSocket();
   requestAnimationFrame(frame);
 })();

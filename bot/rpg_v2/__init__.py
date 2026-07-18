@@ -9,14 +9,18 @@ from .contracts import (
     EventType,
     RuntimePhase,
     new_animation_event,
+    new_expedition_snapshot,
     new_player_record,
     new_runtime_snapshot,
     new_turn_prompt,
     validate_animation_event,
+    validate_expedition_snapshot,
     validate_player_record,
     validate_runtime_snapshot,
     validate_turn_prompt,
 )
+from .engine import BattleEngine, make_enemy, make_friendly
+from .models import Actor, BattleResult, EffectKind, Side, Skill
 
 __all__ = [
     "CONTRACT_VERSION",
@@ -24,11 +28,21 @@ __all__ = [
     "EventType",
     "RuntimePhase",
     "new_animation_event",
+    "new_expedition_snapshot",
     "new_player_record",
     "new_runtime_snapshot",
     "new_turn_prompt",
     "validate_animation_event",
+    "validate_expedition_snapshot",
     "validate_player_record",
     "validate_runtime_snapshot",
     "validate_turn_prompt",
+    "Actor",
+    "BattleEngine",
+    "BattleResult",
+    "EffectKind",
+    "Side",
+    "Skill",
+    "make_enemy",
+    "make_friendly",
 ]

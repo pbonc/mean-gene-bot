@@ -5,10 +5,12 @@ from bot.rpg_v2.contracts import (
     EventType,
     RuntimePhase,
     new_animation_event,
+    new_expedition_snapshot,
     new_player_record,
     new_runtime_snapshot,
     new_turn_prompt,
     validate_animation_event,
+    validate_expedition_snapshot,
     validate_player_record,
     validate_runtime_snapshot,
     validate_turn_prompt,
@@ -124,6 +126,26 @@ class RpgV2ContractTests(unittest.TestCase):
         )
 
         validate_runtime_snapshot(runtime)
+
+    def test_expedition_snapshot_contract_is_uncapped(self):
+        snapshot = new_expedition_snapshot(
+            [
+                {
+                    "actor_id": f"viewer-{index}",
+                    "display_name": f"Viewer{index}",
+                    "class": "adventurer",
+                    "presence": "active",
+                    "last_seen_at": 1000.0,
+                }
+                for index in range(200)
+            ],
+            active_window_seconds=1200,
+            walkoff_window_seconds=2700,
+            now="2026-07-18T00:00:00Z",
+        )
+
+        validate_expedition_snapshot(snapshot)
+        self.assertEqual(len(snapshot["members"]), 200)
 
     def test_animation_event_is_ordered_and_json_safe(self):
         event = new_animation_event(

@@ -12,10 +12,10 @@ This file is the execution roadmap for the whole bot. Detailed feature specifica
 
 ## Current priorities
 
-1. Redefine the Stream RPG contracts around an uncapped expedition and manual full-screen battles.
-2. Turn the proven micro-strip prototype into a useful ambient journey surface.
-3. Build the standalone turn engine and three-skill class kits.
-4. Build the full-screen battle source and private control surface.
+1. Connect Twitch presence to the ambient expedition without adding battle logic.
+2. Build the standalone turn engine and three-skill class kits.
+3. Build the full-screen battle source and private control surface.
+4. Connect turn-specific numbered Twitch choices after real engine prompts exist.
 5. Preserve bot reliability while new work is introduced.
 6. Address storage, telemetry, and repository hygiene in bounded maintenance sprints.
 
@@ -109,7 +109,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Objective:** Convert the micro strip from a combat demo into persistent, low-distraction stream decoration before the full battle system is complete.
 
-**Status:** In progress — functional ambient renderer implemented; OBS visual review pending
+**Status:** Complete — 2026-07-18
 
 - Display the joined expedition as an adaptive friendly group rather than four active slots.
 - Retain simple idle motion and temporary join/name flourishes.
@@ -122,9 +122,29 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** The strip works as useful stream decoration, communicates expedition state and pending encounters, and does not require attention, chat commands, or the completed battle engine.
 
-## RPG Sprint 4: Standalone turn engine and class kits
+## RPG Sprint 4: Twitch presence and live expedition roster
+
+**Objective:** Turn the ambient strip into live stream decoration by connecting viewer presence without introducing combat decisions or persistence.
+
+**Status:** Complete — 2026-07-18
+
+- Add `!join` through a thin Twitch adapter to create an in-memory Adventurer and place it in the expedition.
+- Refresh a joined viewer's presence from ordinary chat messages without requiring RPG commands.
+- Define configurable active and walk-off windows; inactivity removes a character from the visible expedition without punishment.
+- Make returning joined viewers reappear automatically when they chat again.
+- Publish versioned expedition snapshots through the existing overlay WebSocket transport.
+- Replace the strip's fixed demonstration roster with live snapshots while retaining an explicit preview/demo mode.
+- Keep class assignment at Adventurer until progression exists; do not create premature persistence rules.
+- Keep presence, roster membership, and rendering layout separate.
+- Add tests for joins, duplicate joins, case-insensitive identity, activity refresh, inactivity, reconnect snapshots, and large rosters.
+
+**Exit criteria:** A private stream populates and depopulates the ambient strip through real Twitch participation, with no battle engine and no required chat beyond joining once.
+
+## RPG Sprint 5: Standalone turn engine and class kits
 
 **Objective:** Implement deterministic combat without Twitch, OBS, WebSockets, or persistence.
+
+**Status:** Complete — 2026-07-18
 
 - Create pure models for actors, skills, effects, encounters, turns, and outcomes.
 - Resolve one actor at a time using speed, priority, and a stable tie-breaker.
@@ -142,7 +162,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** Battles of varying roster sizes complete deterministically, every turn has a valid default path, and no viewer response is required for progress.
 
-## RPG Sprint 5: Full-screen battle prototype
+## RPG Sprint 6: Full-screen battle prototype
 
 **Objective:** Prove the crowd-and-action-stage presentation at 1920x1080 before Twitch integration.
 
@@ -158,7 +178,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** The full-screen prototype clearly presents turn ownership, three choices, targets, outcomes, and crowd identity across tested roster sizes.
 
-## RPG Sprint 6: Private battle control surface
+## RPG Sprint 7: Private battle control surface
 
 **Objective:** Give the streamer reliable manual control without placing operator controls on-stream.
 
@@ -171,13 +191,10 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** The streamer can safely stage and operate an encounter while manually controlling OBS scenes.
 
-## RPG Sprint 7: Twitch presence and numbered choices
+## RPG Sprint 8: Turn-specific Twitch choices
 
-**Objective:** Connect ordinary chat presence and turn-specific `1`, `2`, or `3` input without creating general chat spam.
+**Objective:** Connect real engine prompts to bare `1`, `2`, or `3` Twitch input without creating general chat spam.
 
-- Add `!join` to create or reactivate a character.
-- Refresh joined-viewer presence from ordinary chat messages.
-- Remove a character from the visible expedition after configurable inactivity without deleting progression.
 - Accept a bare `1`, `2`, or `3` only from the viewer whose choice window is currently open.
 - Ignore other numeric messages and late responses without posting errors.
 - End the choice window immediately on valid input.
@@ -187,7 +204,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** A private stream completes battles through a mixture of viewer selections and automatic defaults, with no stalled turns and minimal bot output.
 
-## RPG Sprint 8: Persistence and progression
+## RPG Sprint 9: Persistence and progression
 
 **Objective:** Give viewers durable identity and meaningful choices without allowing veterans to invalidate newcomers.
 
@@ -201,7 +218,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Exit criteria:** Viewers can leave, return, choose a class, and retain recognizable progress without importing legacy combat balance.
 
-## RPG Sprint 9: Stream trial and pacing
+## RPG Sprint 10: Stream trial and pacing
 
 **Objective:** Validate that the journey/battle split supports stream growth and remains practical with real chat behavior.
 
@@ -372,3 +389,33 @@ Move completed sprint summaries here with the completion date, relevant commit o
 - Distinguished timed active-viewer prompts from immediate absent-viewer defaults.
 - Required pending turns to match the current battle and an encounter participant.
 - Replaced the micro-strip-only specification with the combined journey, battle, control, Twitch-input, and manual-OBS product specification.
+
+## 2026-07-18: RPG Sprint 3 — Journey strip as an expedition surface
+
+- Replaced the miniature combat demonstration with an adaptive ambient expedition roster.
+- Added journey, treasure, camp, merchant, and encounter-ready presentation states.
+- Added temporary join nameplates plus normal, quiet, and hidden display modes.
+- Added sparse trees, rocks, and ruins that travel behind the party at a shared constant speed.
+- Synchronized gameplay events with travel so the scene stops only when an event reaches its interaction point.
+- Kept event ordering deterministic for visual review; future game services will select weighted events.
+- Verified the full placeholder cycle in OBS and retained major battles for the dedicated full-screen battle source.
+
+## 2026-07-18: RPG Sprint 4 — Twitch presence and live expedition roster
+
+- Added an in-memory expedition presence service with stable Twitch identity and Adventurer defaults.
+- Added `!join`, ordinary-message presence refresh, idle state, walk-off behavior, and automatic return on later chat.
+- Added versioned, uncapped expedition snapshots and WebSocket reconnect recovery.
+- Changed `/rpg-micro` to use live Twitch members by default while preserving `?demo=1` for visual testing.
+- Added configurable active and walk-off windows without introducing persistence or battle logic.
+- Verified the complete live path in a private stream when `Iamdar` joined and appeared as an Adventurer in OBS.
+
+## 2026-07-18: RPG Sprint 5 — Standalone turn engine and class kits
+
+- Added pure actor, skill, side, effect, and battle-result models.
+- Added three numbered skills and automatic defaults for Adventurer, Warrior, Mage, Healer, and Ranger.
+- Added automatic Slime, Goblin, and Ogre behavior.
+- Added speed-based stable turn order and automatic target policies.
+- Added damage, healing, shields, focus, marks, area effects, knockouts, victory, defeat, and stalemate outcomes.
+- Added timed-viewer prompt generation while keeping default resolution independent of Twitch or timers.
+- Added monotonically sequenced animation events suitable for the future full-screen renderer.
+- Verified seeded repeatability and successful simulation with 150 friendlies against 20 Ogres.
