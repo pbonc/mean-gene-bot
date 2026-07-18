@@ -16,9 +16,13 @@ body {
 }
 
 #micro-strip {
-  display: block;
+  position: absolute;
+  left: 0;
+  bottom: 0;
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 20 / 1;
+  max-height: 96px;
   background: transparent;
   image-rendering: pixelated;
   image-rendering: crisp-edges;

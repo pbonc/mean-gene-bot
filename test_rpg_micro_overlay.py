@@ -18,6 +18,9 @@ class RpgMicroOverlayTests(unittest.TestCase):
 
         self.assertIn('width="1920" height="96"', html)
         self.assertIn("background: transparent", css)
+        self.assertIn("aspect-ratio: 20 / 1", css)
+        self.assertIn("max-height: 96px", css)
+        self.assertIn("bottom: 0", css)
 
     def test_demo_includes_initial_classes_enemies_and_phases(self):
         script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
