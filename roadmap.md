@@ -60,6 +60,8 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Objective:** Prove that the idea is readable and pleasant at its actual stream size before building the game.
 
+**Status:** In progress — functional prototype implemented; OBS/Twitch-scale visual sign-off pending
+
 - Add a new `/rpg-micro` OBS browser-source route without replacing `/battle`.
 - Build a 1920x96 page with a fully transparent background.
 - Create temporary, visually distinct silhouettes for the five friendly classes and three enemies.

@@ -255,6 +255,9 @@ async def wheel_overlay(request):
 async def battle_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "battle_overlay.html"))
 
+async def rpg_micro_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "rpg_micro", "index.html"))
+
 async def grid_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "grid_overlay.html"))
 
@@ -515,6 +518,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/mlb", mlb_break_overlay)
     app.router.add_get("/wheel", wheel_overlay)
     app.router.add_get("/battle", battle_overlay)
+    app.router.add_get("/rpg-micro", rpg_micro_overlay)
     app.router.add_get("/grid", grid_overlay)
 
     # Tetris card drop overlay
@@ -527,6 +531,10 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     gifs_dir = GIFS_DIR
     if os.path.isdir(gifs_dir):
         app.router.add_static('/gifs', gifs_dir)
+
+    rpg_micro_dir = os.path.join(STATIC_DIR, "rpg_micro")
+    if os.path.isdir(rpg_micro_dir):
+        app.router.add_static('/rpg-micro-assets', rpg_micro_dir)
     
     # Serve trading card images
     cards_dir = CARDS_DIR
