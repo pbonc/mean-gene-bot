@@ -12,10 +12,11 @@ This file is the execution roadmap for the whole bot. Detailed feature specifica
 
 ## Current priorities
 
-1. Prototype the Stream RPG micro strip at its real OBS dimensions.
-2. Keep the archived RPG isolated while establishing clean v2 pathways.
-3. Preserve bot reliability while new work is introduced.
-4. Address storage, telemetry, and repository hygiene in bounded maintenance sprints.
+1. Redefine the Stream RPG contracts around an uncapped expedition and manual full-screen battles.
+2. Build the standalone turn engine and three-skill class kits.
+3. Build the full-screen battle source and private control surface.
+4. Preserve bot reliability while new work is introduced.
+5. Address storage, telemetry, and repository hygiene in bounded maintenance sprints.
 
 ---
 
@@ -23,21 +24,26 @@ This file is the execution roadmap for the whole bot. Detailed feature specifica
 
 ## Goal
 
-Create a persistent, transparent micro-RPG along the bottom of OBS. Chat characters wander while idle, automatically battle spawned enemies, display short announcements and loot flourishes, and leave the visible roster after extended inactivity. The RPG should reward participation without encouraging command spam or competing with the stream.
+Create a persistent chat expedition with two public presentations: a tiny transparent journey strip during the normal stream and a manually selected full-screen JRPG battle scene for encounters. Every participating character belongs to the battle roster. When a recently active viewer's turn arrives, they may choose one of three skills by typing `1`, `2`, or `3`; a class-appropriate default resolves automatically on timeout or absence so combat never stalls.
 
 The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STRIP_ROADMAP.md](docs/RPG_V2_MICRO_STRIP_ROADMAP.md).
 
 ## Product baseline
 
-- Transparent 1920x96 browser source for a 1920x1080 stream canvas
-- Most quiet-state activity contained within the bottom 64 pixels
-- Approximately 32x40 pixel actors, subject to OBS and Twitch readability testing
-- Four visible chat characters on the left and up to three enemies on the right
+- Transparent 1920x96 journey strip for a 1920x1080 stream canvas
+- Full-screen 1920x1080 JRPG battle source selected manually in OBS
+- Private browser-based control surface for starting, pausing, aborting, and resolving encounters
+- No automatic OBS scene changes and no battle page popups
+- Uncapped logical expedition and battle roster; rendering density adapts independently of eligibility
+- Friendly crowd on the left, enemy crowd on the right, and clear action positions between them
 - Adventurer base class progressing into Warrior, Mage, Healer, or Ranger
 - Slime and Goblin common enemies, followed by an Ogre boss
-- Ambient loop: `wander -> encounter -> automatic battle -> rewards -> wander`
-- Normal chat activity refreshes presence; combat commands are not required
-- Short overlay announcements for encounters, bosses, victory, defeat, levels, and loot
+- Journey loop: `wander -> ambient event -> encounter ready -> wait for streamer`
+- Battle loop: `start -> actor turn -> choice or default -> action -> outcome check -> results`
+- Three numbered skills per class with automatic targeting in the initial release
+- Normal chat activity refreshes presence; only the acting viewer's bare `1`, `2`, or `3` is accepted
+- Every class has a safe default action; absent viewers resolve immediately and active-viewer prompts time out
+- Short strip announcements for camps, treasure, encounters, levels, and loot
 - Persistent identity and progression without importing the old RPG economy
 
 ## RPG Sprint 0: Archive boundary and decisions
@@ -60,12 +66,12 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Objective:** Prove that the idea is readable and pleasant at its actual stream size before building the game.
 
-**Status:** In progress — functional prototype implemented; OBS/Twitch-scale visual sign-off pending
+**Status:** Complete — 2026-07-18
 
 - Add a new `/rpg-micro` OBS browser-source route without replacing `/battle`.
 - Build a 1920x96 page with a fully transparent background.
 - Create temporary, visually distinct silhouettes for the five friendly classes and three enemies.
-- Render four friendly slots, three enemy slots, tiny health bars, ready/status pips, and temporary name labels.
+- Render a readable friendly group, enemy group, tiny health bars, status pips, and temporary name/action labels.
 - Demonstrate wandering, enemy arrival, melee lunge, projectile, healing, hit reaction, knockout, victory, defeat, and loot flourish.
 - Add a scripted demo loop independent of Twitch and persistent data.
 - Test the source in OBS at 1080p, in a downscaled preview, and against both bright and dark stream content.
@@ -73,92 +79,143 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Exit criteria:** Viewers can distinguish sides, broad character roles, health changes, and major events after realistic scaling and compression, without permanent text panels.
 
-## RPG Sprint 2: Standalone automatic battle engine
+## RPG Sprint 2: Contract reset and battle rules
 
-**Objective:** Implement a deterministic game that can run and be tested without Twitch, OBS, WebSockets, or files.
+**Objective:** Replace the obsolete four-slot auto-battle assumptions before implementing the engine.
 
-- Create `bot/rpg_v2/` with models, engine, class definitions, enemies, and progression boundaries.
-- Implement the internal state machine: idle, encounter introduction, resolution, result, and return to idle.
-- Resolve actors sequentially using speed, move priority, and a stable tie-breaker.
-- Give every class a sensible automatic behavior:
-  - Adventurer uses a balanced strike.
-  - Warrior protects threatened allies.
-  - Mage prioritizes high-impact damage.
-  - Healer heals when necessary and attacks otherwise.
-  - Ranger targets weakened enemies.
-- Add Slime, Goblin, and Ogre behaviors with visually telegraphed effects.
-- Produce an ordered animation-event list from every resolved action.
-- Test targeting, turn order, healing, knockouts, victory, defeat, and deterministic seeded simulations.
+- Remove the four-friendly eligibility limit from the v2 runtime contract.
+- Model an uncapped expedition roster and encounter participant roster.
+- Keep screen position and sprite density out of combat eligibility rules.
+- Add explicit phases for journey, encounter ready, streamer-controlled start, actor choice, action playback, results, and return to journey.
+- Define the manual handoff:
+  - the strip announces and holds an encounter
+  - the streamer changes OBS scenes
+  - a control action starts the battle
+  - nothing changes OBS scenes automatically
+- Define a turn prompt containing actor ID, three skill choices, deadline, and default skill.
+- Define timeout behavior:
+  - recently active viewer gets a short choice window
+  - valid input resolves immediately
+  - timeout uses the class default
+  - absent viewer auto-acts without waiting
+- Update the detailed specification, archive decisions, fixtures, and contract tests.
 
-**Exit criteria:** Automated test battles complete reliably and produce stable snapshots plus ordered visual events.
+**Exit criteria:** Versioned contracts describe the journey strip, full battle, control surface, uncapped roster, numbered choices, and non-blocking defaults without retaining four-slot assumptions.
 
-## RPG Sprint 3: Overlay event integration
+## RPG Sprint 3: Standalone turn engine and class kits
 
-**Objective:** Drive the micro strip from the real engine while keeping game state authoritative on the server.
+**Objective:** Implement deterministic combat without Twitch, OBS, WebSockets, or persistence.
 
-- Publish recoverable snapshots and sequenced animation events through the existing overlay WebSocket infrastructure.
-- Let a newly connected browser source render current state immediately.
-- Ignore duplicated and stale events after reconnects.
-- Queue visual actions so actors move one at a time while the server remains authoritative.
-- Ensure a missing or disconnected overlay never blocks combat resolution.
-- Add quiet, normal, paused, and hidden operator modes.
+- Create pure models for actors, skills, effects, encounters, turns, and outcomes.
+- Resolve one actor at a time using speed, priority, and a stable tie-breaker.
+- Give each friendly class three skills and one declared default:
+  - Adventurer: Strike, Brace, Rally; default Strike
+  - Warrior: Slash, Guard Ally, Shield Slam; default Slash
+  - Mage: Arcane Bolt, Fireball, Focus; default Arcane Bolt
+  - Healer: Smite, Heal, Group Heal; default Heal when needed, otherwise Smite
+  - Ranger: Quick Shot, Mark Target, Volley; default Quick Shot
+- Use automatic targeting in the first release; viewers choose a skill, not a target.
+- Add Slime, Goblin, and Ogre skills and defaults.
+- Produce ordered domain and animation events for prompts, choices, defaults, movement, effects, damage, healing, knockouts, and results.
+- Support seeded simulations with one participant, typical groups, and large rosters.
+- Test invalid choices, late choices, timeouts, absent actors, targeting, turn order, victory, defeat, and stalemate protection.
 
-**Exit criteria:** Repeated automated battles render correctly, and refreshing the browser source recovers without restarting the bot or replaying an entire old battle.
+**Exit criteria:** Battles of varying roster sizes complete deterministically, every turn has a valid default path, and no viewer response is required for progress.
 
-## RPG Sprint 4: Chat presence and roster rotation
+## RPG Sprint 4: Full-screen battle prototype
 
-**Objective:** Let ordinary Twitch participation populate the strip without requiring RPG command spam.
+**Objective:** Prove the crowd-and-action-stage presentation at 1920x1080 before Twitch integration.
 
-- Add `!join` to create or explicitly activate a character.
-- Refresh a joined viewer's presence from ordinary chat messages.
-- Start with configurable presence targets:
-  - roughly 20 minutes before moving an unseen viewer to reserve
-  - roughly 45 minutes before the character walks off the strip
-- Treat timeouts as visual roster management, never as loss of XP or character data.
-- Rotate four active characters between encounters using wait time and new-viewer visibility.
-- Give reserves a small capped support contribution.
-- Make returning viewers visibly walk back onto the strip.
-- Avoid paid-status combat advantages and avoid requiring messages solely to remain eligible.
+- Add `/rpg-battle` as a separate OBS browser source.
+- Place the friendly crowd on the left and enemy crowd on the right.
+- Reserve prominent friendly and enemy action positions near the center.
+- Adapt crowd layout by population while keeping all roster members eligible.
+- Highlight the acting crowd sprite, move it to the action position, show its nameplate and three numbered skills, resolve the effect, and return it to the crowd.
+- Show the current viewer prompt clearly enough for mobile users to respond with a bare number.
+- Accelerate ordinary playback for large encounters without hiding specials, knockouts, or major heals.
+- Add scripted fixtures for small, medium, and crowded battles.
+- Keep the battle page dormant when no battle is active; never trigger navigation or OBS scene changes.
 
-**Exit criteria:** A private stream can gain and lose participants naturally through conversation while battles continue with no required combat input.
+**Exit criteria:** The full-screen prototype clearly presents turn ownership, three choices, targets, outcomes, and crowd identity across tested roster sizes.
 
-## RPG Sprint 5: Persistence and progression
+## RPG Sprint 5: Journey strip as an expedition surface
 
-**Objective:** Give viewers a reason to return without allowing veteran power to invalidate newcomers.
+**Objective:** Convert the micro strip from a combat demo into persistent, low-distraction stream decoration.
 
-- Persist viewer identity, XP, level, class, cosmetic choices, and basic battle history.
+- Display the joined expedition as an adaptive friendly group rather than four active slots.
+- Retain simple idle motion and temporary join/name flourishes.
+- Add restrained ambient states such as wandering, resting, camp, treasure, merchant, and encounter ready.
+- Freeze or settle the party when an encounter is ready.
+- Show compact encounter, progression, and loot announcements.
+- Do not run major battles in the strip; minor ambient events may resolve without taking over the stream.
+- Keep visual events configurable so the strip can be quieted or hidden instantly.
+
+**Exit criteria:** The strip communicates expedition state and pending encounters without requiring attention, chat commands, or a battle-sized interface.
+
+## RPG Sprint 6: Private battle control surface
+
+**Objective:** Give the streamer reliable manual control without placing operator controls on-stream.
+
+- Add `/rpg-control` with authenticated or local-only operator controls.
+- Support prepare encounter, start, pause, resume, abort, auto-resolve, advance stalled playback, show results, and return to journey.
+- Make encounter preparation and battle start separate operations so the streamer can switch OBS scenes first.
+- Display connected overlay status, current phase, pending actor, deadline, and last accepted choice.
+- Ensure refreshing or disconnecting the controller cannot corrupt or stall combat.
+- Do not attempt automatic OBS scene switching in the initial release.
+
+**Exit criteria:** The streamer can safely stage and operate an encounter while manually controlling OBS scenes.
+
+## RPG Sprint 7: Twitch presence and numbered choices
+
+**Objective:** Connect ordinary chat presence and turn-specific `1`, `2`, or `3` input without creating general chat spam.
+
+- Add `!join` to create or reactivate a character.
+- Refresh joined-viewer presence from ordinary chat messages.
+- Remove a character from the visible expedition after configurable inactivity without deleting progression.
+- Accept a bare `1`, `2`, or `3` only from the viewer whose choice window is currently open.
+- Ignore other numeric messages and late responses without posting errors.
+- End the choice window immediately on valid input.
+- Use the declared class default on timeout and skip the wait for viewers considered absent.
+- Suppress routine bot confirmations; the battle screen confirms the accepted choice.
+- Add rate-limit, duplicate-message, reconnect, and identity tests.
+
+**Exit criteria:** A private stream completes battles through a mixture of viewer selections and automatic defaults, with no stalled turns and minimal bot output.
+
+## RPG Sprint 8: Persistence and progression
+
+**Objective:** Give viewers durable identity and meaningful choices without allowing veterans to invalidate newcomers.
+
+- Persist viewer identity, XP, level, class, cosmetics, and basic battle history.
 - Begin every new character as an Adventurer.
-- Unlock selection of Warrior, Mage, Healer, or Ranger at level 5.
-- Add one distinctive special flourish per advanced class, initially triggered automatically.
-- Cap power growth conservatively and place most long-term distinction in cosmetics, titles, and animation variations.
-- Add versioned persistence and recovery tests.
-- Create a reviewed, one-way, idempotent legacy migration only after the v2 schema stabilizes.
+- Unlock Warrior, Mage, Healer, or Ranger selection at level 5.
+- Keep stat growth conservative and emphasize cosmetics, titles, and animation variants.
+- Persist encounter state safely enough to recover or explicitly abort after restart.
+- Add versioned persistence, migration, backup, and recovery tests.
+- Create a reviewed, one-way legacy recognition migration only after the v2 schema stabilizes.
 
-**Exit criteria:** A viewer can leave, return, advance, and retain a recognizable character without old state or veteran progression destabilizing encounters.
+**Exit criteria:** Viewers can leave, return, choose a class, and retain recognizable progress without importing legacy combat balance.
 
-## RPG Sprint 6: Stream trial and tuning
+## RPG Sprint 9: Stream trial and pacing
 
-**Objective:** Validate that the RPG supports stream growth and does not distract from the main content.
+**Objective:** Validate that the journey/battle split supports stream growth and remains practical with real chat behavior.
 
-- Measure joins, returning participants, visible-roster wait time, battle duration, and overlay engagement.
-- Test an initial encounter cadence of roughly two to five minutes between battles.
-- Keep normal encounters around 30-75 seconds and bosses around one to three minutes unless trials suggest otherwise.
-- Tune movement, brightness, announcement frequency, and sound independently.
-- Add moderator controls for start, pause, resume, abort, force encounter, quiet mode, and hide.
-- Document OBS setup and safe fallback behavior.
-- Decide whether special bosses merit a separate expanded presentation driven by the same engine.
+- Measure joins, returns, encounter acceptance, choice response rate, defaults, battle duration, and roster size.
+- Tune active-viewer choice windows, absence thresholds, playback speed, and large-roster acceleration.
+- Test manual scene-switch timing from encounter ready through results.
+- Tune strip brightness, announcement frequency, battle readability, and sound independently.
+- Document OBS setup, controller use, recovery, and safe fallback behavior.
+- Provide quiet, paused, hidden, and auto-resolve operating modes.
 
-**Exit criteria:** Several real streams demonstrate that the strip is readable, stable, easily silenced, and compatible with normal conversation.
+**Exit criteria:** Several real streams show that the strip supports normal content, full battles are easy to stage manually, and timeouts/defaults keep every encounter moving.
 
 ## RPG post-launch backlog
 
-- Additional enemy families and encounter environments
-- Cosmetic pets or reserve assists that do not complicate core combat
+- Additional enemy families, environments, camps, treasure, merchants, and journey events
+- Cosmetic pets or assists that do not complicate core combat
 - Raid-triggered reinforcements or special encounters
 - Community milestones and scheduled bosses
-- Optional highlighted viewer specials
-- Expanded boss/BRB overlay using the same snapshots and events
 - Additional cosmetics, titles, palettes, and animation variants
+- Optional group decisions, boss mechanics, or target selection after the numbered-skill loop is proven
 
 The following remain explicitly deferred until usage data justifies them: inventories, equipment stats, currencies, gacha, referrals, salaries, PvP, prestige classes, and branching skill trees.
 
@@ -269,7 +326,7 @@ These items need prioritization before they become committed sprints.
 
 Add new ideas here before scheduling them. Each idea should eventually state the viewer/operator problem, intended outcome, dependencies, risks, and a measurable exit criterion.
 
-- Full-screen RPG boss presentation driven by the micro-strip engine
+- Additional presentation modes driven by the shared RPG engine
 - Bot management and health dashboard
 - Improved Discord/Twitch cross-platform command ownership
 - Additional stream-growth experiments that do not rely on chat spam
@@ -285,7 +342,16 @@ Move completed sprint summaries here with the completion date, relevant commit o
 - Added a read-only archive manifest with keep, reinterpret, and retire decisions.
 - Established `bot/rpg_v2/` without dependencies on the archived RPG, Twitch, OBS, or file storage.
 - Added version 1 player, runtime snapshot, and sequenced animation-event contracts.
-- Locked the initial class roster, four-friendly/three-enemy limits, and ambient automatic battle phases.
+- Locked the initial class roster and initial prototype limits; Sprint 2 now explicitly replaces the superseded four-friendly auto-battle assumptions.
 - Updated the detailed RPG specification to use chat for presence rather than required combat commands.
 - Added contract tests for defaults, retired legacy fields, class validation, actor limits, and ordered events.
 - Deferred the one-way legacy migration until the v2 persistence schema and progression policy are proven in later sprints.
+
+## 2026-07-18: RPG Sprint 1 — Transparent micro-strip prototype
+
+- Added the `/rpg-micro` transparent OBS browser source and verified it at 1920x1080 source size with a 1920x96 bottom strip.
+- Added readable temporary sprites for Adventurer, Warrior, Mage, Healer, Ranger, Slime, Goblin, and Ogre.
+- Demonstrated idle motion, enemy arrival, melee and projectile actions, healing, health changes, action nameplates, victory, and loot flourishes.
+- Corrected aspect-ratio handling after live OBS review and placed the Warrior at the friendly front.
+- Kept scenery effects out of the baseline after review to preserve a simple visual foundation.
+- Deferred conversion from the combat demo to the expedition journey surface to RPG Sprint 5.

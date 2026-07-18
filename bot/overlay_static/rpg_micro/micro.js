@@ -21,11 +21,15 @@
   };
 
   const friendlies = [
-    actor("warrior", "Bulwark", 128, "friendly", 42, 42),
+    actor("warrior", "Bulwark", 314, "friendly", 42, 42),
     actor("mage", "Hexa", 190, "friendly", 35, 35),
-    actor("healer", "Mendly", 252, "friendly", 38, 38),
-    actor("ranger", "Fletch", 314, "friendly", 36, 36),
+    actor("healer", "Mendly", 128, "friendly", 38, 38),
+    actor("ranger", "Fletch", 252, "friendly", 36, 36),
   ];
+
+  // The Adventurer demonstrates the base-class silhouette while wandering.
+  // They are a reserve, not a fifth active combatant, and leave when combat begins.
+  const adventurer = actor("adventurer", "Newblood", 66, "friendly", 34, 34);
 
   const enemies = [
     actor("slime", "Slime", 1662, "enemy", 30, 30),
@@ -47,14 +51,19 @@
     return {
       kind, name, homeX, x: homeX, y: 78, side, hp, maxHp,
       visible: side === "friendly", defeated: false, action: null,
-      flashUntil: 0, labelUntil: 0, walkOffset: Math.random() * Math.PI * 2,
+      flashUntil: 0, labelUntil: 0, actionLabel: null,
+      walkOffset: Math.random() * Math.PI * 2,
     };
   }
 
   function resetBattle() {
     friendlies.forEach((item) => Object.assign(item, {
-      hp: item.maxHp, defeated: false, visible: true, x: item.homeX, action: null,
+      hp: item.maxHp, defeated: false, visible: true, x: item.homeX, action: null, actionLabel: null,
     }));
+    Object.assign(adventurer, {
+      hp: adventurer.maxHp, defeated: false, visible: true,
+      x: adventurer.homeX, action: null, actionLabel: null,
+    });
     enemies.forEach((item) => Object.assign(item, {
       hp: item.maxHp, defeated: false, visible: false, x: item.homeX + 120, action: null,
     }));
@@ -98,6 +107,7 @@
     if (state.phase === "wander" && elapsed > 5200) {
       setPhase("arrival");
       state.encounter += 1;
+      adventurer.visible = false;
       enemies.forEach((item) => { item.visible = true; });
       announce(state.encounter % 3 === 0 ? "A HEAVY FOOTSTEP SHAKES THE ROAD..." : "MONSTERS BLOCK THE ROAD", "danger");
     } else if (state.phase === "arrival") {
@@ -106,6 +116,7 @@
     } else if (state.phase === "warrior" && elapsed > 250) {
       setPhase("warrior-hit");
       friendlies[0].labelUntil = now + 1300;
+      friendlies[0].actionLabel = "SHIELD BASH";
       friendlies[0].action = { from: friendlies[0].homeX, to: enemies[0].x - 34, born: now, duration: 700 };
     } else if (state.phase === "warrior-hit" && elapsed > 420) {
       if (!state.didWarriorHit) {
@@ -116,6 +127,7 @@
     } else if (state.phase === "mage" && elapsed > 300) {
       setPhase("mage-hit");
       friendlies[1].labelUntil = now + 1300;
+      friendlies[1].actionLabel = "ARCANE BOLT";
       projectile(friendlies[1], enemies[1], palette.purple);
     } else if (state.phase === "mage-hit" && elapsed > 430) {
       if (!state.didMageHit) { state.didMageHit = true; damage(enemies[1], 14); }
@@ -123,6 +135,7 @@
     } else if (state.phase === "enemy" && elapsed > 300) {
       setPhase("enemy-hit");
       enemies[2].labelUntil = now + 1300;
+      enemies[2].actionLabel = "CLUB SMASH";
       enemies[2].action = { from: enemies[2].homeX, to: friendlies[0].x + 42, born: now, duration: 760 };
     } else if (state.phase === "enemy-hit" && elapsed > 460) {
       if (!state.didEnemyHit) { state.didEnemyHit = true; damage(friendlies[0], 19); }
@@ -130,12 +143,14 @@
     } else if (state.phase === "healer" && elapsed > 300) {
       setPhase("healer-hit");
       friendlies[2].labelUntil = now + 1300;
+      friendlies[2].actionLabel = "MEND WOUNDS";
       heal(friendlies[0], 11);
     } else if (state.phase === "healer-hit" && elapsed > 1050) {
       setPhase("ranger");
     } else if (state.phase === "ranger" && elapsed > 300) {
       setPhase("ranger-hit");
       friendlies[3].labelUntil = now + 1300;
+      friendlies[3].actionLabel = "QUICK SHOT";
       projectile(friendlies[3], enemies[0], palette.gold);
     } else if (state.phase === "ranger-hit" && elapsed > 430) {
       if (!state.didRangerHit) { state.didRangerHit = true; damage(enemies[0], 18); }
@@ -161,6 +176,10 @@
       item.y = 78 + Math.round(Math.sin(seconds * 3.2 + index) * (state.phase === "wander" ? 1.5 : 0.7));
       applyAction(item, now);
     });
+    if (adventurer.visible) {
+      adventurer.x = adventurer.homeX + Math.sin(seconds * 1.7 + adventurer.walkOffset) * 5;
+      adventurer.y = 78 + Math.round(Math.sin(seconds * 3.2 + 4) * 1.5);
+    }
     enemies.forEach((item, index) => {
       if (!item.action && state.phase !== "arrival") item.x += (item.homeX - item.x) * 0.16;
       item.y = 78 + Math.round(Math.sin(seconds * 2.7 + index) * 0.8);
@@ -179,7 +198,7 @@
   function draw(now) {
     ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
     drawGround();
-    [...friendlies, ...enemies].forEach((item) => drawActor(item, now));
+    [adventurer, ...friendlies, ...enemies].forEach((item) => drawActor(item, now));
     drawEffects(now);
     drawFloaters(now);
     drawAnnouncement(now);
@@ -278,11 +297,13 @@
     ctx.font = "bold 11px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    const width = Math.ceil(ctx.measureText(item.name).width) + 10;
+    const label = item.actionLabel ? `${item.name.toUpperCase()}  •  ${item.actionLabel}` : item.name.toUpperCase();
+    const width = Math.ceil(ctx.measureText(label).width) + 12;
     const x = Math.round(item.x);
     block(x - width / 2, 3, width, 16, palette.shadow);
     ctx.fillStyle = palette.ink;
-    ctx.fillText(item.name.toUpperCase(), x, 17);
+    block(x - width / 2, 18, width, 2, classColor(item.kind));
+    ctx.fillText(label, x, 17);
     ctx.restore();
   }
 
@@ -353,6 +374,6 @@
   }
 
   resetBattle();
-  window.rpgMicroDemo = { state, friendlies, enemies, announce, setPhase, resetBattle };
+  window.rpgMicroDemo = { state, adventurer, friendlies, enemies, announce, setPhase, resetBattle };
   requestAnimationFrame(frame);
 })();

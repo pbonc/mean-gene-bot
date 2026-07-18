@@ -27,6 +27,9 @@ class RpgMicroOverlayTests(unittest.TestCase):
 
         for name in ("warrior", "mage", "healer", "ranger", "slime", "goblin", "ogre"):
             self.assertIn(f'"{name}"', script)
+        self.assertIn('actor("adventurer", "Newblood"', script)
+        self.assertIn('actor("warrior", "Bulwark", 314', script)
+        self.assertIn('actionLabel = "SHIELD BASH"', script)
         for phase in ("wander", "arrival", "victory", "loot"):
             self.assertIn(f'"{phase}"', script)
 
