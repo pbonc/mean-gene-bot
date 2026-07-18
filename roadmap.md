@@ -13,10 +13,11 @@ This file is the execution roadmap for the whole bot. Detailed feature specifica
 ## Current priorities
 
 1. Redefine the Stream RPG contracts around an uncapped expedition and manual full-screen battles.
-2. Build the standalone turn engine and three-skill class kits.
-3. Build the full-screen battle source and private control surface.
-4. Preserve bot reliability while new work is introduced.
-5. Address storage, telemetry, and repository hygiene in bounded maintenance sprints.
+2. Turn the proven micro-strip prototype into a useful ambient journey surface.
+3. Build the standalone turn engine and three-skill class kits.
+4. Build the full-screen battle source and private control surface.
+5. Preserve bot reliability while new work is introduced.
+6. Address storage, telemetry, and repository hygiene in bounded maintenance sprints.
 
 ---
 
@@ -26,7 +27,7 @@ This file is the execution roadmap for the whole bot. Detailed feature specifica
 
 Create a persistent chat expedition with two public presentations: a tiny transparent journey strip during the normal stream and a manually selected full-screen JRPG battle scene for encounters. Every participating character belongs to the battle roster. When a recently active viewer's turn arrives, they may choose one of three skills by typing `1`, `2`, or `3`; a class-appropriate default resolves automatically on timeout or absence so combat never stalls.
 
-The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STRIP_ROADMAP.md](docs/RPG_V2_MICRO_STRIP_ROADMAP.md).
+The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_SPEC.md](docs/RPG_V2_PRODUCT_SPEC.md).
 
 ## Product baseline
 
@@ -83,6 +84,8 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Objective:** Replace the obsolete four-slot auto-battle assumptions before implementing the engine.
 
+**Status:** Complete — 2026-07-18
+
 - Remove the four-friendly eligibility limit from the v2 runtime contract.
 - Model an uncapped expedition roster and encounter participant roster.
 - Keep screen position and sprite density out of combat eligibility rules.
@@ -102,7 +105,22 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Exit criteria:** Versioned contracts describe the journey strip, full battle, control surface, uncapped roster, numbered choices, and non-blocking defaults without retaining four-slot assumptions.
 
-## RPG Sprint 3: Standalone turn engine and class kits
+## RPG Sprint 3: Journey strip as an expedition surface
+
+**Objective:** Convert the micro strip from a combat demo into persistent, low-distraction stream decoration before the full battle system is complete.
+
+- Display the joined expedition as an adaptive friendly group rather than four active slots.
+- Retain simple idle motion and temporary join/name flourishes.
+- Add restrained ambient states such as wandering, resting, camp, treasure, merchant, and encounter ready.
+- Freeze or settle the party when an encounter is ready.
+- Show compact encounter, progression, and loot announcements.
+- Use scripted or lightweight placeholder events until the real battle engine is connected.
+- Do not run major battles in the strip; minor ambient events may resolve without taking over the stream.
+- Keep visual events configurable so the strip can be quieted or hidden instantly.
+
+**Exit criteria:** The strip works as useful stream decoration, communicates expedition state and pending encounters, and does not require attention, chat commands, or the completed battle engine.
+
+## RPG Sprint 4: Standalone turn engine and class kits
 
 **Objective:** Implement deterministic combat without Twitch, OBS, WebSockets, or persistence.
 
@@ -122,7 +140,7 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 
 **Exit criteria:** Battles of varying roster sizes complete deterministically, every turn has a valid default path, and no viewer response is required for progress.
 
-## RPG Sprint 4: Full-screen battle prototype
+## RPG Sprint 5: Full-screen battle prototype
 
 **Objective:** Prove the crowd-and-action-stage presentation at 1920x1080 before Twitch integration.
 
@@ -137,20 +155,6 @@ The detailed product and technical specification lives in [docs/RPG_V2_MICRO_STR
 - Keep the battle page dormant when no battle is active; never trigger navigation or OBS scene changes.
 
 **Exit criteria:** The full-screen prototype clearly presents turn ownership, three choices, targets, outcomes, and crowd identity across tested roster sizes.
-
-## RPG Sprint 5: Journey strip as an expedition surface
-
-**Objective:** Convert the micro strip from a combat demo into persistent, low-distraction stream decoration.
-
-- Display the joined expedition as an adaptive friendly group rather than four active slots.
-- Retain simple idle motion and temporary join/name flourishes.
-- Add restrained ambient states such as wandering, resting, camp, treasure, merchant, and encounter ready.
-- Freeze or settle the party when an encounter is ready.
-- Show compact encounter, progression, and loot announcements.
-- Do not run major battles in the strip; minor ambient events may resolve without taking over the stream.
-- Keep visual events configurable so the strip can be quieted or hidden instantly.
-
-**Exit criteria:** The strip communicates expedition state and pending encounters without requiring attention, chat commands, or a battle-sized interface.
 
 ## RPG Sprint 6: Private battle control surface
 
@@ -354,4 +358,15 @@ Move completed sprint summaries here with the completion date, relevant commit o
 - Demonstrated idle motion, enemy arrival, melee and projectile actions, healing, health changes, action nameplates, victory, and loot flourishes.
 - Corrected aspect-ratio handling after live OBS review and placed the Warrior at the friendly front.
 - Kept scenery effects out of the baseline after review to preserve a simple visual foundation.
-- Deferred conversion from the combat demo to the expedition journey surface to RPG Sprint 5.
+- Scheduled conversion from the combat demo to the expedition journey surface as the next visual deliverable in RPG Sprint 3.
+
+## 2026-07-18: RPG Sprint 2 — Contract reset and battle rules
+
+- Replaced contract version 1 with an explicitly incompatible version 2.
+- Removed active-party, reserve-count, four-friendly, and three-enemy limits from runtime state.
+- Added uncapped expedition, participant, and enemy collections with unique actor identity validation.
+- Added journey, encounter-ready, operator-start, actor-choice, playback, result, and pause phases.
+- Added a turn-prompt contract requiring exactly three numbered skills and a declared default.
+- Distinguished timed active-viewer prompts from immediate absent-viewer defaults.
+- Required pending turns to match the current battle and an encounter participant.
+- Replaced the micro-strip-only specification with the combined journey, battle, control, Twitch-input, and manual-OBS product specification.

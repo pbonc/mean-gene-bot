@@ -47,7 +47,7 @@ Any migration must read from a copy or open the archive read-only, write a new v
 - Future Twitch adapter: `bot/rpg_v2/commands.py`
 - Future overlay assets: `bot/overlay_static/rpg_micro/`
 - Future mutable data: `data/rpg_v2/`
-- Product specification: `docs/RPG_V2_MICRO_STRIP_ROADMAP.md`
+- Product specification: `docs/RPG_V2_PRODUCT_SPEC.md`
 - Execution roadmap: `roadmap.md`
 
-The current contract version is `1`. Contract upgrades must be explicit; silently accepting a v1 legacy record as a v2 record is prohibited.
+The current contract version is `2`. Contract upgrades are explicit; version 1 prototype records and legacy RPG records are rejected rather than silently interpreted as current state.

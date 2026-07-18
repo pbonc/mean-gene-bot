@@ -13,10 +13,11 @@ from enum import StrEnum
 from typing import Any, Mapping
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 PLAYER_SCHEMA = "rpg_v2.player"
 RUNTIME_SCHEMA = "rpg_v2.runtime"
 EVENT_SCHEMA = "rpg_v2.animation_event"
+TURN_PROMPT_SCHEMA = "rpg_v2.turn_prompt"
 
 
 class CharacterClass(StrEnum):
@@ -28,9 +29,10 @@ class CharacterClass(StrEnum):
 
 
 class RuntimePhase(StrEnum):
-    IDLE = "idle"
-    WANDER = "wander"
-    ENCOUNTER_INTRO = "encounter_intro"
+    JOURNEY = "journey"
+    ENCOUNTER_READY = "encounter_ready"
+    BATTLE_STARTING = "battle_starting"
+    ACTOR_CHOICE = "actor_choice"
     ACTION_PLAYBACK = "action_playback"
     CHECK = "check"
     VICTORY = "victory"
@@ -43,6 +45,10 @@ class EventType(StrEnum):
     ACTOR_JOINED = "actor_joined"
     ACTOR_LEFT = "actor_left"
     ENCOUNTER_STARTED = "encounter_started"
+    ENCOUNTER_READY = "encounter_ready"
+    TURN_PROMPTED = "turn_prompted"
+    SKILL_SELECTED = "skill_selected"
+    DEFAULT_SELECTED = "default_selected"
     ACTION_STARTED = "action_started"
     PROJECTILE_SPAWNED = "projectile_spawned"
     DAMAGE_APPLIED = "damage_applied"
@@ -115,11 +121,12 @@ def new_runtime_snapshot(*, now: str | None = None) -> dict[str, Any]:
         "version": CONTRACT_VERSION,
         "updated_at": now or _utc_now(),
         "battle_id": None,
-        "phase": RuntimePhase.WANDER.value,
+        "phase": RuntimePhase.JOURNEY.value,
         "round": 0,
-        "active_party": [],
-        "reserve_count": 0,
+        "expedition": [],
+        "participants": [],
         "enemies": [],
+        "pending_turn": None,
         "last_event_sequence": 0,
         "result": None,
     }
@@ -131,15 +138,92 @@ def validate_runtime_snapshot(record: Mapping[str, Any]) -> None:
     _require_schema(record, RUNTIME_SCHEMA)
     _require(record.get("phase") in {item.value for item in RuntimePhase}, "unknown runtime phase")
     _require(isinstance(record.get("round"), int) and record["round"] >= 0, "round must be >= 0")
-    _require(isinstance(record.get("active_party"), list), "active_party must be a list")
-    _require(len(record["active_party"]) <= 4, "active_party cannot exceed four actors")
-    _require(isinstance(record.get("reserve_count"), int) and record["reserve_count"] >= 0, "reserve_count must be >= 0")
+    _require(isinstance(record.get("expedition"), list), "expedition must be a list")
+    _require(isinstance(record.get("participants"), list), "participants must be a list")
     _require(isinstance(record.get("enemies"), list), "enemies must be a list")
-    _require(len(record["enemies"]) <= 3, "enemies cannot exceed three actors")
+    _require_unique_ids(record["expedition"], "expedition")
+    _require_unique_ids(record["participants"], "participants")
+    _require_unique_ids(record["enemies"], "enemies")
+    pending_turn = record.get("pending_turn")
+    _require(pending_turn is None or isinstance(pending_turn, Mapping), "pending_turn must be null or an object")
+    if pending_turn is not None:
+        validate_turn_prompt(pending_turn)
+        _require(pending_turn.get("battle_id") == record.get("battle_id"), "pending_turn battle_id must match runtime")
+        participant_ids = {str(item.get("actor_id")) for item in record["participants"]}
+        _require(pending_turn.get("actor_id") in participant_ids, "pending_turn actor must be a participant")
+    if record.get("phase") == RuntimePhase.ACTOR_CHOICE.value:
+        _require(pending_turn is not None, "actor_choice phase requires pending_turn")
     _require(
         isinstance(record.get("last_event_sequence"), int) and record["last_event_sequence"] >= 0,
         "last_event_sequence must be >= 0",
     )
+
+
+def _require_unique_ids(items: list[Any], field_name: str) -> None:
+    ids: list[str] = []
+    for item in items:
+        _require(isinstance(item, Mapping), f"{field_name} entries must be objects")
+        actor_id = str(item.get("actor_id", "")).strip()
+        _require(bool(actor_id), f"{field_name} actor_id is required")
+        ids.append(actor_id)
+    _require(len(ids) == len(set(ids)), f"{field_name} actor_id values must be unique")
+
+
+def new_turn_prompt(
+    *,
+    battle_id: str,
+    turn_id: str,
+    actor_id: str,
+    choices: list[Mapping[str, Any]],
+    default_choice: int,
+    waits_for_viewer: bool,
+    deadline: str | None = None,
+) -> dict[str, Any]:
+    """Create the three-choice contract shown to one acting viewer.
+
+    ``deadline`` is null when the actor should auto-act immediately. The engine
+    applies ``default_choice`` when no accepted selection exists by the deadline.
+    """
+
+    record: dict[str, Any] = {
+        "schema": TURN_PROMPT_SCHEMA,
+        "version": CONTRACT_VERSION,
+        "battle_id": str(battle_id).strip(),
+        "turn_id": str(turn_id).strip(),
+        "actor_id": str(actor_id).strip(),
+        "choices": [dict(choice) for choice in choices],
+        "default_choice": default_choice,
+        "waits_for_viewer": waits_for_viewer,
+        "deadline": deadline,
+    }
+    validate_turn_prompt(record)
+    return record
+
+
+def validate_turn_prompt(record: Mapping[str, Any]) -> None:
+    _require_schema(record, TURN_PROMPT_SCHEMA)
+    for field in ("battle_id", "turn_id", "actor_id"):
+        _require(bool(str(record.get(field, "")).strip()), f"{field} is required")
+    choices = record.get("choices")
+    _require(isinstance(choices, list), "choices must be a list")
+    _require(len(choices) == 3, "turn prompt requires exactly three choices")
+    numbers: list[int] = []
+    for choice in choices:
+        _require(isinstance(choice, Mapping), "choice entries must be objects")
+        number = choice.get("number")
+        _require(isinstance(number, int), "choice number must be an integer")
+        numbers.append(number)
+        _require(bool(str(choice.get("skill_id", "")).strip()), "choice skill_id is required")
+        _require(bool(str(choice.get("label", "")).strip()), "choice label is required")
+    _require(sorted(numbers) == [1, 2, 3], "choice numbers must be 1, 2, and 3")
+    _require(record.get("default_choice") in (1, 2, 3), "default_choice must be 1, 2, or 3")
+    _require(isinstance(record.get("waits_for_viewer"), bool), "waits_for_viewer must be boolean")
+    deadline = record.get("deadline")
+    _require(deadline is None or isinstance(deadline, str), "deadline must be null or a string")
+    if record.get("waits_for_viewer"):
+        _require(bool(deadline), "viewer choice requires a deadline")
+    else:
+        _require(deadline is None, "automatic choice must not wait on a deadline")
 
 
 def new_animation_event(
