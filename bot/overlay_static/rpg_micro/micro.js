@@ -1,275 +1,388 @@
 (() => {
   "use strict";
 
-  const LOGICAL_WIDTH = 1920;
-  const LOGICAL_HEIGHT = 96;
+  const WIDTH = 1920;
+  const HEIGHT = 96;
+  const TRAVEL_SPEED_PX_PER_SECOND = 26;
+  const EVENT_APPROACH_DISTANCE = 140;
+  const EVENT_APPROACH_SECONDS = EVENT_APPROACH_DISTANCE / TRAVEL_SPEED_PX_PER_SECOND;
   const canvas = document.getElementById("micro-strip");
   const ctx = canvas.getContext("2d", { alpha: true });
   ctx.imageSmoothingEnabled = false;
 
-  const palette = {
+  const params = new URLSearchParams(window.location.search);
+  const initialMode = ["normal", "quiet", "hidden"].includes(params.get("mode"))
+    ? params.get("mode")
+    : "normal";
+
+  const colors = {
     ink: "#fff7d6",
-    shadow: "rgba(4, 8, 18, 0.78)",
-    hp: "#7cf29a",
-    hpLow: "#ff6b6b",
-    hpBack: "rgba(18, 23, 34, 0.88)",
+    shadow: "rgba(4, 8, 18, 0.82)",
     gold: "#ffd76a",
     blue: "#6fb5ff",
     purple: "#c08cff",
     green: "#7fe0a3",
     red: "#ff806f",
+    ground: "rgba(90, 142, 126, 0.32)",
   };
 
-  const friendlies = [
-    actor("warrior", "Bulwark", 314, "friendly", 42, 42),
-    actor("mage", "Hexa", 190, "friendly", 35, 35),
-    actor("healer", "Mendly", 128, "friendly", 38, 38),
-    actor("ranger", "Fletch", 252, "friendly", 36, 36),
-  ];
-
-  // The Adventurer demonstrates the base-class silhouette while wandering.
-  // They are a reserve, not a fifth active combatant, and leave when combat begins.
-  const adventurer = actor("adventurer", "Newblood", 66, "friendly", 34, 34);
-
-  const enemies = [
-    actor("slime", "Slime", 1662, "enemy", 30, 30),
-    actor("goblin", "Goblin", 1720, "enemy", 38, 38),
-    actor("ogre", "Ogre", 1792, "enemy", 92, 92),
+  const expedition = [
+    member("adventurer", "Newblood"),
+    member("healer", "Mendly"),
+    member("mage", "Hexa"),
+    member("adventurer", "Wayfarer"),
+    member("ranger", "Fletch"),
+    member("adventurer", "Pip"),
+    member("mage", "Ember"),
+    member("healer", "Moss"),
+    member("ranger", "Quill"),
+    member("warrior", "Bulwark"),
   ];
 
   const state = {
-    phase: "wander",
-    startedAt: performance.now(),
+    mode: initialMode,
+    ambient: "journey",
+    ambientStartedAt: performance.now(),
+    cycleStartedAt: performance.now(),
+    lastFrameAt: performance.now(),
     announcement: null,
     announcementUntil: 0,
-    floaters: [],
-    effects: [],
-    encounter: 0,
+    joinHighlight: null,
+    joinHighlightUntil: 0,
+    background: [
+      backgroundItem("tree", 760),
+      backgroundItem("rock", 1100),
+      backgroundItem("ruin", 1490),
+      backgroundItem("tree", 1870),
+    ],
   };
 
-  function actor(kind, name, homeX, side, hp, maxHp) {
+  function backgroundItem(kind, x) {
+    return { kind, x };
+  }
+
+  function member(kind, name) {
     return {
-      kind, name, homeX, x: homeX, y: 78, side, hp, maxHp,
-      visible: side === "friendly", defeated: false, action: null,
-      flashUntil: 0, labelUntil: 0, actionLabel: null,
-      walkOffset: Math.random() * Math.PI * 2,
+      actor_id: name.toLowerCase(),
+      kind,
+      name,
+      x: 0,
+      y: 88,
+      scale: 1,
+      row: 0,
+      phaseOffset: Math.random() * Math.PI * 2,
     };
   }
 
-  function resetBattle() {
-    friendlies.forEach((item) => Object.assign(item, {
-      hp: item.maxHp, defeated: false, visible: true, x: item.homeX, action: null, actionLabel: null,
-    }));
-    Object.assign(adventurer, {
-      hp: adventurer.maxHp, defeated: false, visible: true,
-      x: adventurer.homeX, action: null, actionLabel: null,
-    });
-    enemies.forEach((item) => Object.assign(item, {
-      hp: item.maxHp, defeated: false, visible: false, x: item.homeX + 120, action: null,
-    }));
-    state.floaters = [];
-    state.effects = [];
+  function classPriority(kind) {
+    return { healer: 0, mage: 1, adventurer: 2, ranger: 3, warrior: 4 }[kind] ?? 2;
   }
 
-  function announce(text, tone = "normal", duration = 2600) {
+  function layoutExpedition() {
+    const ordered = [...expedition].sort((a, b) => classPriority(a.kind) - classPriority(b.kind));
+    const count = ordered.length;
+    const rows = Math.min(3, Math.max(1, Math.ceil(count / 14)));
+    const columns = Math.max(1, Math.ceil(count / rows));
+    const scale = count <= 12 ? 1 : count <= 28 ? 0.78 : 0.58;
+    const availableWidth = 610;
+    const spacing = columns === 1 ? 0 : Math.min(48 * scale, availableWidth / (columns - 1));
+
+    ordered.forEach((actor, index) => {
+      const row = index % rows;
+      const column = Math.floor(index / rows);
+      actor.row = row;
+      actor.scale = scale * (1 - row * 0.06);
+      actor.x = 60 + column * spacing + row * 11;
+      actor.y = 91 - row * 24 * scale;
+    });
+  }
+
+  function addMember(kind, name) {
+    const cleanName = String(name || "Traveler").trim().slice(0, 24) || "Traveler";
+    const actor = member(kind, cleanName);
+    expedition.push(actor);
+    state.joinHighlight = actor.actor_id;
+    state.joinHighlightUntil = performance.now() + 3200;
+    announce(`${cleanName.toUpperCase()} JOINS THE EXPEDITION`, "join", 3200);
+    layoutExpedition();
+    return actor;
+  }
+
+  function removeMember(actorId) {
+    const index = expedition.findIndex((actor) => actor.actor_id === actorId);
+    if (index < 0) return false;
+    expedition.splice(index, 1);
+    layoutExpedition();
+    return true;
+  }
+
+  function announce(text, tone = "normal", duration = 3200) {
+    if (state.mode === "quiet" || state.mode === "hidden") return;
     state.announcement = { text, tone };
     state.announcementUntil = performance.now() + duration;
   }
 
-  function setPhase(phase) {
-    state.phase = phase;
-    state.startedAt = performance.now();
+  function setAmbientState(next, options = {}) {
+    const allowed = ["journey", "treasure", "camp", "merchant", "encounter_ready"];
+    if (!allowed.includes(next)) throw new Error(`Unknown ambient state: ${next}`);
+    if (state.ambient === next && !options.force) return;
+    state.ambient = next;
+    state.ambientStartedAt = performance.now();
+
+    if (options.announce === false) return;
+    const messages = {
+      treasure: ["A TREASURE CHEST APPEARS", "loot"],
+      camp: ["THE EXPEDITION MAKES CAMP", "camp"],
+      merchant: ["A TRAVELING MERCHANT PASSES BY", "merchant"],
+      encounter_ready: ["ENCOUNTER READY  •  WAITING FOR THE STREAMER", "danger"],
+    };
+    if (messages[next]) announce(messages[next][0], messages[next][1], next === "encounter_ready" ? 5200 : 3400);
   }
 
-  function damage(target, amount) {
-    target.hp = Math.max(0, target.hp - amount);
-    target.flashUntil = performance.now() + 180;
-    state.floaters.push({ x: target.x, y: 40, text: `-${amount}`, color: "#ff786d", born: performance.now() });
-    if (target.hp === 0) target.defeated = true;
-  }
-
-  function heal(target, amount) {
-    target.hp = Math.min(target.maxHp, target.hp + amount);
-    state.floaters.push({ x: target.x, y: 40, text: `+${amount}`, color: "#8effad", born: performance.now() });
-    state.effects.push({ kind: "sparkle", x: target.x, y: 58, born: performance.now(), color: "#8effad" });
-  }
-
-  function projectile(from, target, color) {
-    state.effects.push({
-      kind: "projectile", fromX: from.x, toX: target.x, x: from.x,
-      y: 58, born: performance.now(), duration: 420, color,
-    });
-  }
-
-  function runDemo(now) {
-    const elapsed = now - state.startedAt;
-
-    if (state.phase === "wander" && elapsed > 5200) {
-      setPhase("arrival");
-      state.encounter += 1;
-      adventurer.visible = false;
-      enemies.forEach((item) => { item.visible = true; });
-      announce(state.encounter % 3 === 0 ? "A HEAVY FOOTSTEP SHAKES THE ROAD..." : "MONSTERS BLOCK THE ROAD", "danger");
-    } else if (state.phase === "arrival") {
-      enemies.forEach((item) => { item.x += (item.homeX - item.x) * 0.08; });
-      if (elapsed > 3000) setPhase("warrior");
-    } else if (state.phase === "warrior" && elapsed > 250) {
-      setPhase("warrior-hit");
-      friendlies[0].labelUntil = now + 1300;
-      friendlies[0].actionLabel = "SHIELD BASH";
-      friendlies[0].action = { from: friendlies[0].homeX, to: enemies[0].x - 34, born: now, duration: 700 };
-    } else if (state.phase === "warrior-hit" && elapsed > 420) {
-      if (!state.didWarriorHit) {
-        state.didWarriorHit = true;
-        damage(enemies[0], 12);
-      }
-      if (elapsed > 1100) { state.didWarriorHit = false; setPhase("mage"); }
-    } else if (state.phase === "mage" && elapsed > 300) {
-      setPhase("mage-hit");
-      friendlies[1].labelUntil = now + 1300;
-      friendlies[1].actionLabel = "ARCANE BOLT";
-      projectile(friendlies[1], enemies[1], palette.purple);
-    } else if (state.phase === "mage-hit" && elapsed > 430) {
-      if (!state.didMageHit) { state.didMageHit = true; damage(enemies[1], 14); }
-      if (elapsed > 1050) { state.didMageHit = false; setPhase("enemy"); }
-    } else if (state.phase === "enemy" && elapsed > 300) {
-      setPhase("enemy-hit");
-      enemies[2].labelUntil = now + 1300;
-      enemies[2].actionLabel = "CLUB SMASH";
-      enemies[2].action = { from: enemies[2].homeX, to: friendlies[0].x + 42, born: now, duration: 760 };
-    } else if (state.phase === "enemy-hit" && elapsed > 460) {
-      if (!state.didEnemyHit) { state.didEnemyHit = true; damage(friendlies[0], 19); }
-      if (elapsed > 1150) { state.didEnemyHit = false; setPhase("healer"); }
-    } else if (state.phase === "healer" && elapsed > 300) {
-      setPhase("healer-hit");
-      friendlies[2].labelUntil = now + 1300;
-      friendlies[2].actionLabel = "MEND WOUNDS";
-      heal(friendlies[0], 11);
-    } else if (state.phase === "healer-hit" && elapsed > 1050) {
-      setPhase("ranger");
-    } else if (state.phase === "ranger" && elapsed > 300) {
-      setPhase("ranger-hit");
-      friendlies[3].labelUntil = now + 1300;
-      friendlies[3].actionLabel = "QUICK SHOT";
-      projectile(friendlies[3], enemies[0], palette.gold);
-    } else if (state.phase === "ranger-hit" && elapsed > 430) {
-      if (!state.didRangerHit) { state.didRangerHit = true; damage(enemies[0], 18); }
-      if (elapsed > 1150) { state.didRangerHit = false; setPhase("victory"); announce("VICTORY!  THE ROAD IS CLEAR", "victory", 3200); }
-    } else if (state.phase === "victory" && elapsed > 3400) {
-      announce("LOOT FOUND  •  18 XP  •  SLIME JELLY", "loot", 3400);
-      state.effects.push({ kind: "loot", x: 960, y: 55, born: now, color: palette.gold });
-      setPhase("loot");
-    } else if (state.phase === "loot" && elapsed > 3900) {
-      resetBattle();
-      setPhase("wander");
+  function setMode(mode) {
+    if (!["normal", "quiet", "hidden"].includes(mode)) throw new Error(`Unknown display mode: ${mode}`);
+    state.mode = mode;
+    if (mode !== "normal") {
+      state.announcement = null;
+      state.announcementUntil = 0;
     }
   }
 
-  function updateActors(now) {
-    const seconds = now / 1000;
-    friendlies.forEach((item, index) => {
-      if (state.phase === "wander") {
-        item.x = item.homeX + Math.sin(seconds * 1.7 + item.walkOffset) * 5;
-      } else if (!item.action) {
-        item.x += (item.homeX - item.x) * 0.16;
-      }
-      item.y = 78 + Math.round(Math.sin(seconds * 3.2 + index) * (state.phase === "wander" ? 1.5 : 0.7));
-      applyAction(item, now);
-    });
-    if (adventurer.visible) {
-      adventurer.x = adventurer.homeX + Math.sin(seconds * 1.7 + adventurer.walkOffset) * 5;
-      adventurer.y = 78 + Math.round(Math.sin(seconds * 3.2 + 4) * 1.5);
-    }
-    enemies.forEach((item, index) => {
-      if (!item.action && state.phase !== "arrival") item.x += (item.homeX - item.x) * 0.16;
-      item.y = 78 + Math.round(Math.sin(seconds * 2.7 + index) * 0.8);
-      applyAction(item, now);
-    });
-  }
-
-  function applyAction(item, now) {
-    if (!item.action) return;
-    const progress = Math.min(1, (now - item.action.born) / item.action.duration);
-    const thereAndBack = Math.sin(progress * Math.PI);
-    item.x = item.action.from + (item.action.to - item.action.from) * thereAndBack;
-    if (progress >= 1) item.action = null;
+  function runPlaceholderCycle(now) {
+    if (state.mode === "hidden") return;
+    const elapsed = (now - state.cycleStartedAt) % 90000;
+    let next = "journey";
+    if (elapsed >= 30000 && elapsed < 37000) next = "treasure";
+    else if (elapsed >= 52000 && elapsed < 65000) next = "camp";
+    else if (elapsed >= 70000 && elapsed < 77000) next = "merchant";
+    else if (elapsed >= 80000) next = "encounter_ready";
+    setAmbientState(next);
   }
 
   function draw(now) {
-    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    if (state.mode === "hidden") return;
+
     drawGround();
-    [adventurer, ...friendlies, ...enemies].forEach((item) => drawActor(item, now));
-    drawEffects(now);
-    drawFloaters(now);
+    drawBackground();
+    drawProp(now);
+    drawExpedition(now);
     drawAnnouncement(now);
+  }
+
+  function updateBackground(now) {
+    const elapsedSeconds = Math.min(0.05, Math.max(0, (now - state.lastFrameAt) / 1000));
+    state.lastFrameAt = now;
+    const eventAge = (now - state.ambientStartedAt) / 1000;
+    const approachingEvent = ["treasure", "merchant", "encounter_ready"].includes(state.ambient)
+      && eventAge < EVENT_APPROACH_SECONDS;
+    if (state.mode !== "normal" || (state.ambient !== "journey" && !approachingEvent)) return;
+    state.background.forEach((item) => {
+      item.x -= TRAVEL_SPEED_PX_PER_SECOND * elapsedSeconds;
+      if (item.x < -70) item.x = WIDTH + 120 + Math.random() * 340;
+    });
   }
 
   function drawGround() {
     ctx.save();
-    ctx.globalAlpha = state.phase === "wander" ? 0.22 : 0.32;
-    ctx.fillStyle = "rgba(135, 191, 173, 0.55)";
-    for (let x = 28; x < LOGICAL_WIDTH; x += 46) {
-      const height = 2 + ((x / 46) % 3);
-      ctx.fillRect(x, 91 - height, 2, height);
+    ctx.fillStyle = colors.ground;
+    ctx.fillRect(0, 92, WIDTH, 2);
+    ctx.globalAlpha = 0.22;
+    for (let x = 22; x < WIDTH; x += 52) {
+      block(x, 88, 2, 4, "#72aa83");
+      block(x - 3, 90, 3, 2, "#72aa83");
+      block(x + 2, 89, 3, 2, "#72aa83");
     }
-    ctx.fillStyle = "rgba(10, 20, 26, 0.4)";
-    ctx.fillRect(0, 92, LOGICAL_WIDTH, 2);
     ctx.restore();
   }
 
-  function drawActor(item, now) {
-    if (!item.visible) return;
+  function drawBackground() {
+    if (state.mode !== "normal") return;
     ctx.save();
-    ctx.translate(Math.round(item.x), Math.round(item.y));
-    if (item.side === "enemy") ctx.scale(-1, 1);
-    if (item.defeated) {
-      ctx.globalAlpha = 0.35;
-      ctx.rotate(item.side === "enemy" ? -Math.PI / 2 : Math.PI / 2);
-    }
-    if (item.flashUntil > now) ctx.globalCompositeOperation = "screen";
-    drawSprite(item.kind);
+    state.background.forEach((item) => {
+      const x = Math.round(item.x);
+      if (item.kind === "tree") {
+        block(x - 3, 91 - 30, 6, 30, "#5e432e");
+        block(x - 12, 91 - 42, 24, 15, "#397452");
+        block(x - 8, 91 - 50, 16, 10, "#56a070");
+        block(x - 5, 91 - 47, 10, 3, "#75bd89");
+      } else if (item.kind === "ruin") {
+        block(x - 21, 91 - 28, 8, 28, "#697572");
+        block(x + 12, 91 - 20, 8, 20, "#697572");
+        block(x - 23, 91 - 32, 44, 6, "#a4b0ac");
+        block(x - 18, 91 - 27, 4, 25, "#8e9a96");
+        block(x - 7, 91 - 14, 19, 14, "#394443");
+      } else {
+        block(x - 10, 91 - 7, 20, 7, "#65716f");
+        block(x - 6, 91 - 11, 12, 5, "#a6b1ad");
+        block(x - 3, 91 - 10, 7, 2, "#c1cac6");
+      }
+    });
     ctx.restore();
-    drawHealth(item);
-    if (item.labelUntil > now) drawName(item);
+  }
+
+  function drawExpedition(now) {
+    const seconds = now / 1000;
+    const ordered = [...expedition].sort((a, b) => a.row - b.row || a.x - b.x);
+    ordered.forEach((actor) => {
+      let bob = 0;
+      if (state.ambient === "journey") bob = Math.round(Math.sin(seconds * 3.1 + actor.phaseOffset) * 1.4);
+      else if (state.ambient === "treasure" || state.ambient === "merchant") bob = Math.round(Math.sin(seconds * 2.2 + actor.phaseOffset) * 0.6);
+
+      ctx.save();
+      ctx.translate(Math.round(actor.x), Math.round(actor.y + bob));
+      ctx.scale(actor.scale, actor.scale);
+      drawSprite(actor.kind);
+      ctx.restore();
+
+      if (state.joinHighlight === actor.actor_id && state.joinHighlightUntil > now) {
+        drawNameplate(actor, now);
+      }
+    });
+  }
+
+  function drawProp(now) {
+    if (state.mode === "quiet") return;
+    const age = (now - state.ambientStartedAt) / 1000;
+    if (state.ambient === "treasure") drawEnteringEvent(age, 940, 6.4, (x) => drawChest(x, 90, age));
+    else if (state.ambient === "camp") drawCamp(870, 92, age);
+    else if (state.ambient === "merchant") drawEnteringEvent(age, 930, 6.3, (x) => drawMerchant(x, 90, age));
+    else if (state.ambient === "encounter_ready") drawEnteringEvent(age, 1560, Infinity, (x) => drawEncounter(x, 92, age));
+  }
+
+  function drawEnteringEvent(age, stopX, fadeAt, renderer) {
+    const x = Math.max(stopX, stopX + EVENT_APPROACH_DISTANCE - TRAVEL_SPEED_PX_PER_SECOND * age);
+    ctx.save();
+    if (age > fadeAt) ctx.globalAlpha = Math.max(0, 1 - (age - fadeAt) / 0.6);
+    renderer(x);
+    ctx.restore();
+  }
+
+  function drawChest(x, y, age) {
+    const bob = Math.round(Math.sin(age * 3) * 1.5);
+    block(x - 16, y - 18 + bob, 32, 16, "#8c592f");
+    block(x - 18, y - 20 + bob, 36, 7, "#b47738");
+    block(x - 3, y - 16 + bob, 6, 9, colors.gold);
+    if (age < 3.5) {
+      block(x - 24, y - 28 + bob, 3, 3, colors.gold);
+      block(x + 21, y - 31 + bob, 3, 3, colors.gold);
+    }
+  }
+
+  function drawCamp(x, y, age) {
+    const flame = Math.round(Math.sin(age * 9) * 2);
+    block(x - 28, y - 5, 56, 3, "rgba(86, 63, 46, 0.76)");
+    block(x - 7, y - 14 - flame, 14, 11 + flame, "#ff9b4f");
+    block(x - 4, y - 11 - flame, 8, 8 + flame, "#ffe06a");
+    block(x - 36, y - 25, 3, 22, "#9a7653");
+    block(x - 36, y - 27, 38, 3, "#9a7653");
+    block(x - 31, y - 24, 28, 14, "rgba(76, 117, 92, 0.82)");
+  }
+
+  function drawMerchant(x, y, age) {
+    const bob = Math.round(Math.sin(age * 2.4) * 1);
+    ctx.save();
+    ctx.translate(x, y + bob);
+    drawSprite("merchant");
+    ctx.restore();
+    block(x + 18, y - 18, 22, 16, "#76502f");
+    block(x + 15, y - 20, 28, 5, "#b47a3e");
+    block(x + 24, y - 15, 6, 6, colors.gold);
+  }
+
+  function drawEncounter(x, y, age) {
+    const pulse = 0.68 + Math.sin(age * 3) * 0.12;
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.translate(x - 35, y);
+    ctx.scale(-1, 1);
+    drawSprite("slime");
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.translate(x + 30, y);
+    ctx.scale(-1, 1);
+    drawSprite("goblin");
+    ctx.restore();
+    ctx.font = "bold 16px monospace";
+    ctx.textAlign = "center";
+    ctx.fillStyle = colors.red;
+    ctx.fillText("!", x, 42);
+  }
+
+  function drawNameplate(actor) {
+    ctx.save();
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    const label = actor.name.toUpperCase();
+    const width = Math.ceil(ctx.measureText(label).width) + 12;
+    const x = actor.x;
+    block(x - width / 2, 4, width, 17, colors.shadow);
+    block(x - width / 2, 19, width, 2, classColor(actor.kind));
+    ctx.fillStyle = colors.ink;
+    ctx.fillText(label, x, 17);
+    ctx.restore();
+  }
+
+  function drawAnnouncement(now) {
+    if (!state.announcement || state.announcementUntil <= now || state.mode !== "normal") return;
+    const text = state.announcement.text;
+    const tone = state.announcement.tone;
+    ctx.save();
+    ctx.font = "bold 14px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const width = Math.min(720, Math.ceil(ctx.measureText(text).width) + 40);
+    const x = WIDTH / 2 - width / 2;
+    block(x, 4, width, 24, colors.shadow);
+    block(x, 4, width, 2, toneColor(tone));
+    ctx.fillStyle = tone === "loot" ? colors.gold : colors.ink;
+    ctx.fillText(text, WIDTH / 2, 17);
+    ctx.restore();
+  }
+
+  function toneColor(tone) {
+    return { danger: colors.red, loot: colors.gold, camp: colors.green, merchant: colors.purple, join: colors.blue }[tone] || colors.blue;
   }
 
   function block(x, y, width, height, color) {
     ctx.fillStyle = color;
-    ctx.fillRect(x, y, width, height);
+    ctx.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
   }
 
   function drawSprite(kind) {
     const skin = "#f2bd83";
     const dark = "#172033";
     const boot = "#121725";
+
     if (kind === "slime") {
       block(-14, -18, 28, 16, "#64d6ba"); block(-10, -22, 20, 4, "#8ff0d6");
-      block(-9, -13, 3, 4, dark); block(6, -13, 3, 4, dark); block(-14, -3, 7, 3, "#42a995"); block(7, -3, 7, 3, "#42a995");
+      block(-9, -13, 3, 4, dark); block(6, -13, 3, 4, dark);
       return;
     }
     if (kind === "goblin") {
       block(-11, -34, 22, 13, "#76b65d"); block(-18, -31, 7, 5, "#76b65d"); block(11, -31, 7, 5, "#76b65d");
       block(-8, -29, 3, 3, dark); block(5, -29, 3, 3, dark); block(-10, -21, 20, 15, "#8a4f3c");
-      block(-9, -6, 7, 6, boot); block(2, -6, 7, 6, boot); block(11, -28, 3, 27, "#d0a75e"); block(10, -30, 10, 3, "#d0a75e");
+      block(-9, -6, 7, 6, boot); block(2, -6, 7, 6, boot); block(11, -28, 3, 27, "#d0a75e");
       return;
     }
-    if (kind === "ogre") {
-      block(-18, -46, 36, 17, "#a379c4"); block(-15, -41, 4, 4, dark); block(11, -41, 4, 4, dark);
-      block(-22, -29, 44, 23, "#75528f"); block(-16, -6, 12, 6, boot); block(4, -6, 12, 6, boot);
-      block(20, -43, 7, 39, "#76512f"); block(17, -47, 20, 8, "#a57a45");
+    if (kind === "merchant") {
+      block(-8, -38, 16, 13, skin); block(-6, -34, 3, 3, dark); block(3, -34, 3, 3, dark);
+      block(-12, -25, 24, 18, "#9d6bb5"); block(-9, -7, 7, 7, boot); block(2, -7, 7, 7, boot);
+      block(-12, -42, 24, 5, "#69477a");
       return;
     }
+
     block(-8, -38, 16, 13, skin);
     block(-6, -34, 3, 3, dark); block(3, -34, 3, 3, dark);
     block(-9, -25, 18, 18, classColor(kind));
     block(-8, -7, 6, 7, boot); block(2, -7, 6, 7, boot);
     if (kind === "warrior") {
       block(-11, -43, 22, 6, "#9abce8"); block(9, -25, 12, 18, "#537eb8"); block(12, -22, 6, 12, "#8eb7e7");
-      block(-14, -24, 3, 23, "#d9e5f2"); block(-18, -24, 11, 3, "#d9e5f2");
     } else if (kind === "mage") {
-      block(-14, -43, 28, 5, "#8655bd"); block(-7, -51, 14, 9, "#a776da"); block(12, -28, 3, 27, "#8c6845"); block(10, -32, 7, 7, palette.purple);
+      block(-14, -43, 28, 5, "#8655bd"); block(-7, -51, 14, 9, "#a776da"); block(12, -28, 3, 27, "#8c6845"); block(10, -32, 7, 7, colors.purple);
     } else if (kind === "healer") {
-      block(-9, -43, 18, 5, "#f1f0d4"); block(12, -28, 3, 27, "#9d7549"); block(9, -34, 9, 9, palette.green); block(-2, -22, 4, 10, "#f3f1d6"); block(-5, -19, 10, 4, "#f3f1d6");
+      block(-9, -43, 18, 5, "#f1f0d4"); block(12, -28, 3, 27, "#9d7549"); block(9, -34, 9, 9, colors.green); block(-2, -22, 4, 10, "#f3f1d6"); block(-5, -19, 10, 4, "#f3f1d6");
     } else if (kind === "ranger") {
       block(-11, -42, 22, 5, "#547f55"); block(12, -30, 3, 28, "#b37942"); block(8, -28, 10, 3, "#d5a45c");
     } else {
@@ -281,99 +394,23 @@
     return { warrior: "#4e7fbd", mage: "#7646a8", healer: "#4e9b72", ranger: "#8b5342", adventurer: "#9b744e" }[kind] || "#8b6a4b";
   }
 
-  function drawHealth(item) {
-    if (item.defeated || !item.visible) return;
-    const width = item.kind === "ogre" ? 48 : 30;
-    const x = Math.round(item.x - width / 2);
-    const y = item.kind === "ogre" ? 24 : 31;
-    block(x - 1, y - 1, width + 2, 5, palette.shadow);
-    block(x, y, width, 3, palette.hpBack);
-    const ratio = item.maxHp ? item.hp / item.maxHp : 0;
-    block(x, y, Math.round(width * ratio), 3, ratio < 0.35 ? palette.hpLow : palette.hp);
-  }
-
-  function drawName(item) {
-    ctx.save();
-    ctx.font = "bold 11px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    const label = item.actionLabel ? `${item.name.toUpperCase()}  •  ${item.actionLabel}` : item.name.toUpperCase();
-    const width = Math.ceil(ctx.measureText(label).width) + 12;
-    const x = Math.round(item.x);
-    block(x - width / 2, 3, width, 16, palette.shadow);
-    ctx.fillStyle = palette.ink;
-    block(x - width / 2, 18, width, 2, classColor(item.kind));
-    ctx.fillText(label, x, 17);
-    ctx.restore();
-  }
-
-  function drawFloaters(now) {
-    state.floaters = state.floaters.filter((item) => now - item.born < 900);
-    state.floaters.forEach((item) => {
-      const progress = (now - item.born) / 900;
-      ctx.save();
-      ctx.globalAlpha = 1 - progress;
-      ctx.font = "bold 14px monospace";
-      ctx.textAlign = "center";
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = palette.shadow;
-      ctx.strokeText(item.text, item.x, item.y - progress * 18);
-      ctx.fillStyle = item.color;
-      ctx.fillText(item.text, item.x, item.y - progress * 18);
-      ctx.restore();
-    });
-  }
-
-  function drawEffects(now) {
-    state.effects = state.effects.filter((item) => now - item.born < (item.kind === "loot" ? 3200 : 800));
-    state.effects.forEach((item) => {
-      const age = now - item.born;
-      ctx.save();
-      if (item.kind === "projectile") {
-        const progress = Math.min(1, age / item.duration);
-        item.x = item.fromX + (item.toX - item.fromX) * progress;
-        ctx.globalAlpha = 1 - Math.max(0, progress - 0.8) * 5;
-        block(Math.round(item.x) - 4, item.y - 2, 9, 4, item.color);
-        block(Math.round(item.x) - 2, item.y - 5, 4, 10, "rgba(255,255,255,.7)");
-      } else {
-        const radius = item.kind === "loot" ? 12 + age / 90 : 4 + age / 60;
-        ctx.globalAlpha = Math.max(0, 1 - age / (item.kind === "loot" ? 3200 : 800));
-        ctx.strokeStyle = item.color;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(item.x, item.y, radius, 0, Math.PI * 2); ctx.stroke();
-        for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
-          block(item.x + Math.cos(angle) * radius - 1, item.y + Math.sin(angle) * radius - 1, 3, 3, item.color);
-        }
-      }
-      ctx.restore();
-    });
-  }
-
-  function drawAnnouncement(now) {
-    if (!state.announcement || state.announcementUntil <= now) return;
-    const text = state.announcement.text;
-    const tone = state.announcement.tone;
-    ctx.save();
-    ctx.font = "bold 14px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    const width = Math.min(660, Math.ceil(ctx.measureText(text).width) + 38);
-    const x = LOGICAL_WIDTH / 2 - width / 2;
-    block(x, 4, width, 24, "rgba(6, 10, 20, 0.88)");
-    block(x, 4, width, 2, tone === "danger" ? palette.red : tone === "victory" || tone === "loot" ? palette.gold : palette.blue);
-    ctx.fillStyle = tone === "loot" ? palette.gold : palette.ink;
-    ctx.fillText(text, LOGICAL_WIDTH / 2, 17);
-    ctx.restore();
-  }
-
   function frame(now) {
-    runDemo(now);
-    updateActors(now);
+    runPlaceholderCycle(now);
+    updateBackground(now);
     draw(now);
     requestAnimationFrame(frame);
   }
 
-  resetBattle();
-  window.rpgMicroDemo = { state, adventurer, friendlies, enemies, announce, setPhase, resetBattle };
+  layoutExpedition();
+  window.rpgMicro = {
+    state,
+    expedition,
+    addMember,
+    removeMember,
+    setAmbientState,
+    setMode,
+    announce,
+    relayout: layoutExpedition,
+  };
   requestAnimationFrame(frame);
 })();

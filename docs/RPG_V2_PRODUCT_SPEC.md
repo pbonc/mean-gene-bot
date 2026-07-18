@@ -31,6 +31,10 @@ The strip is persistent, transparent stream decoration. It shows the expedition 
 
 Major battles do not resolve inside the strip. When an encounter is ready, the party settles and a compact announcement appears. The encounter waits indefinitely for the streamer.
 
+During Sprint 3, a lightweight 90-second placeholder cycle previews journey, treasure, camp, merchant, and encounter-ready states before live services exist. Display modes can be previewed with `/rpg-micro?mode=normal`, `/rpg-micro?mode=quiet`, or `/rpg-micro?mode=hidden`. Quiet mode keeps the expedition while suppressing props and announcements; hidden mode renders nothing.
+
+Passive scenery such as sparse trees, rocks, and ruins crosses from right to left only during journey, creating movement without becoming an interactive event. Scenery and incoming gameplay events share one constant travel speed and full opacity; scenery is drawn behind party sprites so overlap creates natural depth. Meaningful events stop in a clear event area: treasure and merchants pause briefly and fade, while an encounter remains in place awaiting the streamer. Background travel freezes whenever the expedition stops for an event.
+
 ### Battle page: `/rpg-battle`
 
 The full-screen page places the friendly crowd on the left and enemy crowd on the right. It reserves prominent friendly and enemy action positions near the center. On an actor's turn:

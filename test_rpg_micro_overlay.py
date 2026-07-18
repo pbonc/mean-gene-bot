@@ -22,16 +22,51 @@ class RpgMicroOverlayTests(unittest.TestCase):
         self.assertIn("max-height: 96px", css)
         self.assertIn("bottom: 0", css)
 
-    def test_demo_includes_initial_classes_enemies_and_phases(self):
+    def test_strip_includes_expedition_classes_and_ambient_states(self):
         script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
 
-        for name in ("warrior", "mage", "healer", "ranger", "slime", "goblin", "ogre"):
+        for name in ("adventurer", "warrior", "mage", "healer", "ranger"):
             self.assertIn(f'"{name}"', script)
-        self.assertIn('actor("adventurer", "Newblood"', script)
-        self.assertIn('actor("warrior", "Bulwark", 314', script)
-        self.assertIn('actionLabel = "SHIELD BASH"', script)
-        for phase in ("wander", "arrival", "victory", "loot"):
-            self.assertIn(f'"{phase}"', script)
+        for ambient_state in ("journey", "treasure", "camp", "merchant", "encounter_ready"):
+            self.assertIn(f'"{ambient_state}"', script)
+
+    def test_strip_exposes_adaptive_roster_and_display_controls(self):
+        script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
+
+        self.assertIn("function layoutExpedition()", script)
+        self.assertIn("function addMember(kind, name)", script)
+        self.assertIn("function removeMember(actorId)", script)
+        self.assertIn("function setMode(mode)", script)
+        for mode in ("normal", "quiet", "hidden"):
+            self.assertIn(f'"{mode}"', script)
+
+    def test_strip_is_ambient_not_a_major_battle_demo(self):
+        script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
+
+        self.assertNotIn("SHIELD BASH", script)
+        self.assertNotIn("damage(", script)
+        self.assertIn("ENCOUNTER READY", script)
+
+    def test_passive_scenery_moves_only_during_journey(self):
+        script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
+
+        for scenery in ("tree", "rock", "ruin"):
+            self.assertIn(f'backgroundItem("{scenery}"', script)
+        self.assertIn('state.ambient !== "journey"', script)
+        self.assertIn("TRAVEL_SPEED_PX_PER_SECOND = 26", script)
+        self.assertIn("EVENT_APPROACH_SECONDS = EVENT_APPROACH_DISTANCE / TRAVEL_SPEED_PX_PER_SECOND", script)
+        self.assertIn("item.x -= TRAVEL_SPEED_PX_PER_SECOND * elapsedSeconds", script)
+        self.assertNotIn("ctx.globalAlpha = 0.62", script)
+
+    def test_game_events_enter_stop_and_fade(self):
+        script = (MICRO_DIR / "micro.js").read_text(encoding="utf-8")
+
+        self.assertIn("function drawEnteringEvent", script)
+        self.assertIn("stopX + EVENT_APPROACH_DISTANCE - TRAVEL_SPEED_PX_PER_SECOND * age", script)
+        self.assertIn("eventAge < EVENT_APPROACH_SECONDS", script)
+        self.assertIn("drawEnteringEvent(age, 940", script)
+        self.assertIn("drawEnteringEvent(age, 930", script)
+        self.assertIn("Math.max(0, 1 - (age - fadeAt) / 0.6)", script)
 
 
 if __name__ == "__main__":

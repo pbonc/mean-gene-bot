@@ -109,6 +109,8 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Objective:** Convert the micro strip from a combat demo into persistent, low-distraction stream decoration before the full battle system is complete.
 
+**Status:** In progress — functional ambient renderer implemented; OBS visual review pending
+
 - Display the joined expedition as an adaptive friendly group rather than four active slots.
 - Retain simple idle motion and temporary join/name flourishes.
 - Add restrained ambient states such as wandering, resting, camp, treasure, merchant, and encounter ready.
