@@ -1,6 +1,6 @@
 {
-  "is_active": false,
-  "current_word": null,
+  "is_active": true,
+  "current_word": "rum",
   "prize_value": 40,
   "stream_bias_percent": 85,
   "winner": null

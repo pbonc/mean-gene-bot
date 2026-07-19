@@ -999,7 +999,7 @@
         } else {
           message = `🎲 ${possibleCount} potential winners remain`;
         }
-        filterInfo.innerHTML = message;
+        filterInfo.textContent = message;
         filterInfo.style.display = 'block';
       }
     }
@@ -1010,26 +1010,20 @@
       const winnerSection = document.getElementById('winnerSection');
       const analysisSection = document.getElementById('analysisSection');
       
-      if (winner) {
-        // Display winner
-        winnerSection.innerHTML = `
-          <div class="winner-number">${winner.number}</div>
-          <div class="winner-name">🎉 ${winner.username} 🎉</div>
-        `;
-      } else {
-        // No winner - show the drawn number
-        const drawnNumber = currentFilter.join('');
-        winnerSection.innerHTML = `
-          <div class="winner-number">${drawnNumber}</div>
-          <div class="winner-name" style="color: #ff6666;">💔 No Winner! 💔</div>
-        `;
-      }
+      const winnerNumber = document.createElement('div');
+      winnerNumber.className = 'winner-number';
+      winnerNumber.textContent = winner ? winner.number : currentFilter.join('');
+      const winnerName = document.createElement('div');
+      winnerName.className = 'winner-name';
+      winnerName.textContent = winner ? `🎉 ${winner.username} 🎉` : '💔 No Winner! 💔';
+      if (!winner) winnerName.style.color = '#ff6666';
+      winnerSection.replaceChildren(winnerNumber, winnerName);
       
       // Analyze bad beats and closest calls
       const drawnNumber = winner ? winner.number : currentFilter.join('');
       const analysis = analyzeBadBeats(drawnNumber);
       
-      let analysisHTML = '';
+      analysisSection.replaceChildren();
       
       if (analysis.badBeats.length > 0) {
         const uniqueUsers = [...new Set(analysis.badBeats.map(bb => bb.username))];
@@ -1037,42 +1031,45 @@
           ? `(+${analysis.jackpotPerPerson} entries each from jackpot!)` 
           : '';
         
-        analysisHTML += `
-          <div class="analysis-title">💔 Bad Beats - Off by 1! ${jackpotText}</div>
-        `;
+        const title = document.createElement('div');
+        title.className = 'analysis-title';
+        title.textContent = `💔 Bad Beats - Off by 1! ${jackpotText}`;
+        analysisSection.appendChild(title);
         analysis.badBeats.forEach(item => {
-          analysisHTML += `
-            <div class="bad-beat-item">
-              <span>${item.number} - ${item.username}</span>
-              <span>±1 from winner</span>
-            </div>
-          `;
+          const row = document.createElement('div');
+          row.className = 'bad-beat-item';
+          const entrant = document.createElement('span');
+          entrant.textContent = `${item.number} - ${item.username}`;
+          const difference = document.createElement('span');
+          difference.textContent = '±1 from winner';
+          row.append(entrant, difference);
+          analysisSection.appendChild(row);
         });
         
         if (analysis.jackpotPerPerson > 0) {
-          analysisHTML += `
-            <div style="text-align: center; margin-top: 10px; font-size: 14px; color: #ffd700;">
-              💰 Jackpot: ${analysis.totalJackpot} entries → ${analysis.jackpotPerPerson} each to ${uniqueUsers.length} user${uniqueUsers.length > 1 ? 's' : ''}
-            </div>
-          `;
+          const jackpot = document.createElement('div');
+          jackpot.style.cssText = 'text-align: center; margin-top: 10px; font-size: 14px; color: #ffd700;';
+          jackpot.textContent = `💰 Jackpot: ${analysis.totalJackpot} entries → ${analysis.jackpotPerPerson} each to ${uniqueUsers.length} user${uniqueUsers.length > 1 ? 's' : ''}`;
+          analysisSection.appendChild(jackpot);
         }
       }
       
       if (analysis.closest.length > 0) {
-        analysisHTML += `
-          <div class="analysis-title">🎯 Other Close Calls</div>
-        `;
+        const title = document.createElement('div');
+        title.className = 'analysis-title';
+        title.textContent = '🎯 Other Close Calls';
+        analysisSection.appendChild(title);
         analysis.closest.forEach(item => {
-          analysisHTML += `
-            <div class="closest-item">
-              <span>${item.number} - ${item.username}</span>
-              <span>Off by ${item.difference}</span>
-            </div>
-          `;
+          const row = document.createElement('div');
+          row.className = 'closest-item';
+          const entrant = document.createElement('span');
+          entrant.textContent = `${item.number} - ${item.username}`;
+          const difference = document.createElement('span');
+          difference.textContent = `Off by ${item.difference}`;
+          row.append(entrant, difference);
+          analysisSection.appendChild(row);
         });
       }
-      
-      analysisSection.innerHTML = analysisHTML;
       finalResults.style.display = 'block';
       
       // Hide after 15 seconds
@@ -1153,7 +1150,7 @@
       
       // Clear existing grid only if no filter is active
       if (currentFilter.length === 0) {
-        grid.innerHTML = '';
+        grid.replaceChildren();
         grid.classList.remove('filtering', 'final-stage', 'mega-stage');
         
         // Create all 1000 number cards (000-999)
@@ -1366,9 +1363,6 @@
       
       // Update filter info with dramatic messaging
       const filterInfo = document.getElementById('filterInfo');
-      const remainingCount = document.getElementById('remainingCount');
-      remainingCount.textContent = possibleCount;
-      
       // Add tyrannical messaging based on remaining count
       if (currentFilter.length > 0) {
         let message = '';
@@ -1383,9 +1377,9 @@
         } else {
           message = `🎲 ${possibleCount} potential winners remain`;
         }
-        filterInfo.innerHTML = message;
+        filterInfo.textContent = message;
       } else {
-        filterInfo.innerHTML = `Remaining possibilities: <span id="remainingCount">${possibleCount}</span>`;
+        filterInfo.textContent = `Remaining possibilities: ${possibleCount}`;
       }
       
       filterInfo.style.display = 'block';

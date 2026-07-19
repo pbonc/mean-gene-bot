@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mean Gene RPG Battle</title>
+  <link rel="stylesheet" href="/rpg-battle-assets/battle.css">
+</head>
+<body>
+  <main id="battle" class="battle dormant" aria-label="Stream RPG battle screen">
+    <div class="sky"></div><div class="hills far"></div><div class="hills near"></div><div class="ground"></div>
+    <header><span id="round">EXPEDITION</span><strong id="encounter">AWAITING ENCOUNTER</strong><span id="pace">DORMANT</span></header>
+    <section id="friendlies" class="crowd friendly" aria-label="Friendly party"></section>
+    <section id="enemies" class="crowd enemy" aria-label="Enemies"></section>
+    <section class="action-stage" aria-label="Action stage"><div id="friendly-action"></div><div id="effect"></div><div id="enemy-action"></div></section>
+    <aside id="prompt" class="prompt" aria-live="polite">
+      <div class="actor-name" id="actor-name">Awaiting encounter</div>
+      <div class="instruction" id="instruction">The battle screen is ready.</div>
+      <ol id="skills"></ol>
+    </aside>
+    <div id="result" class="result"></div>
+  </main>
+  <script src="/rpg-battle-assets/battle.js"></script>
+</body>
+</html>

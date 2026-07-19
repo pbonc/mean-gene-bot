@@ -19,6 +19,7 @@ RUNTIME_SCHEMA = "rpg_v2.runtime"
 EVENT_SCHEMA = "rpg_v2.animation_event"
 TURN_PROMPT_SCHEMA = "rpg_v2.turn_prompt"
 EXPEDITION_SCHEMA = "rpg_v2.expedition"
+BATTLE_OVERLAY_SCHEMA = "rpg_v2.battle_overlay"
 
 
 class CharacterClass(StrEnum):
@@ -308,3 +309,65 @@ def validate_animation_event(record: Mapping[str, Any]) -> None:
     _require(record.get("type") in {item.value for item in EventType}, "unknown animation event type")
     _require(isinstance(record.get("target_ids"), list), "target_ids must be a list")
     _require(isinstance(record.get("values"), Mapping), "values must be an object")
+
+
+def new_battle_overlay_snapshot(
+    *,
+    battle_id: str | None,
+    phase: RuntimePhase | str,
+    round_number: int,
+    friendlies: list[Mapping[str, Any]],
+    enemies: list[Mapping[str, Any]],
+    pending_turn: Mapping[str, Any] | None = None,
+    last_event_sequence: int = 0,
+    result: str | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Create the authoritative state consumed by the full-screen renderer."""
+
+    phase_value = phase.value if isinstance(phase, RuntimePhase) else str(phase)
+    record: dict[str, Any] = {
+        "type": "rpg_v2_battle_snapshot",
+        "schema": BATTLE_OVERLAY_SCHEMA,
+        "version": CONTRACT_VERSION,
+        "generated_at": now or _utc_now(),
+        "battle_id": battle_id,
+        "phase": phase_value,
+        "round": round_number,
+        "friendlies": [dict(actor) for actor in friendlies],
+        "enemies": [dict(actor) for actor in enemies],
+        "pending_turn": dict(pending_turn) if pending_turn else None,
+        "last_event_sequence": last_event_sequence,
+        "result": result,
+    }
+    validate_battle_overlay_snapshot(record)
+    return record
+
+
+def validate_battle_overlay_snapshot(record: Mapping[str, Any]) -> None:
+    _require_schema(record, BATTLE_OVERLAY_SCHEMA)
+    _require(record.get("type") == "rpg_v2_battle_snapshot", "unexpected battle payload type")
+    _require(record.get("phase") in {item.value for item in RuntimePhase}, "unknown battle phase")
+    _require(isinstance(record.get("round"), int) and record["round"] >= 0, "round must be >= 0")
+    _require(isinstance(record.get("last_event_sequence"), int) and record["last_event_sequence"] >= 0, "last_event_sequence must be >= 0")
+    friendlies = record.get("friendlies")
+    enemies = record.get("enemies")
+    _require(isinstance(friendlies, list), "friendlies must be a list")
+    _require(isinstance(enemies, list), "enemies must be a list")
+    _require_unique_ids([*friendlies, *enemies], "battle actors")
+    for actor in [*friendlies, *enemies]:
+        _require(bool(str(actor.get("name", "")).strip()), "actor name is required")
+        _require(bool(str(actor.get("kind", "")).strip()), "actor kind is required")
+        _require(actor.get("side") in ("friendly", "enemy"), "actor side must be friendly or enemy")
+        max_hp = actor.get("max_hp")
+        hp = actor.get("hp")
+        _require(isinstance(max_hp, int) and max_hp > 0, "actor max_hp must be positive")
+        _require(isinstance(hp, int) and 0 <= hp <= max_hp, "actor hp must be between zero and max_hp")
+        _require(isinstance(actor.get("shield"), int) and actor["shield"] >= 0, "actor shield must be non-negative")
+    pending_turn = record.get("pending_turn")
+    _require(pending_turn is None or isinstance(pending_turn, Mapping), "pending_turn must be null or an object")
+    if pending_turn is not None:
+        validate_turn_prompt(pending_turn)
+        _require(pending_turn.get("battle_id") == record.get("battle_id"), "pending_turn battle_id must match snapshot")
+    if record.get("phase") == RuntimePhase.ACTOR_CHOICE.value:
+        _require(pending_turn is not None, "actor_choice phase requires pending_turn")

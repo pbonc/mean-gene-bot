@@ -6,6 +6,15 @@ from bot.rpg_v2.models import Side
 
 
 class BattleEngineTests(unittest.TestCase):
+    def test_overlay_snapshot_reports_resulting_hp_without_renderer_math(self):
+        engine = BattleEngine("battle-overlay", [make_friendly("f1", "Hero")], [make_enemy("e1", "Slime", "slime")], seed=1)
+        engine.resolve_current_turn()
+
+        snapshot = engine.overlay_snapshot()
+
+        self.assertEqual(snapshot["last_event_sequence"], len(engine.events))
+        self.assertEqual(snapshot["enemies"][0]["hp"], engine.enemies[0].hp)
+        self.assertEqual(snapshot["friendlies"][0]["name"], "Hero")
     def test_every_friendly_class_has_exactly_three_numbered_skills(self):
         expected = {
             "adventurer": ["Strike", "Brace", "Rally"],

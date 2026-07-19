@@ -5,11 +5,13 @@ from bot.rpg_v2.contracts import (
     EventType,
     RuntimePhase,
     new_animation_event,
+    new_battle_overlay_snapshot,
     new_expedition_snapshot,
     new_player_record,
     new_runtime_snapshot,
     new_turn_prompt,
     validate_animation_event,
+    validate_battle_overlay_snapshot,
     validate_expedition_snapshot,
     validate_player_record,
     validate_runtime_snapshot,
@@ -163,6 +165,32 @@ class RpgV2ContractTests(unittest.TestCase):
         validate_animation_event(event)
         self.assertEqual(event["sequence"], 7)
         self.assertEqual(event["values"], {"damage": 4})
+
+    def test_battle_overlay_snapshot_contains_authoritative_actor_state(self):
+        snapshot = new_battle_overlay_snapshot(
+            battle_id="battle-1",
+            phase=RuntimePhase.ACTION_PLAYBACK,
+            round_number=3,
+            friendlies=[{"actor_id": "viewer-1", "name": "Iamdar", "kind": "warrior", "side": "friendly", "hp": 42, "max_hp": 50, "shield": 6}],
+            enemies=[{"actor_id": "slime-1", "name": "Slime", "kind": "slime", "side": "enemy", "hp": 9, "max_hp": 24, "shield": 0}],
+            last_event_sequence=12,
+            now="2026-07-18T00:00:00Z",
+        )
+
+        validate_battle_overlay_snapshot(snapshot)
+        self.assertEqual(snapshot["friendlies"][0]["hp"], 42)
+        self.assertEqual(snapshot["last_event_sequence"], 12)
+
+    def test_battle_overlay_rejects_duplicate_ids_across_sides(self):
+        actor = {"actor_id": "same", "name": "Same", "kind": "slime", "side": "friendly", "hp": 1, "max_hp": 1, "shield": 0}
+        with self.assertRaisesRegex(ValueError, "must be unique"):
+            new_battle_overlay_snapshot(
+                battle_id="battle-1",
+                phase=RuntimePhase.ACTION_PLAYBACK,
+                round_number=1,
+                friendlies=[actor],
+                enemies=[{**actor, "side": "enemy"}],
+            )
 
 
 if __name__ == "__main__":

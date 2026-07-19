@@ -6,7 +6,7 @@ import random
 from collections.abc import Iterable
 
 from .classes import default_friendly_choice, friendly_skills
-from .contracts import EventType, new_animation_event, new_turn_prompt
+from .contracts import EventType, RuntimePhase, new_animation_event, new_battle_overlay_snapshot, new_turn_prompt
 from .enemies import default_enemy_choice, enemy_skills
 from .models import Actor, BattleResult, EffectKind, Side, Skill
 
@@ -80,6 +80,27 @@ class BattleEngine:
             if actor.actor_id == actor_id:
                 return actor
         raise KeyError(actor_id)
+
+    def overlay_snapshot(self, *, pending_turn: dict | None = None) -> dict:
+        if self.outcome == "victory":
+            phase = RuntimePhase.VICTORY
+        elif self.outcome in ("defeat", "stalemate"):
+            phase = RuntimePhase.DEFEAT
+        elif pending_turn:
+            phase = RuntimePhase.ACTOR_CHOICE
+        else:
+            phase = RuntimePhase.ACTION_PLAYBACK
+        return new_battle_overlay_snapshot(
+            battle_id=self.battle_id,
+            phase=phase,
+            round_number=self.round_number,
+            friendlies=[actor.overlay_record() for actor in self.friendlies],
+            enemies=[actor.overlay_record() for actor in self.enemies],
+            pending_turn=pending_turn,
+            last_event_sequence=self._event_sequence,
+            result=self.outcome,
+            now="1970-01-01T00:00:00Z",
+        )
 
     def living(self, side: Side) -> list[Actor]:
         roster = self.friendlies if side is Side.FRIENDLY else self.enemies

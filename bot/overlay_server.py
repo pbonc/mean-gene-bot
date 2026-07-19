@@ -181,6 +181,12 @@ async def websocket_handler(request):
                                 await ws.send_json(latest_rpg_v2_expedition)
                             except Exception:
                                 pass
+                    if data.get('type') == 'request_rpg_v2_battle':
+                        if latest_rpg_v2_battle:
+                            try:
+                                await ws.send_json(latest_rpg_v2_battle)
+                            except Exception:
+                                pass
                     if data.get('type') == 'request_grid_state':
                         payload = latest_grid_state
                         if not payload:
@@ -263,6 +269,9 @@ async def battle_overlay(request):
 
 async def rpg_micro_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "rpg_micro", "index.html"))
+
+async def rpg_battle_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "rpg_battle", "index.html"))
 
 async def grid_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "grid_overlay.html"))
@@ -442,6 +451,7 @@ latest_ticker_message = ""
 latest_wheel_state = None
 latest_rpg_state = None
 latest_rpg_v2_expedition = None
+latest_rpg_v2_battle = None
 latest_grid_state = None
 
 
@@ -484,7 +494,7 @@ async def as_overlay_task():
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
-    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_rpg_v2_expedition, latest_grid_state
+    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_rpg_v2_expedition, latest_rpg_v2_battle, latest_grid_state
     if message.get("type") == "ticker" and "text" in message:
         latest_ticker_message = message["text"]
     if message.get("type") == "wheel_state":
@@ -493,6 +503,8 @@ async def broadcast_overlay_message(message: dict):
         latest_rpg_state = message
     if message.get("type") == "rpg_v2_expedition":
         latest_rpg_v2_expedition = message
+    if message.get("type") == "rpg_v2_battle_snapshot":
+        latest_rpg_v2_battle = message
     if message.get("type") == "grid_state":
         latest_grid_state = message
     
@@ -528,6 +540,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/wheel", wheel_overlay)
     app.router.add_get("/battle", battle_overlay)
     app.router.add_get("/rpg-micro", rpg_micro_overlay)
+    app.router.add_get("/rpg-battle", rpg_battle_overlay)
     app.router.add_get("/grid", grid_overlay)
 
     # Tetris card drop overlay
@@ -544,6 +557,10 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     rpg_micro_dir = os.path.join(STATIC_DIR, "rpg_micro")
     if os.path.isdir(rpg_micro_dir):
         app.router.add_static('/rpg-micro-assets', rpg_micro_dir)
+
+    rpg_battle_dir = os.path.join(STATIC_DIR, "rpg_battle")
+    if os.path.isdir(rpg_battle_dir):
+        app.router.add_static('/rpg-battle-assets', rpg_battle_dir)
     
     # Serve trading card images
     cards_dir = CARDS_DIR

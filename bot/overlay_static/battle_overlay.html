@@ -712,36 +712,44 @@
       return raw.replace(/^\s*[A-Za-z][A-Za-z\s_-]{1,24}:\s*/, "");
     }
 
-    function escapeHtml(text) {
-      return String(text || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    function styleBattleLogText(rawText, options = {}) {
-      let styled = escapeHtml(rawText || "");
-
+    function appendStyledBattleLogText(container, rawText, options = {}) {
+      const text = String(rawText || "");
+      const highlights = [];
       if (options.highlightCrit) {
-        styled = styled.replace(/CRIT!/g, '<span class="crit-text">CRIT!</span>');
+        for (const match of text.matchAll(/CRIT!/g)) {
+          highlights.push({ start: match.index, end: match.index + match[0].length, className: "crit-text" });
+        }
       }
-
       if (options.highlightNumbers) {
-        styled = styled.replace(/(for\s+)(\d+)(\s+damage\b)/gi, `$1<span class="damage-num">$2</span>$3`);
-        styled = styled.replace(/(takes\s+)(\d+)(\s+damage\b)/gi, `$1<span class="damage-num">$2</span>$3`);
-        styled = styled.replace(/(dealt\s+)(\d+)(\b)/gi, `$1<span class="damage-num">$2</span>$3`);
-        styled = styled.replace(/(healed\s+)(\d+)(\s*HP\b)/gi, `$1<span class="heal-num">$2</span>$3`);
-        styled = styled.replace(/(healed\s+for\s+)(\d+)(\b)/gi, `$1<span class="heal-num">$2</span>$3`);
-        styled = styled.replace(/(restored\s+)(\d+)(\s+HP\b)/gi, `$1<span class="heal-num">$2</span>$3`);
+        const numberPatterns = [
+          { regex: /(?:for\s+|takes\s+|dealt\s+)(\d+)(?=\s+damage\b|\b)/gi, className: "damage-num" },
+          { regex: /(?:healed\s+|healed\s+for\s+|restored\s+)(\d+)(?=\s*HP\b|\b)/gi, className: "heal-num" },
+        ];
+        numberPatterns.forEach(({ regex, className }) => {
+          for (const match of text.matchAll(regex)) {
+            const offset = match[0].lastIndexOf(match[1]);
+            const start = match.index + offset;
+            highlights.push({ start, end: start + match[1].length, className });
+          }
+        });
       }
 
-      return styled;
+      highlights.sort((a, b) => a.start - b.start || a.end - b.end);
+      let cursor = 0;
+      highlights.forEach((highlight) => {
+        if (highlight.start < cursor) return;
+        container.appendChild(document.createTextNode(text.slice(cursor, highlight.start)));
+        const span = document.createElement("span");
+        span.className = highlight.className;
+        span.textContent = text.slice(highlight.start, highlight.end);
+        container.appendChild(span);
+        cursor = highlight.end;
+      });
+      container.appendChild(document.createTextNode(text.slice(cursor)));
     }
 
     function renderLog(listEl, items, emptyText, options = {}) {
-      listEl.innerHTML = "";
+      listEl.replaceChildren();
       if (!items || items.length === 0) {
         const li = document.createElement("li");
         li.className = "log-item muted";
@@ -760,7 +768,7 @@
           ts.textContent = item.ts ? item.ts.replace("T", " ").replace("Z", "") : "";
           li.appendChild(ts);
         }
-        li.innerHTML += styleBattleLogText(text, options);
+        appendStyledBattleLogText(li, text, options);
         listEl.appendChild(li);
       });
     }
@@ -795,7 +803,7 @@
     }
 
     function renderParty(listEl, items, activePlayersSet) {
-      listEl.innerHTML = "";
+      listEl.replaceChildren();
       if (!items || items.length === 0) {
         const li = document.createElement("li");
         li.className = "log-item muted";
@@ -895,7 +903,7 @@
     }
 
     function renderMonsters(listEl, items) {
-      listEl.innerHTML = "";
+      listEl.replaceChildren();
       if (!items || items.length === 0) {
         const li = document.createElement("li");
         li.className = "log-item muted";
@@ -1127,26 +1135,37 @@
         return;
       }
 
-      progressContainer.innerHTML = "";
-      lootSummary.innerHTML = "";
+      progressContainer.replaceChildren();
+      lootSummary.replaceChildren();
       clearLootModalTimers();
       lootSummary.scrollTop = 0;
 
       // Show ascend progress if any player has it
       if (lootData.ascend_progress && lootData.ascend_progress.length > 0) {
         console.log("Rendering ascend progress:", lootData.ascend_progress);
-        const progressHtml = lootData.ascend_progress.map(item => `
-          <div class="ascend-progress">
-            <div class="label">${item.name} - Ascend Progress</div>
-            <div class="progress-value">${item.current}/${item.threshold} Lifetime Damage</div>
-            <div class="progress-bar">
-              <div class="progress-fill" style="width: ${(item.current / item.threshold) * 100}%">
-                ${Math.round((item.current / item.threshold) * 100)}%
-              </div>
-            </div>
-          </div>
-        `).join("");
-        progressContainer.innerHTML = progressHtml;
+        lootData.ascend_progress.forEach((item) => {
+          const progress = document.createElement("div");
+          progress.className = "ascend-progress";
+          const label = document.createElement("div");
+          label.className = "label";
+          label.textContent = `${item.name} - Ascend Progress`;
+          const value = document.createElement("div");
+          value.className = "progress-value";
+          value.textContent = `${item.current}/${item.threshold} Lifetime Damage`;
+          const bar = document.createElement("div");
+          bar.className = "progress-bar";
+          const fill = document.createElement("div");
+          fill.className = "progress-fill";
+          const rawPercent = Number(item.threshold) > 0
+            ? (Number(item.current) / Number(item.threshold)) * 100
+            : 0;
+          const percent = Math.max(0, Math.min(100, Number.isFinite(rawPercent) ? rawPercent : 0));
+          fill.style.width = `${percent}%`;
+          fill.textContent = `${Math.round(percent)}%`;
+          bar.appendChild(fill);
+          progress.append(label, value, bar);
+          progressContainer.appendChild(progress);
+        });
       }
 
       if (lootData.loot && lootData.loot.length > 0) {
@@ -1187,9 +1206,25 @@
         const partyTotalXp = Number(lootData.party_total_xp ?? 0)
           || lootData.loot.reduce((sum, player) => sum + Number(player.xp ?? 0), 0);
 
-        const lootSummaryLines = [`<p><strong>The party got</strong> ${partyTotalXp} XP.</p>`];
+        const summaryTiles = document.createElement("div");
+        summaryTiles.className = "summary-tiles";
+        const lootTile = document.createElement("section");
+        lootTile.className = "summary-tile loot-tile";
+        const lootHeading = document.createElement("h3");
+        lootHeading.textContent = "Loot";
+        const lootScroll = document.createElement("div");
+        lootScroll.className = "loot-scroll";
+        const partyXp = document.createElement("p");
+        const partyXpLabel = document.createElement("strong");
+        partyXpLabel.textContent = "The party got";
+        partyXp.append(partyXpLabel, document.createTextNode(` ${partyTotalXp} XP.`));
+        lootScroll.appendChild(partyXp);
         if (summaryItems.length > 0) {
-          lootSummaryLines.push(`<p><strong>Everyone got</strong>: ${summaryItems.join(" | ")}</p>`);
+          const everyone = document.createElement("p");
+          const everyoneLabel = document.createElement("strong");
+          everyoneLabel.textContent = "Everyone got";
+          everyone.append(everyoneLabel, document.createTextNode(`: ${summaryItems.join(" | ")}`));
+          lootScroll.appendChild(everyone);
         }
 
         const dropNotes = [];
@@ -1218,17 +1253,32 @@
           if (entryDrops > 0) noteParts.push(`+${entryDrops} raffle entr${entryDrops === 1 ? "y" : "ies"}`);
           if (ultraDrops > 0) noteParts.push(`+${ultraDrops} ultra entr${ultraDrops === 1 ? "y" : "ies"}`);
           if (noteParts.length > 0) {
-            dropNotes.push(`<li><strong>${player.name}</strong>: ${noteParts.join(", ")}</li>`);
+            dropNotes.push({ name: player.name, text: noteParts.join(", ") });
           }
 
           return;
         });
 
         if (dropNotes.length > 0) {
-          lootSummaryLines.push(`<p><strong>Drop notes</strong></p><ul>${dropNotes.join("")}</ul>`);
+          const notesHeading = document.createElement("p");
+          const notesLabel = document.createElement("strong");
+          notesLabel.textContent = "Drop notes";
+          notesHeading.appendChild(notesLabel);
+          const notesList = document.createElement("ul");
+          dropNotes.forEach((note) => {
+            const item = document.createElement("li");
+            const name = document.createElement("strong");
+            name.textContent = note.name;
+            item.append(name, document.createTextNode(`: ${note.text}`));
+            notesList.appendChild(item);
+          });
+          lootScroll.append(notesHeading, notesList);
         } else {
-          lootSummaryLines.push("<p>No notable individual drops this battle.</p>");
+          const noDrops = document.createElement("p");
+          noDrops.textContent = "No notable individual drops this battle.";
+          lootScroll.appendChild(noDrops);
         }
+        lootTile.append(lootHeading, lootScroll);
 
         const topDpsRows = Array.isArray(lootData.top_dps_rankings)
           ? lootData.top_dps_rankings
@@ -1237,32 +1287,47 @@
           ? lootData.top_heal_rankings
           : [];
 
-        const renderRankingRows = (rows, key, emptyText) => {
+        const renderRankingTile = (heading, rows, key, emptyText) => {
+          const tile = document.createElement("section");
+          tile.className = "summary-tile";
+          const title = document.createElement("h3");
+          title.textContent = heading;
+          tile.appendChild(title);
           const filtered = rows.filter((row) => Number(row?.[key] ?? 0) > 0).slice(0, 3);
-          const items = [];
+          if (filtered.length === 0) {
+            const empty = document.createElement("p");
+            empty.textContent = emptyText;
+            tile.appendChild(empty);
+          }
+          const list = document.createElement("ol");
 
           for (let idx = 0; idx < 3; idx += 1) {
             const row = filtered[idx];
+            const item = document.createElement("li");
+            item.appendChild(document.createTextNode(`#${idx + 1} `));
             if (row) {
               const value = Number(row[key] ?? 0);
-              const safeName = row.name || "Unknown";
-              items.push(`<li>#${idx + 1} <strong>${safeName}</strong> — ${value}</li>`);
+              const name = document.createElement("strong");
+              name.textContent = row.name || "Unknown";
+              item.append(name, document.createTextNode(` — ${value}`));
             } else {
-              items.push(`<li>#${idx + 1} <span class="muted">—</span></li>`);
+              const placeholder = document.createElement("span");
+              placeholder.className = "muted";
+              placeholder.textContent = "—";
+              item.appendChild(placeholder);
             }
+            list.appendChild(item);
           }
-
-          const emptyNote = filtered.length === 0 ? `<p>${emptyText}</p>` : "";
-          return `${emptyNote}<ol>${items.join("")}</ol>`;
+          tile.appendChild(list);
+          return tile;
         };
 
-        const tilesHtml = [
-          `<section class="summary-tile loot-tile"><h3>Loot</h3><div class="loot-scroll">${lootSummaryLines.join("")}</div></section>`,
-          `<section class="summary-tile"><h3>Top 3 DPS</h3>${renderRankingRows(topDpsRows, "damage", "No DPS recorded.")}</section>`,
-          `<section class="summary-tile"><h3>Top 3 Healing</h3>${renderRankingRows(topHealRows, "healing", "No healing recorded.")}</section>`,
-        ].join("");
-
-        lootSummary.innerHTML = `<div class="summary-tiles">${tilesHtml}</div>`;
+        summaryTiles.append(
+          lootTile,
+          renderRankingTile("Top 3 DPS", topDpsRows, "damage", "No DPS recorded."),
+          renderRankingTile("Top 3 Healing", topHealRows, "healing", "No healing recorded."),
+        );
+        lootSummary.appendChild(summaryTiles);
       }
 
       console.log("Adding show class to modal");

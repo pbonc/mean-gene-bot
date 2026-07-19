@@ -166,6 +166,15 @@ The detailed product and technical specification lives in [docs/RPG_V2_PRODUCT_S
 
 **Objective:** Prove the crowd-and-action-stage presentation at 1920x1080 before Twitch integration.
 
+**Status:** In progress — 2026-07-18
+
+Implemented so far:
+
+- Added an authoritative, reconnect-safe battle overlay snapshot with complete actor HP and shield state.
+- Added `/rpg-battle` as a dormant full-screen source with small, medium, and crowded demo fixtures.
+- Added adaptive two-sided crowds, center action positions, acting-character emphasis, HP bars, and a mobile-readable three-choice prompt.
+- Kept the renderer separate from combat calculations and OBS scene control.
+
 - Add `/rpg-battle` as a separate OBS browser source.
 - Place the friendly crowd on the left and enemy crowd on the right.
 - Reserve prominent friendly and enemy action positions near the center.

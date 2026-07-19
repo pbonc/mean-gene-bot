@@ -76,6 +76,18 @@ class Actor:
             marked_bonus=self.marked_bonus,
         )
 
+    def overlay_record(self) -> dict:
+        return {
+            "actor_id": self.actor_id,
+            "name": self.name,
+            "kind": self.kind,
+            "side": self.side.value,
+            "hp": int(self.hp or 0),
+            "max_hp": self.max_hp,
+            "shield": self.shield,
+            "alive": self.alive,
+        }
+
 
 @dataclass
 class BattleResult:
