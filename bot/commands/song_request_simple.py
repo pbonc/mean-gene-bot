@@ -2779,6 +2779,7 @@ class SongRequestCog(commands.Cog):
             if self.playlist_task and not self.playlist_task.done():
                 self.playlist_task.cancel()
             self.playlist_task = asyncio.create_task(self._run_playlist(ctx.channel))
+            return
         elif action_or_request.lower() == "remove":
             await self._remove_last_queued_song_for_user(ctx, username)
             return
@@ -2964,18 +2965,8 @@ class SongRequestCog(commands.Cog):
                 await ctx.send(f"❌ No playlist match for \"{search_query}\". Try a number like `!srx 42` or a YouTube link.")
                 return
 
-            if len(matches) == 1:
-                match = matches[0]
-                match_number = match.get('number')
-                if match_number is None:
-                    await ctx.send("❌ Found a match but it is missing a song number. Try another query or request by URL.")
-                    return
-                await ctx.send(f"🔍 Found #{match_number}: {match.get('title', 'Unknown')} by {match.get('artist', 'Unknown')}. Adding to queue...")
-                await self._handle_playlist_request(ctx, int(match_number), username)
-                return
-
-            # Multiple matches: show a short list of numbers to pick
-            lines = ["🔍 Found a few matches. Request by number:"]
+            # Searches always show choices; only an explicit song number queues a track.
+            lines = ["🔍 Search results. Request by number:"]
             for song in matches:
                 lines.append(f"• #{song.get('number', '?')} — {song.get('title', 'Unknown')} by {song.get('artist', 'Unknown')}")
             await ctx.send("\n".join(lines))
