@@ -6,8 +6,9 @@ import asyncio
 import os
 import sys
 
-# Add bot directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'bot'))
+# Add the project root to the import path when run directly.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
 
 try:
     from bot.commands.song_request_simple import SimpleSongManager

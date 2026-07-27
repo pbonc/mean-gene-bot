@@ -47,17 +47,17 @@ I've implemented a **two-tier download strategy**:
 - If format/signature errors occur, automatically retries with Android client
 - Lists available formats if both attempts fail (for debugging)
 
-### 3. Created `test_video_formats.py` script
+### 3. Created `tools/diagnostics/list_video_formats.py` script
 - Manually test any YouTube URL
 - Shows all available formats
 - Tests different format strings
-- Usage: `python test_video_formats.py <youtube_url>`
+- Usage: `python tools/diagnostics/list_video_formats.py <youtube_url>`
 
 ## Testing the Fix
 
 Test the problematic video:
 ```powershell
-python test_video_formats.py "https://www.youtube.com/watch?v=hzFpiW5vHrc"
+python tools/diagnostics/list_video_formats.py "https://www.youtube.com/watch?v=hzFpiW5vHrc"
 ```
 
 Or test with yt-dlp directly:

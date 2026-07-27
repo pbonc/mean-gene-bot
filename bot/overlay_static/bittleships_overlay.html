@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bittleships</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --navy: #041523;
+      --panel: rgba(5, 30, 48, 0.94);
+      --line: rgba(108, 211, 255, 0.34);
+      --water: #0b486b;
+      --water2: #0c3655;
+      --hit: #ff554f;
+      --miss: #8ad9ff;
+      --gold: #ffd166;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      overflow: hidden;
+      color: #f5fbff;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(41, 151, 196, .32), transparent 45%),
+        linear-gradient(145deg, #020b12, var(--navy));
+    }
+    main {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(500px, 1fr) minmax(260px, 36%);
+      gap: 22px;
+      padding: 24px;
+    }
+    .board-panel, aside {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--panel);
+      box-shadow: 0 18px 55px rgba(0, 0, 0, .45);
+      backdrop-filter: blur(12px);
+    }
+    .board-panel {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+      overflow: hidden;
+    }
+    h1 {
+      margin: 0 0 14px;
+      text-align: center;
+      color: var(--gold);
+      font-size: clamp(28px, 4vw, 58px);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      text-shadow: 0 0 22px rgba(255, 209, 102, .28);
+    }
+    #board {
+      width: min(100%, calc(100vh - 180px));
+      max-width: 100%;
+      max-height: calc(100vh - 180px);
+      aspect-ratio: 1;
+      margin: auto;
+      display: grid;
+      grid-template-columns: 34px repeat(10, 1fr);
+      grid-template-rows: 34px repeat(10, 1fr);
+      gap: 3px;
+    }
+    .label {
+      display: grid;
+      place-items: center;
+      color: #a9dff6;
+      font-weight: 800;
+      font-size: clamp(12px, 1.4vw, 22px);
+    }
+    .cell {
+      position: relative;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: linear-gradient(145deg, var(--water), var(--water2));
+      overflow: hidden;
+    }
+    .cell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .22;
+      background: repeating-linear-gradient(0deg, transparent 0 7px, #8ee5ff 8px 9px);
+    }
+    .cell.hit {
+      background: radial-gradient(circle, #fff 0 7%, #ffb347 8% 28%, var(--hit) 30% 64%, #501016 66%);
+      animation: impact .65s ease-out;
+    }
+    .cell.miss::after {
+      content: "";
+      width: 42%;
+      aspect-ratio: 1;
+      border: 4px solid var(--miss);
+      border-radius: 50%;
+      box-shadow: 0 0 13px var(--miss);
+    }
+    @keyframes impact {
+      0% { transform: scale(.5); filter: brightness(3); }
+      70% { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+    aside {
+      padding: 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .status {
+      display: inline-flex;
+      align-self: flex-start;
+      padding: 7px 13px;
+      border-radius: 999px;
+      font-weight: 900;
+      letter-spacing: .12em;
+      background: #263a48;
+    }
+    .status.active { background: #147a55; }
+    .admiral { font-size: clamp(22px, 3vw, 42px); font-weight: 800; }
+    .admiral span { display: block; color: #8bdcff; font-size: .45em; letter-spacing: .14em; text-transform: uppercase; }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .055);
+      border: 1px solid rgba(255, 255, 255, .08);
+    }
+    .stat b { display: block; color: var(--gold); font-size: clamp(25px, 4vw, 50px); }
+    .stat small { color: #a9c9d8; text-transform: uppercase; letter-spacing: .1em; }
+    #message {
+      margin-top: auto;
+      padding: 18px;
+      min-height: 105px;
+      border-left: 5px solid var(--gold);
+      border-radius: 10px;
+      background: rgba(255, 209, 102, .08);
+      font-size: clamp(17px, 2vw, 29px);
+      font-weight: 700;
+    }
+    .help { color: #afccda; font-size: clamp(14px, 1.3vw, 20px); line-height: 1.5; }
+    #classic-info {
+      display: none;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(72, 190, 255, .08);
+      border: 1px solid rgba(72, 190, 255, .2);
+      font-weight: 700;
+      line-height: 1.45;
+    }
+    #leaderboard {
+      display: none;
+      gap: 5px;
+      max-height: 150px;
+      overflow: hidden;
+    }
+    .leader-row {
+      display: grid;
+      grid-template-columns: 30px 1fr auto;
+      gap: 8px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.045);
+      font-weight: 700;
+    }
+    .leader-row:first-child { color: var(--gold); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="board-panel">
+      <h1>Bittleships</h1>
+      <div id="board" aria-label="10 by 10 Bittleships board"></div>
+    </section>
+    <aside>
+      <div id="status" class="status">WAITING</div>
+      <div class="admiral"><span>Fleet Admiral</span><div id="admiral">Unassigned</div></div>
+      <div id="classic-info"></div>
+      <div class="stats">
+        <div class="stat"><b id="remaining">0</b><small>Ships remaining</small></div>
+        <div class="stat"><b id="hits">0</b><small>Hits</small></div>
+        <div class="stat"><b id="misses">0</b><small>Misses</small></div>
+        <div class="stat"><b id="fired">0</b><small>Shots fired</small></div>
+      </div>
+      <div id="leaderboard"></div>
+      <div class="help">Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!ships A5</b></div>
+      <div id="message">Waiting for battle orders.</div>
+    </aside>
+  </main>
+  <script>
+    const board = document.getElementById("board");
+    const cellElements = new Map();
+    let latestState = null;
+    let soundStateInitialized = false;
+    let knownRevealedCells = new Set();
+    const hitSound = new Audio("/bittleships_audio/hit-kaboom.mp3");
+    const missSound = new Audio("/bittleships_audio/miss-splash.mp3");
+    hitSound.preload = "auto";
+    missSound.preload = "auto";
+    hitSound.volume = 0.75;
+    missSound.volume = 0.7;
+    function buildBoard() {
+      board.replaceChildren();
+      board.append(document.createElement("div"));
+      for (const n of "ABCDEFGHIJ") {
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = n;
+        board.append(label);
+      }
+      for (let row = 1; row <= 10; row++) {
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = row;
+        board.append(label);
+        for (const col of "ABCDEFGHIJ") {
+          const coordinate = `${col}${row}`;
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.dataset.coordinate = coordinate;
+          board.append(cell);
+          cellElements.set(coordinate, cell);
+        }
+      }
+    }
+    function render(data) {
+      if (!data || data.type !== "bittleships_state") return;
+      latestState = data;
+      const currentCells = new Set(Object.keys(data.cells || {}));
+      if (soundStateInitialized) {
+        const newlyRevealed = [...currentCells].filter(coordinate => !knownRevealedCells.has(coordinate));
+        const latestCoordinate = newlyRevealed[newlyRevealed.length - 1];
+        const latestResult = latestCoordinate ? data.cells[latestCoordinate]?.result : null;
+        const sound = latestResult === "hit" ? hitSound : (latestResult === "miss" ? missSound : null);
+        if (sound) {
+          sound.currentTime = 0;
+          sound.play().catch(() => {});
+        }
+      } else {
+        soundStateInitialized = true;
+      }
+      knownRevealedCells = currentCells;
+      for (const cell of cellElements.values()) cell.className = "cell";
+      for (const [coordinate, record] of Object.entries(data.cells || {})) {
+        const cell = cellElements.get(coordinate);
+        if (cell && (record.result === "hit" || record.result === "miss")) {
+          cell.classList.add(record.result);
+          cell.title = record.player ? `Fired by ${record.player}` : "";
+        }
+      }
+      const status = document.getElementById("status");
+      status.textContent = data.active ? "BATTLE ACTIVE" : (data.ship_count ? "BATTLE ENDED" : "WAITING");
+      status.classList.toggle("active", Boolean(data.active));
+      document.getElementById("admiral").textContent = data.admiral ? `@${data.admiral}` : "Unassigned";
+      document.getElementById("remaining").textContent = data.ships_remaining ?? 0;
+      document.getElementById("hits").textContent = data.hits ?? 0;
+      document.getElementById("misses").textContent = data.misses ?? 0;
+      document.getElementById("fired").textContent = data.shots_fired ?? 0;
+      document.getElementById("message").textContent = data.message || "Awaiting orders.";
+      const classicInfo = document.getElementById("classic-info");
+      const leaderboard = document.getElementById("leaderboard");
+      const help = document.querySelector(".help");
+      if (data.mode === "classic" && data.classic) {
+        const classic = data.classic;
+        classicInfo.style.display = "block";
+        if (data.phase === "joining") {
+          classicInfo.textContent = `SIGNUP OPEN • ${classic.players.length} joined • ${classic.fighter_enabled ? "Fighter ON" : "Fighter OFF"}`;
+        } else {
+          updateTurnCountdown();
+        }
+        leaderboard.style.display = "grid";
+        leaderboard.replaceChildren();
+        for (const [index, player] of (classic.scores || []).slice(0, 6).entries()) {
+          const row = document.createElement("div");
+          row.className = "leader-row";
+          for (const value of [index + 1, `@${player.name}`, `${player.points} pts`]) {
+            const span = document.createElement("span");
+            span.textContent = value;
+            row.append(span);
+          }
+          leaderboard.append(row);
+        }
+        help.innerHTML = data.phase === "joining"
+          ? "Join the fleet: <b>!ships join</b>"
+          : "Fire on your turn: <b>!ships A5</b><br>Sink bonus: <b>+1 point</b>";
+      } else {
+        classicInfo.style.display = "none";
+        leaderboard.style.display = "none";
+        leaderboard.replaceChildren();
+        help.innerHTML = "Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!ships A5</b>";
+      }
+    }
+    function updateTurnCountdown() {
+      if (!latestState || latestState.mode !== "classic" || !latestState.classic || latestState.phase !== "playing") return;
+      const classic = latestState.classic;
+      const remaining = classic.turn_deadline
+        ? Math.max(0, Math.ceil((new Date(classic.turn_deadline).getTime() - Date.now()) / 1000))
+        : 0;
+      document.getElementById("classic-info").textContent =
+        `ROUND ${classic.round} • ${classic.current_player ? `@${classic.current_player}'s turn` : "Battle complete"} • ${remaining}s • ${classic.fighter_alive ? "Fighter airborne" : (classic.fighter_enabled ? "Fighter destroyed" : "No fighter")}`;
+    }
+    function connect() {
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+      socket.addEventListener("open", () => socket.send(JSON.stringify({type: "request_bittleships_state"})));
+      socket.addEventListener("message", event => {
+        try { render(JSON.parse(event.data)); } catch (_) {}
+      });
+      socket.addEventListener("close", () => setTimeout(connect, 2000));
+      socket.addEventListener("error", () => socket.close());
+    }
+    buildBoard();
+    setInterval(updateTurnCountdown, 250);
+    connect();
+  </script>
+</body>
+</html>

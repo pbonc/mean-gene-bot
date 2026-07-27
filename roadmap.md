@@ -358,6 +358,18 @@ These items need prioritization before they become committed sprints.
 
 Add new ideas here before scheduling them. Each idea should eventually state the viewer/operator problem, intended outcome, dependencies, risks, and a measurable exit criterion.
 
+## Bittleships participation and permissions
+
+**Status:** Roadmap idea only; not yet scheduled or implemented.
+
+- Add between-round joining so viewers can join after the current round completes and participate in the next round.
+- Allow the streamer account `iamdar` to join any game, including while serving as the Admiral.
+- Allow moderators, as well as the Admiral, to award shots to players.
+- Rename the displayed title **Fleet Admiral** to **Rear Admiral** throughout Bittleships.
+- Before implementation, define the exact join-window behavior, permission checks, and handling for players who receive shots while waiting for the next round.
+
+**Proposed exit criterion:** After a round ends, eligible waiting viewers can enter the next round; `iamdar` can participate while holding the Admiral role; both moderators and the Admiral can award shots; and all player-facing Bittleships text uses **Rear Admiral**.
+
 - Additional presentation modes driven by the shared RPG engine
 - Bot management and health dashboard
 - Improved Discord/Twitch cross-platform command ownership

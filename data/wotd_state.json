@@ -1,7 +1,7 @@
 {
-  "is_active": true,
-  "current_word": "Derpism",
-  "prize_value": 55,
-  "stream_bias_percent": 100,
-  "winner": null
+  "is_active": false,
+  "current_word": null,
+  "prize_value": 5,
+  "stream_bias_percent": 15,
+  "winner": "tankahdelphia"
 }

@@ -1,13 +1,13 @@
 """
 Test script to list available formats for a YouTube video
-Usage: python test_video_formats.py <youtube_url>
+Usage: python tools/diagnostics/list_video_formats.py <youtube_url>
 """
 
 import sys
 import os
 
 # Add project root to path
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
 try:
@@ -171,9 +171,9 @@ def test_video_formats(url):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python test_video_formats.py <youtube_url>")
+        print("Usage: python tools/diagnostics/list_video_formats.py <youtube_url>")
         print("\nExample:")
-        print("  python test_video_formats.py https://www.youtube.com/watch?v=hzFpiW5vHrc")
+        print("  python tools/diagnostics/list_video_formats.py https://www.youtube.com/watch?v=hzFpiW5vHrc")
         sys.exit(1)
     
     url = sys.argv[1]

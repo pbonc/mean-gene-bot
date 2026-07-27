@@ -1,0 +1,334 @@
+{
+  "admiral": "iamdar",
+  "mode": "classic",
+  "phase": "playing",
+  "active": true,
+  "ship_count": 5,
+  "ships": [
+    {
+      "name": "Destroyer",
+      "length": 2,
+      "cells": [
+        "I9",
+        "J9"
+      ]
+    },
+    {
+      "name": "Submarine",
+      "length": 3,
+      "cells": [
+        "H2",
+        "H3",
+        "H4"
+      ]
+    },
+    {
+      "name": "Cruiser",
+      "length": 3,
+      "cells": [
+        "A4",
+        "B4",
+        "C4"
+      ]
+    },
+    {
+      "name": "Battleship",
+      "length": 4,
+      "cells": [
+        "F1",
+        "G1",
+        "H1",
+        "I1"
+      ]
+    },
+    {
+      "name": "Aircraft Carrier",
+      "length": 5,
+      "cells": [
+        "B5",
+        "B6",
+        "B7",
+        "B8",
+        "B9"
+      ]
+    }
+  ],
+  "shots": {},
+  "revealed": {
+    "E7": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:40:35.113805+00:00"
+    },
+    "A5": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:40:53.802227+00:00"
+    },
+    "A1": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:40:56.659589+00:00"
+    },
+    "B4": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:41:20.597259+00:00"
+    },
+    "D10": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:41:27.141130+00:00"
+    },
+    "J1": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:41:30.435949+00:00"
+    },
+    "I8": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:41:39.688464+00:00"
+    },
+    "B5": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:41:51.524422+00:00"
+    },
+    "F1": {
+      "result": "hit",
+      "target": "Battleship",
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:42:10.300243+00:00"
+    },
+    "B3": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:42:15.257148+00:00"
+    },
+    "F2": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:42:35.952359+00:00"
+    },
+    "E1": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:42:41.317917+00:00"
+    },
+    "B9": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:43:07.345878+00:00"
+    },
+    "G1": {
+      "result": "hit",
+      "target": "Battleship",
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:43:22.745622+00:00"
+    },
+    "G2": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:43:27.952893+00:00"
+    },
+    "D5": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:43:38.572487+00:00"
+    },
+    "H1": {
+      "result": "hit",
+      "target": "Battleship",
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:44:00.291260+00:00"
+    },
+    "I1": {
+      "result": "hit",
+      "target": "Battleship",
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:44:12.783782+00:00"
+    },
+    "B6": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:44:18.372961+00:00"
+    },
+    "A9": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:44:34.071033+00:00"
+    },
+    "G7": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:44:51.314394+00:00"
+    },
+    "B10": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:44:57.735555+00:00"
+    },
+    "C9": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:45:08.696094+00:00"
+    },
+    "F5": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:45:39.297590+00:00"
+    },
+    "B8": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:45:55.220632+00:00"
+    },
+    "B7": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:46:10.373923+00:00"
+    },
+    "J5": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:46:18.609363+00:00"
+    },
+    "F8": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:46:30.934200+00:00"
+    },
+    "F3": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:46:47.293600+00:00"
+    },
+    "C4": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:47:16.336282+00:00"
+    },
+    "C5": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:47:24.101027+00:00"
+    },
+    "A4": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:47:38.968397+00:00"
+    },
+    "H5": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:47:54.668800+00:00"
+    },
+    "D2": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:48:12.549893+00:00"
+    },
+    "D4": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:48:24.540011+00:00"
+    },
+    "G8": {
+      "result": "miss",
+      "target": null,
+      "player": "tankahdelphia",
+      "fired_at": "2026-07-27T01:48:43.303783+00:00"
+    },
+    "G9": {
+      "result": "miss",
+      "target": null,
+      "player": "karnave",
+      "fired_at": "2026-07-27T01:49:09.580969+00:00"
+    },
+    "I10": {
+      "result": "miss",
+      "target": null,
+      "player": "desktoppilotsociety",
+      "fired_at": "2026-07-27T01:49:26.298451+00:00"
+    }
+  },
+  "hits": 12,
+  "misses": 26,
+  "classic": {
+    "join_deadline": "2026-07-27T01:40:16.294258+00:00",
+    "players": [
+      "desktoppilotsociety",
+      "karnave",
+      "tankahdelphia"
+    ],
+    "turn_order": [
+      "karnave",
+      "desktoppilotsociety",
+      "tankahdelphia"
+    ],
+    "turn_index": 2,
+    "round": 13,
+    "turn_deadline": "2026-07-27T01:50:26.298451+00:00",
+    "scores": {
+      "desktoppilotsociety": {
+        "hits": 5,
+        "sinks": 2,
+        "points": 7
+      },
+      "karnave": {
+        "hits": 4,
+        "sinks": 0,
+        "points": 4
+      },
+      "tankahdelphia": {
+        "hits": 3,
+        "sinks": 1,
+        "points": 4
+      }
+    },
+    "sunk": [
+      "Battleship",
+      "Aircraft Carrier",
+      "Cruiser"
+    ],
+    "fighter_enabled": true,
+    "fighter_alive": true,
+    "fighter_cell": "J7"
+  },
+  "suspended_game": null,
+  "last_event": "@desktoppilotsociety fired at I10: MISS!",
+  "started_at": "2026-07-27T01:40:16.290180+00:00",
+  "updated_at": "2026-07-27T01:49:26.298968+00:00"
+}

@@ -1,32 +1,12 @@
 {
-  "slots": {
-    "fal_the_warlock": 1,
-    "livesuieng": 1
-  },
-  "scores": {
-    "nate048": 1,
-    "terminallynormal": 1,
-    "karnave": 1,
-    "tankahdelphia": 1,
-    "hoplon5": 1
-  },
-  "last_winner": "hoplon5",
+  "slots": {},
+  "scores": {},
+  "last_winner": null,
   "remove_on_win": true,
   "wheel_locked": false,
   "last_man_standing": false,
-  "order": [
-    "fal_the_warlock",
-    "livesuieng"
-  ],
-  "colors": {
-    "hoplon5": "#ffffff",
-    "karnave": "#38bdf8",
-    "fal_the_warlock": "#fc0303",
-    "tankahdelphia": "#f472b6",
-    "terminallynormal": "#bada55",
-    "nate048": "#f59e0b",
-    "livesuieng": "#455a55"
-  },
+  "order": [],
+  "colors": {},
   "multiplier": 1,
   "manual_users": []
 }

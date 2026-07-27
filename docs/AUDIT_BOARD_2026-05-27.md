@@ -55,10 +55,6 @@ Notes:
 
 ### D) Temporary/debug/archive payload
 
-- `tmp_find_lines.py`
-- `tmp_grid_lines.py`
-- `tmp_line_info.py`
-- `tmp_line_numbers_script.py`
 - `archive/rpg/rpg_cog.py`
 - `archive/rpg/rpg_log.json`
 - `archive/rpg/rpg_state.json`
@@ -66,7 +62,7 @@ Notes:
 Notes:
 
 - Archive content may be intentionally retained, but should be reviewed for size and future maintenance cost.
-- `tmp_*.py` should not stay in long-lived branch history after checkpoint.
+- The root-level `tmp_*.py` inspection scripts identified by this audit were removed during repository cleanup.
 
 ## Command Discrepancy Snapshot
 
