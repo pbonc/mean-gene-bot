@@ -29,6 +29,8 @@ class WOTDState:
         self.prize_value = 5
         self.stream_bias_percent = 15
         self.winner = None
+        self.last_word = None
+        self.last_entries = None
         self.load()
 
     def load(self):
@@ -41,6 +43,8 @@ class WOTDState:
             self.prize_value = data.get("prize_value", 5)
             self.stream_bias_percent = data.get("stream_bias_percent", 15)
             self.winner = data.get("winner", None)
+            self.last_word = data.get("last_word", None)
+            self.last_entries = data.get("last_entries", None)
         else:
             self.save()
 
@@ -51,7 +55,9 @@ class WOTDState:
             "current_word": self.current_word,
             "prize_value": self.prize_value,
             "stream_bias_percent": self.stream_bias_percent,
-            "winner": self.winner
+            "winner": self.winner,
+            "last_word": self.last_word,
+            "last_entries": self.last_entries
         }
         with open(WOTD_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -130,6 +136,8 @@ class WOTDState:
         
         word = self.current_word
         prize = self.prize_value
+        self.last_word = word
+        self.last_entries = prize
         
         self.winner = username
         self.is_active = False
@@ -147,6 +155,8 @@ class WOTDState:
         
         word = self.current_word
         old_prize = self.prize_value
+        self.last_word = word
+        self.last_entries = old_prize
         
         self.is_active = False
         self.current_word = None
@@ -156,6 +166,23 @@ class WOTDState:
         self.save()
         
         return True, (word, old_prize, self.prize_value)
+
+    def reset_for_stream_start(self):
+        """Return the carried state, then restore a clean base WOTD state."""
+        previous = {
+            "word": self.current_word or self.last_word,
+            "entries": self.prize_value if self.current_word else (self.last_entries or self.prize_value),
+            "was_active": self.is_active,
+        }
+        self.is_active = False
+        self.current_word = None
+        self.prize_value = 5
+        self.stream_bias_percent = 15
+        self.winner = None
+        self.last_word = None
+        self.last_entries = None
+        self.save()
+        return previous
 
 
 class WOTDCog(commands.Cog):
