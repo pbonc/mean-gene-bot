@@ -45,6 +45,8 @@ __pycache__/
 *.wav
 *.opus
 *.ogg
+!bot/overlay_static/wom_audio/
+!bot/overlay_static/wom_audio/*.wav
 
 # Ignore common audio cache folders
 cache/
@@ -77,3 +79,9 @@ data/backups/
 
 data/quotes.json
 data/raffle_state.json
+data/bittleships_state.json
+data/wot_auth.json
+data/wot_inventory_snapshot.json
+data/wot_operation_results.json
+data/wot_sold_vehicles.json
+data/custom_text_commands.json

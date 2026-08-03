@@ -111,25 +111,6 @@ class BittleshipsManager:
         self.state["admiral"] = target
         shots = self.state.setdefault("shots", {})
         shots.pop(target, None)
-        classic = self.state.get("classic", {})
-        players = classic.get("players", [])
-        if target in players:
-            players.remove(target)
-        classic.get("scores", {}).pop(target, None)
-        order = classic.get("turn_order", [])
-        if target in order:
-            removed_index = order.index(target)
-            order.pop(removed_index)
-            current_index = int(classic.get("turn_index", 0))
-            if removed_index < current_index:
-                current_index -= 1
-            if order:
-                classic["turn_index"] = current_index % len(order)
-            else:
-                classic["turn_index"] = 0
-                if self.state.get("mode") == "classic":
-                    self.state["active"] = False
-                    self.state["phase"] = "ended"
         if previous != target:
             self.state["last_event"] = f"@{target} is now the admiral."
         self.save()
@@ -304,6 +285,7 @@ class BittleshipsManager:
             "classic": {
                 "join_deadline": (now + timedelta(minutes=minutes)).isoformat(),
                 "players": [],
+                "pending_players": [],
                 "turn_order": [],
                 "turn_index": 0,
                 "round": 0,
@@ -313,6 +295,9 @@ class BittleshipsManager:
                 "fighter_enabled": bool(fighter_enabled),
                 "fighter_alive": bool(fighter_enabled),
                 "fighter_cell": fighter_cell,
+                "sudden_death": False,
+                "sudden_death_players": [],
+                "winner": None,
             },
             "last_event": f"Classic mode signup is open for {minutes} minute{'s' if minutes != 1 else ''}.",
         })
@@ -336,21 +321,35 @@ class BittleshipsManager:
     def join_classic(self, username: str) -> int:
         player = normalize_username(username)
         classic = self.state.get("classic", {})
-        if self.state.get("mode") != "classic" or self.state.get("phase") != "joining":
+        phase = self.state.get("phase")
+        if self.state.get("mode") != "classic" or phase not in ("joining", "playing"):
             raise ValueError("Classic mode is not accepting players.")
-        deadline = datetime.fromisoformat(classic["join_deadline"])
-        if datetime.now(timezone.utc) >= deadline:
-            raise ValueError("The Classic join window has closed.")
+        if phase == "playing" and classic.get("sudden_death"):
+            raise ValueError("Classic mode is in sudden death and is not accepting players.")
+        if phase == "joining":
+            deadline = datetime.fromisoformat(classic["join_deadline"])
+            if datetime.now(timezone.utc) >= deadline:
+                raise ValueError("The Classic join window has closed.")
         if not player:
             raise ValueError("Unable to identify the joining player.")
-        if player == self.admiral:
-            raise ValueError("The admiral cannot join as a player.")
         players = classic.setdefault("players", [])
         if player in players:
             raise ValueError("You have already joined Classic mode.")
         players.append(player)
         classic.setdefault("scores", {})[player] = {"hits": 0, "sinks": 0, "points": 0}
-        self.state["last_event"] = f"@{player} joined Classic mode."
+        if phase == "playing":
+            if self.state.get("revealed"):
+                classic.setdefault("pending_players", []).append(player)
+                self.state["last_event"] = (
+                    f"@{player} joined Classic mode and will enter at the end of the next round."
+                )
+            else:
+                classic.setdefault("turn_order", []).append(player)
+                self.state["last_event"] = (
+                    f"@{player} joined Classic mode before the first shot."
+                )
+        else:
+            self.state["last_event"] = f"@{player} joined Classic mode."
         self.save()
         return len(players)
 
@@ -396,6 +395,52 @@ class BittleshipsManager:
         classic["fighter_cell"] = self.rng.choice(choices)
         return classic["fighter_cell"]
 
+    def _launch_sudden_death_fighter(self) -> str:
+        classic = self.state["classic"]
+        occupied = {cell for ship in self.state.get("ships", []) for cell in ship["cells"]}
+        revealed = set(self.state.get("revealed", {}))
+        choices = [
+            cell for cell in _all_coordinates()
+            if cell not in occupied and cell not in revealed
+        ]
+        if not choices:
+            raise RuntimeError("No unrevealed cell is available for sudden death.")
+        classic["fighter_enabled"] = True
+        classic["fighter_alive"] = True
+        classic["fighter_cell"] = self.rng.choice(choices)
+        return classic["fighter_cell"]
+
+    def _begin_sudden_death(self, tied_players: List[str], last_player: str) -> None:
+        classic = self.state["classic"]
+        original_order = list(classic["turn_order"])
+        tied = set(tied_players)
+        order = [player for player in original_order if player in tied]
+        if not order:
+            order = list(tied_players)
+        try:
+            last_index = original_order.index(last_player)
+        except ValueError:
+            last_index = -1
+        next_player = next(
+            (
+                original_order[(last_index + offset) % len(original_order)]
+                for offset in range(1, len(original_order) + 1)
+                if original_order[(last_index + offset) % len(original_order)] in tied
+            ),
+            order[0],
+        )
+        next_index = order.index(next_player)
+        classic["sudden_death"] = True
+        classic["sudden_death_players"] = order
+        classic["turn_order"] = order
+        classic["turn_index"] = next_index
+        classic["pending_players"] = []
+        classic["turn_deadline"] = (
+            datetime.now(timezone.utc) + timedelta(seconds=CLASSIC_TURN_SECONDS)
+        ).isoformat()
+        if not classic.get("fighter_alive") or not classic.get("fighter_cell"):
+            self._launch_sudden_death_fighter()
+
     def _advance_classic_turn(self) -> bool:
         classic = self.state["classic"]
         order = classic["turn_order"]
@@ -404,6 +449,10 @@ class BittleshipsManager:
         if new_round:
             classic["turn_index"] = 0
             classic["round"] += 1
+            pending_players = classic.setdefault("pending_players", [])
+            if pending_players:
+                order.extend(pending_players)
+                pending_players.clear()
             self._move_fighter()
         classic["turn_deadline"] = (
             datetime.now(timezone.utc) + timedelta(seconds=CLASSIC_TURN_SECONDS)
@@ -416,8 +465,6 @@ class BittleshipsManager:
         classic = self.state.get("classic", {})
         if self.state.get("mode") != "classic" or self.state.get("phase") != "playing":
             raise ValueError("A Classic game is not currently playing.")
-        if player == self.admiral:
-            raise ValueError("The admiral cannot play while commanding the fleet.")
         current_player = classic["turn_order"][classic["turn_index"]]
         if player != current_player:
             raise ValueError(f"It is @{current_player}'s turn.")
@@ -469,19 +516,47 @@ class BittleshipsManager:
         if bonus:
             score["sinks"] += 1
 
-        won = len(classic["sunk"]) == len(CLASSIC_FLEET)
+        fleet_destroyed = len(classic["sunk"]) == len(CLASSIC_FLEET)
+        sudden_death = bool(classic.get("sudden_death"))
+        sudden_death_started = False
+        winner = None
+        winner_score = None
+        won = sudden_death and fighter_hit
         new_round = False
+        if fleet_destroyed and not sudden_death:
+            top_score = max(record["points"] for record in classic["scores"].values())
+            tied_players = [
+                name
+                for name, record in classic["scores"].items()
+                if record["points"] == top_score
+            ]
+            if len(tied_players) > 1:
+                self._begin_sudden_death(tied_players, player)
+                sudden_death_started = True
+            else:
+                won = True
+                winner = tied_players[0]
+                winner_score = classic["scores"][winner]["points"]
+        elif won:
+            winner = player
+            winner_score = score["points"]
+
         if won:
             self.state["active"] = False
             self.state["phase"] = "ended"
             classic["turn_deadline"] = None
-        else:
+            classic["winner"] = winner
+        elif not sudden_death_started:
             new_round = self._advance_classic_turn()
         next_player = None if won else classic["turn_order"][classic["turn_index"]]
         event = f"@{player} fired at {cell}: {result.upper()}!"
         if sunk_name:
             event += f" {sunk_name} destroyed! Bonus point!"
-        if won:
+        if sudden_death_started:
+            event += " The fleet is sunk with the lead tied; fighter sudden death begins!"
+        elif won and sudden_death:
+            event += f" @{player} destroyed the sudden-death fighter and wins!"
+        elif won:
             event += " The fleet has been sunk!"
         elif new_round and classic.get("fighter_alive"):
             event += f" Round {classic['round']} begins; the fighter has moved."
@@ -492,6 +567,10 @@ class BittleshipsManager:
             "sunk": sunk_name,
             "bonus": bonus,
             "won": won,
+            "winner": winner,
+            "winner_score": winner_score,
+            "sudden_death": bool(classic.get("sudden_death")),
+            "sudden_death_started": sudden_death_started,
             "new_round": new_round,
             "next_player": next_player,
             "round": classic["round"],
@@ -567,6 +646,7 @@ class BittleshipsManager:
             "classic": {
                 "join_deadline": classic.get("join_deadline"),
                 "players": list(classic.get("players", [])),
+                "pending_players": list(classic.get("pending_players", [])),
                 "turn_order": list(order),
                 "current_player": current_player,
                 "round": int(classic.get("round", 0)),
@@ -575,6 +655,9 @@ class BittleshipsManager:
                 "sunk": list(classic.get("sunk", [])),
                 "fighter_enabled": bool(classic.get("fighter_enabled")),
                 "fighter_alive": bool(classic.get("fighter_alive")),
+                "sudden_death": bool(classic.get("sudden_death")),
+                "sudden_death_players": list(classic.get("sudden_death_players", [])),
+                "winner": classic.get("winner"),
             } if mode == "classic" else None,
             "cells": cells,
             "message": message or self.state.get("last_event"),

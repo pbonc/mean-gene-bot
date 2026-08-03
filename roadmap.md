@@ -349,6 +349,31 @@ These items need prioritization before they become committed sprints.
 - Add stale-while-revalidate and negative caching.
 - Make stream-day timezone boundaries explicit.
 - Add fixture tests for scheduled, live, final, postponed, and malformed responses.
+- Add an operator-controlled score tracker for MLB, NFL, and NBA: `!scoretrack`
+  lists numbered available games, `!scoretrack <number>` follows one game, and
+  `!scoretrack stop` ends tracking. Poll the selected game more frequently while
+  it is live, announce meaningful score/period/inning/final changes, and stop
+  automatically at final status.
+- Preserve the numbered game menu for a short, explicit TTL and map each number
+  to ESPN's stable event ID. Never resolve a later selection against a freshly
+  reordered schedule, because games can move or disappear between commands.
+
+These items need prioritization before they become committed sprints.
+
+---
+
+# Workstream: World of Tanks statistics
+
+## Candidate sprints
+
+- Extend `!tankstats` to accept an explicit player nickname for public summary,
+  records, and per-tank statistics while retaining the configured account as the
+  default.
+- Resolve player nicknames through the account search endpoint, require an
+  unambiguous match, and cache results by realm, account ID, mode, and tank query
+  so one player's cached response can never be returned for another player.
+- Keep public-stat support distinct from authenticated/private fields and return
+  a clear message when a requested field is unavailable for another account.
 
 These items need prioritization before they become committed sprints.
 
@@ -366,9 +391,11 @@ Add new ideas here before scheduling them. Each idea should eventually state the
 - Allow the streamer account `iamdar` to join any game, including while serving as the Admiral.
 - Allow moderators, as well as the Admiral, to award shots to players.
 - Rename the displayed title **Fleet Admiral** to **Rear Admiral** throughout Bittleships.
-- Before implementation, define the exact join-window behavior, permission checks, and handling for players who receive shots while waiting for the next round.
+- Let players fire by entering the coordinate as the command, such as `!A4`, instead of requiring `!ships A4`.
+- Reduce a player's future turn timer by 10 seconds each time that player times out: 60 seconds after no prior timeouts, then 50, 40, and a minimum of 30 seconds for all subsequent missed turns.
+- Before implementation, define the exact join-window behavior, permission checks, coordinate-command routing and conflicts, handling for players who receive shots while waiting for the next round, and whether a player's timeout penalty resets between games.
 
-**Proposed exit criterion:** After a round ends, eligible waiting viewers can enter the next round; `iamdar` can participate while holding the Admiral role; both moderators and the Admiral can award shots; and all player-facing Bittleships text uses **Rear Admiral**.
+**Proposed exit criterion:** After a round ends, eligible waiting viewers can enter the next round; `iamdar` can participate while holding the Admiral role; both moderators and the Admiral can award shots; players can fire with coordinate-only commands such as `!A4`; all player-facing Bittleships text uses **Rear Admiral**; and repeated timeouts produce per-player turn limits of 60, 50, 40, then 30 seconds without ever dropping below 30.
 
 - Additional presentation modes driven by the shared RPG engine
 - Bot management and health dashboard

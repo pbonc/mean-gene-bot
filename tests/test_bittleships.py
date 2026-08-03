@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bot.bittleships_state import BittleshipsManager, parse_coordinate
+from bot.bittleships_state import CLASSIC_FLEET, BittleshipsManager, parse_coordinate
 
 
 class BittleshipsManagerTests(unittest.TestCase):
@@ -102,10 +102,9 @@ class BittleshipsManagerTests(unittest.TestCase):
         self.assertEqual(len(all_cells), 17)
         self.assertEqual(len(set(all_cells)), 17)
 
-    def test_classic_join_rejects_admiral_and_duplicates(self):
+    def test_classic_join_allows_admiral_but_rejects_duplicates(self):
         self.manager.start_classic_join(3)
-        with self.assertRaisesRegex(ValueError, "admiral"):
-            self.manager.join_classic("theadmiral")
+        self.manager.join_classic("theadmiral")
         self.manager.join_classic("viewer")
         with self.assertRaisesRegex(ValueError, "already"):
             self.manager.join_classic("VIEWER")
@@ -115,6 +114,41 @@ class BittleshipsManagerTests(unittest.TestCase):
         wrong_player = next(player for player in ("alpha", "bravo") if player != order[0])
         with self.assertRaisesRegex(ValueError, "turn"):
             self.manager.classic_fire(wrong_player, "A1")
+
+    def test_classic_join_before_first_shot_enters_current_round(self):
+        order = list(self._start_classic(players=("alpha", "bravo")))
+        self.manager.join_classic("charlie")
+        self.assertEqual(self.manager.state["classic"]["turn_order"], order + ["charlie"])
+        self.assertEqual(self.manager.state["classic"]["pending_players"], [])
+
+    def test_classic_join_after_first_shot_enters_end_of_next_round(self):
+        order = list(self._start_classic(players=("alpha", "bravo")))
+        occupied = {
+            cell
+            for ship in self.manager.state["ships"]
+            for cell in ship["cells"]
+        }
+        miss = next(
+            cell
+            for cell in (f"{letter}{number}" for letter in "ABCDEFGHIJ" for number in range(1, 11))
+            if cell not in occupied
+        )
+        self.manager.classic_fire(order[0], miss)
+        self.manager.join_classic("charlie")
+        self.assertEqual(self.manager.state["classic"]["turn_order"], order)
+        self.assertEqual(self.manager.state["classic"]["pending_players"], ["charlie"])
+
+        self.manager.skip_classic_turn()
+        self.assertEqual(self.manager.state["classic"]["turn_order"], order + ["charlie"])
+        self.assertEqual(self.manager.state["classic"]["turn_index"], 0)
+        self.assertEqual(self.manager.state["classic"]["pending_players"], [])
+
+    def test_queued_classic_join_survives_reload(self):
+        order = self._start_classic(players=("alpha", "bravo"))
+        self.manager.classic_fire(order[0], "A1")
+        self.manager.join_classic("charlie")
+        reloaded = BittleshipsManager(state_file=self.state_file)
+        self.assertEqual(reloaded.state["classic"]["pending_players"], ["charlie"])
 
     def test_classic_turn_gets_one_minute_deadline(self):
         self._start_classic()
@@ -143,14 +177,20 @@ class BittleshipsManagerTests(unittest.TestCase):
                 expected_deadline=expired_deadline,
             )
 
-    def test_assigning_player_as_admiral_removes_them_from_turn_order(self):
-        self._start_classic(players=("alpha", "bravo"))
+    def test_assigning_player_as_admiral_keeps_them_in_classic_turn_order(self):
+        order = self._start_classic(players=("alpha", "bravo"))
         self.manager.set_admiral("alpha")
         classic = self.manager.state["classic"]
-        self.assertNotIn("alpha", classic["players"])
-        self.assertNotIn("alpha", classic["turn_order"])
-        self.assertNotIn("alpha", classic["scores"])
-        self.assertEqual(classic["turn_order"], ["bravo"])
+        self.assertIn("alpha", classic["players"])
+        self.assertEqual(classic["turn_order"], order)
+        self.assertIn("alpha", classic["scores"])
+
+    def test_admiral_can_fire_on_their_enforced_classic_turn(self):
+        order = self._start_classic(players=("theadmiral", "bravo"))
+        if order[0] != "theadmiral":
+            self.manager.skip_classic_turn()
+        outcome = self.manager.classic_fire("theadmiral", "A1")
+        self.assertIn(outcome["result"], ("hit", "miss"))
 
     def test_classic_sink_awards_hit_and_bonus_point(self):
         self._start_classic()
@@ -188,6 +228,42 @@ class BittleshipsManagerTests(unittest.TestCase):
         self.assertEqual(self.manager.state["phase"], "ended")
         score = self.manager.state["classic"]["scores"]["alpha"]
         self.assertEqual(score, {"hits": 17, "sinks": 5, "points": 22})
+
+    def test_tied_fleet_destruction_starts_fighter_sudden_death(self):
+        order = self._start_classic(players=("alpha", "bravo"))
+        classic = self.manager.state["classic"]
+        classic["scores"]["alpha"] = {"hits": 1, "sinks": 0, "points": 20}
+        classic["scores"]["bravo"] = {"hits": 0, "sinks": 0, "points": 22}
+        classic["sunk"] = [name for name, _ in CLASSIC_FLEET[:-1]]
+        last_ship = self.manager.state["ships"][-1]
+        for cell in last_ship["cells"][:-1]:
+            self.manager.state["revealed"][cell] = {
+                "result": "hit", "target": last_ship["name"], "player": "alpha"
+            }
+        classic["turn_index"] = order.index("alpha")
+
+        outcome = self.manager.classic_fire("alpha", last_ship["cells"][-1])
+
+        self.assertFalse(outcome["won"])
+        self.assertTrue(outcome["sudden_death_started"])
+        self.assertTrue(classic["fighter_alive"])
+        self.assertEqual(set(classic["sudden_death_players"]), {"alpha", "bravo"})
+        self.assertEqual(outcome["next_player"], "bravo")
+        self.assertEqual(self.manager.state["phase"], "playing")
+
+    def test_first_sudden_death_fighter_hit_wins(self):
+        order = self._start_classic(players=("alpha", "bravo"), fighter=True)
+        classic = self.manager.state["classic"]
+        classic["sudden_death"] = True
+        classic["sudden_death_players"] = list(order)
+        classic["turn_index"] = 0
+        shooter = order[0]
+
+        outcome = self.manager.classic_fire(shooter, classic["fighter_cell"])
+
+        self.assertTrue(outcome["won"])
+        self.assertEqual(outcome["winner"], shooter)
+        self.assertEqual(self.manager.state["phase"], "ended")
 
     def test_classic_public_payload_hides_fleet_and_fighter_positions(self):
         self.manager.start_classic_join(3, fighter_enabled=True)
@@ -229,6 +305,21 @@ class BittleshipsManagerTests(unittest.TestCase):
         self.assertEqual(reloaded.state["ships"], original_ships)
         self.assertEqual(reloaded.state["shots"], {"viewer": 3})
         self.assertEqual(reloaded.state["mode"], "single")
+
+
+class BittleshipsOverlayTests(unittest.TestCase):
+    def test_classic_player_list_renders_every_player_without_scrolling(self):
+        overlay = (
+            Path(__file__).resolve().parents[1]
+            / "bot"
+            / "overlay_static"
+            / "bittleships_overlay.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("for (const [index, player] of players.entries())", overlay)
+        self.assertNotIn(".slice(0, 6)", overlay)
+        self.assertIn("--leader-columns", overlay)
+        self.assertIn("overflow-wrap: anywhere", overlay)
 
 
 if __name__ == "__main__":

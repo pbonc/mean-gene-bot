@@ -1,12 +1,18 @@
 {
-  "slots": {},
+  "slots": {
+    "livesuieng": 1
+  },
   "scores": {},
   "last_winner": null,
   "remove_on_win": true,
   "wheel_locked": false,
   "last_man_standing": false,
-  "order": [],
-  "colors": {},
+  "order": [
+    "livesuieng"
+  ],
+  "colors": {
+    "livesuieng": "#a55455"
+  },
   "multiplier": 1,
   "manual_users": []
 }

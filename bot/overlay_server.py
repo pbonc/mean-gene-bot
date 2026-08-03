@@ -2,6 +2,7 @@ async def tetris_cards_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "tetris_cards_overlay.html"))
 import os
 import json
+from collections import OrderedDict
 from aiohttp import web
 import asyncio
 from bot.grid_state import GridManager
@@ -9,6 +10,7 @@ from bot.grid_state import GridManager
 overlay_clients = set()
 # Track clients that want AS_overlay messages
 as_overlay_clients = set()
+wotwom_chatters = OrderedDict()
 _runner = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -212,6 +214,16 @@ async def websocket_handler(request):
                                 await ws.send_json(payload)
                             except Exception:
                                 pass
+                    if data.get('type') == 'request_wotwom_chat_roster':
+                        try:
+                            await ws.send_json(
+                                {
+                                    "type": "wotwom_chat_roster",
+                                    "usernames": list(wotwom_chatters.values()),
+                                }
+                            )
+                        except Exception:
+                            pass
                     if data.get('type') == 'wheel_control':
                         action = data.get('action')
                         if action in ("set_multiplier", "set_remove_on_win"):
@@ -291,6 +303,120 @@ async def grid_overlay(request):
 
 async def bittleships_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "bittleships_overlay.html"))
+
+async def wom_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "wom_overlay.html"))
+
+async def wotwom_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "wotwom_overlay.html"))
+
+async def get_wotwom_inventory(request):
+    """Return server-side normalized WoTMA data without exposing the application ID."""
+    from bot.wot_api import WotApiError
+    from bot.wot_inventory import refresh_wot_snapshot
+
+    try:
+        inventory, _ = await refresh_wot_snapshot()
+        return web.json_response(inventory)
+    except WotApiError as exc:
+        return web.json_response({"error": str(exc)}, status=503)
+    except Exception:
+        logging.exception("[WOTWOM] Unexpected inventory refresh failure")
+        return web.json_response(
+            {"error": "Unable to load World of Tanks inventory."}, status=500
+        )
+
+async def wotwom_auth_start(request):
+    """Redirect the local operator to Wargaming's console-service sign in."""
+    from bot.wot_api import WotApiClient, WotApiError, WotConfig
+    import aiohttp
+
+    redirect_uri = os.getenv(
+        "WOT_AUTH_REDIRECT_URI",
+        "http://localhost:8080/api/wotwom/auth/callback",
+    ).strip()
+    try:
+        async with aiohttp.ClientSession() as session:
+            location = await WotApiClient(
+                WotConfig.from_env(), session
+            ).login_url(redirect_uri)
+        raise web.HTTPFound(location)
+    except web.HTTPFound:
+        raise
+    except WotApiError as exc:
+        return web.Response(text=str(exc), status=503)
+
+async def wotwom_auth_callback(request):
+    """Persist the private token returned by console authorization."""
+    from bot.wot_api import WotApiError, save_wot_auth
+
+    payload = dict(request.query)
+    if payload.get("status") == "error" or payload.get("error"):
+        return web.Response(
+            text="World of Tanks authorization was cancelled or denied.",
+            status=400,
+        )
+    try:
+        save_wot_auth(payload)
+    except WotApiError as exc:
+        return web.Response(text=str(exc), status=400)
+    return web.Response(
+        content_type="text/html",
+        text=(
+            "<!doctype html><title>WoTWoM Authorized</title>"
+            "<body style='background:#07170a;color:#83ff7d;font:20px monospace;"
+            "display:grid;place-items:center;min-height:100vh'>"
+            "<div><h1>GARAGE LINK AUTHORIZED</h1>"
+            "<p>The access token was stored locally. You may close this tab.</p></div>"
+            "</body>"
+        ),
+    )
+
+async def get_wotwom_auth_status(request):
+    from bot.wot_api import load_wot_auth
+
+    auth = load_wot_auth()
+    return web.json_response(
+        {
+            "authorized": bool(auth.get("access_token")),
+            "account_id": auth.get("account_id"),
+            "nickname": auth.get("nickname"),
+            "expires_at": auth.get("expires_at"),
+        }
+    )
+
+async def post_wotwom_result(request):
+    from bot.wot_operations import record_operation
+
+    try:
+        payload = await request.json()
+        result = record_operation(payload)
+        return web.json_response({"ok": True, "result": result})
+    except (ValueError, json.JSONDecodeError) as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+
+async def get_wotwom_sold(request):
+    from bot.wot_sold import sold_vehicles
+
+    return web.json_response({"vehicles": sold_vehicles()})
+
+async def post_wotwom_sold(request):
+    from bot.wot_sold import mark_sold, restore_vehicle, sold_vehicles
+
+    try:
+        payload = await request.json()
+        action = str(payload.get("action") or "").lower()
+        if action == "sold":
+            result = mark_sold(payload.get("vehicle") or {})
+        elif action == "restore":
+            result = {"restored": restore_vehicle(int(payload["tank_id"]))}
+        else:
+            raise ValueError("Unknown sold-status action.")
+        return web.json_response(
+            {"ok": True, "result": result, "vehicles": sold_vehicles()}
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return web.json_response({"error": str(exc)}, status=400)
 
 async def get_raffle_data(request):
     """API endpoint to return current raffle state"""
@@ -526,6 +652,14 @@ async def broadcast_overlay_message(message: dict):
         latest_grid_state = message
     if message.get("type") == "bittleships_state":
         latest_bittleships_state = message
+    if message.get("type") == "wotwom_chat_user":
+        username = str(message.get("username") or "").strip()
+        if username:
+            key = username.casefold()
+            wotwom_chatters.pop(key, None)
+            wotwom_chatters[key] = username
+            while len(wotwom_chatters) > 100:
+                wotwom_chatters.popitem(last=False)
     
     msg_type = message.get("type", "unknown")
     logging.debug(f"Broadcasting {msg_type} message to {len(overlay_clients)} overlay clients")
@@ -562,6 +696,8 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/rpg-battle", rpg_battle_overlay)
     app.router.add_get("/grid", grid_overlay)
     app.router.add_get("/bittleships", bittleships_overlay)
+    app.router.add_get("/wom", wom_overlay)
+    app.router.add_get("/wotwom", wotwom_overlay)
 
     # Tetris card drop overlay
     app.router.add_get("/tetris", tetris_cards_overlay)
@@ -569,6 +705,13 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     # API routes
     app.router.add_get("/api/cards", get_card_data)
     app.router.add_get("/api/raffle", get_raffle_data)
+    app.router.add_get("/api/wotwom/inventory", get_wotwom_inventory)
+    app.router.add_get("/api/wotwom/auth/start", wotwom_auth_start)
+    app.router.add_get("/api/wotwom/auth/callback", wotwom_auth_callback)
+    app.router.add_get("/api/wotwom/auth/status", get_wotwom_auth_status)
+    app.router.add_post("/api/wotwom/results", post_wotwom_result)
+    app.router.add_get("/api/wotwom/sold", get_wotwom_sold)
+    app.router.add_post("/api/wotwom/sold", post_wotwom_sold)
     # Serve GIFs and other overlay static assets
     gifs_dir = GIFS_DIR
     if os.path.isdir(gifs_dir):
@@ -585,6 +728,9 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     bittleships_audio_dir = os.path.join(STATIC_DIR, "bittleships_audio")
     if os.path.isdir(bittleships_audio_dir):
         app.router.add_static('/bittleships_audio', bittleships_audio_dir)
+    wom_audio_dir = os.path.join(STATIC_DIR, "wom_audio")
+    if os.path.isdir(wom_audio_dir):
+        app.router.add_static('/wom_audio', wom_audio_dir)
     
     # Serve trading card images
     cards_dir = CARDS_DIR

@@ -1,0 +1,17 @@
+{
+  "admiral": null,
+  "mode": "single",
+  "phase": "idle",
+  "active": false,
+  "ship_count": 0,
+  "ships": [],
+  "shots": {},
+  "revealed": {},
+  "hits": 0,
+  "misses": 0,
+  "classic": {},
+  "suspended_game": null,
+  "last_event": "Waiting for an admiral.",
+  "started_at": null,
+  "updated_at": null
+}

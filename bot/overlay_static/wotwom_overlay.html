@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>World of Tanks Wheel of Misfortune</title>
+<style>
+:root{--green:#83ff7d;--dark:#07170a;--line:#29522c}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#151816;color:var(--green);font-family:"Courier New",monospace}
+.machine{width:min(1920px,100vw);aspect-ratio:16/9;padding:1.2%;overflow:hidden;border:6px solid #303431;border-radius:18px;background:linear-gradient(145deg,#929793,#555a56 52%,#282c29);box-shadow:inset 0 0 0 2px #afb3b0,inset 0 0 30px #111;display:grid;grid-template-rows:auto minmax(0,1fr);gap:1.2%}
+.plate{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:.55% 1%;border:2px solid #303330;background:#aaa699;color:#151615;font-weight:bold;letter-spacing:.08em;font-size:clamp(10px,1.1vw,20px)}.plate span:nth-child(2){text-align:center}.plate span:last-child{text-align:right}
+.layout{min-height:0;display:grid;grid-template-columns:18% 54% 26%;gap:1%}
+.panel{min-height:0;padding:5%;border:3px solid #272a28;background:linear-gradient(#777c78,#404541);box-shadow:inset 0 0 0 1px #a2a6a3,inset 0 0 18px #292c29}
+.left{display:flex;flex-direction:column}.panel-title{margin:0 0 8%;padding:4%;border:1px solid #303230;background:#b3afa1;color:#171817;text-align:center;font-size:clamp(9px,.85vw,15px);font-weight:bold;letter-spacing:.08em}
+.mode-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3%}.toggle-row{display:grid;grid-template-rows:auto 42px;justify-items:center;align-items:center;margin:2% 0;color:#111;text-align:center;font-weight:bold;font-size:clamp(8px,.72vw,13px)}
+.lamp{display:inline-block;width:10px;height:10px;margin-right:6px;border:1px solid #171817;border-radius:50%;background:#461212}.toggle-row.on .lamp{background:#6fff68;box-shadow:0 0 8px #6fff68}
+.toggle{position:relative;width:44px;height:48px;cursor:pointer}.toggle input{position:absolute;opacity:0}.toggle-base{position:absolute;left:6px;bottom:3px;width:32px;height:18px;border:1px solid #161716;border-radius:50%;background:radial-gradient(circle at 50% 35%,#e2e4e2,#777 50%,#222 73%)}.toggle-lever{position:absolute;left:19px;top:7px;width:8px;height:29px;border-radius:5px;transform-origin:50% 90%;transform:rotate(24deg);transition:transform .14s;background:linear-gradient(90deg,#303030,#e4e4e3 38%,#777 72%,#1f1f1f)}.toggle input:checked+.toggle-base+.toggle-lever{transform:rotate(-24deg)}
+.filter-bank{margin-top:2%;padding-top:2%;border-top:1px solid #292c29;color:#111}.filter-title{display:flex;justify-content:space-between;align-items:center;margin:2% 0 1.5%;font-size:clamp(7px,.61vw,11px);font-weight:bold;letter-spacing:.06em}.filter-title small{font-size:.8em}.button-grid{display:grid;gap:3px}.levels{grid-template-columns:repeat(5,1fr)}.eras{grid-template-columns:repeat(3,1fr)}.affiliations{grid-template-columns:repeat(3,1fr)}.classes{grid-template-columns:repeat(2,1fr)}.filter-button{min-width:0;padding:4px 1px;border:2px solid #262a27;border-radius:4px;background:#252925;color:#747974;font:700 clamp(7px,.58vw,10px) "Courier New",monospace;cursor:pointer;box-shadow:inset 0 0 5px #000}.filter-button.active{border-color:#356c39;background:#26562b;color:#9cff96;box-shadow:0 0 7px #65ff6b66,inset 0 0 5px #0b220d}.filter-button:disabled{border-color:#333;background:#333;color:#555;cursor:not-allowed;box-shadow:none}.filter-button.wide{grid-column:1/-1}.affiliations .filter-button{font-size:clamp(6px,.47vw,8px)}
+.agent-console{flex:1;min-height:0;margin-top:4%;padding:3%;border:5px solid #292c29;border-radius:9px;background:#151916;box-shadow:inset 0 0 12px #000;display:grid;grid-template-rows:40px auto minmax(0,1fr) auto;gap:4px}.agent-screen{min-height:70px;padding:5px;overflow-y:auto;scrollbar-width:none;border:1px solid #234c27;background:repeating-linear-gradient(0deg,#78ff820a 0 1px,transparent 1px 4px),#061109;color:#75e978;font-size:clamp(7px,.58vw,10px);text-shadow:0 0 4px #72ff7a}.agent-screen::-webkit-scrollbar{display:none}.agent-empty{text-align:center;padding-top:24px;color:#417445}.agent-name{width:100%;padding:3px;border:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}.agent-name.selected{background:#285a2b;color:#d4ffd1}.agent-controls{display:grid;grid-template-columns:34px 34px minmax(0,1fr);gap:3px}.agent-control{min-width:0;padding:5px 2px;border:2px solid #234c27;background:#1b3c1e;color:#83ff7d;font:700 clamp(7px,.58vw,10px) "Courier New",monospace;cursor:pointer;white-space:normal;line-height:1.05}.agent-control:disabled{color:#476149;opacity:.6}.confirm-agent{grid-column:1/-1}.clear-agent{color:#ffb0a2;border-color:#61322d}
+.panel-mode{display:grid;grid-template-columns:minmax(62px,1fr) 46px minmax(62px,1fr);align-items:center;gap:2px;min-width:0;color:#111;font-size:clamp(8px,.66vw,12px);font-weight:bold;text-align:center}.panel-mode-label{display:flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap}.panel-mode .lamp{flex:0 0 10px;margin-right:4px;vertical-align:middle}.panel-mode-label.active .lamp{background:#6fff68;box-shadow:0 0 8px #6fff68}.panel-mode .toggle{height:38px}.panel-mode .toggle-lever{top:2px;transform:rotate(-24deg)}.panel-mode .toggle input:checked+.toggle-base+.toggle-lever{transform:rotate(24deg)}.panel-mode .toggle-base{bottom:2px}
+.reset-area{margin-top:auto;padding-top:4%;text-align:center}.reset{width:100%;padding:5% 4%;border:3px solid #542222;border-radius:8px;background:linear-gradient(#b45757,#672323);color:#fff;font:inherit;font-weight:bold;cursor:pointer}.brand{margin-top:5%;color:#171817;font-size:clamp(7px,.62vw,11px);font-weight:bold;letter-spacing:.12em}
+.crt-shell{min-height:0;padding:2%;border:8px solid #272a28;border-radius:25px;background:#171a18;box-shadow:inset 0 0 22px #000}.crt{position:relative;height:100%;min-height:0;padding:3%;overflow:hidden;border:2px solid #18321a;border-radius:18px;background:repeating-linear-gradient(0deg,#78ff820a 0 1px,transparent 1px 4px),radial-gradient(circle,#102c14 0%,#07170a 68%,#020703 100%);box-shadow:inset 0 0 45px #000;text-shadow:0 0 5px currentColor;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:2.5%}
+.screen-title{text-align:center;padding-bottom:1.5%;border-bottom:1px solid var(--line);letter-spacing:.12em}.order-grid{min-height:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3%}
+.order-box{padding:4%;border:2px solid var(--line);background:#0003;display:grid;grid-template-rows:22px minmax(0,1fr) 30px;gap:4%;overflow:hidden}.order-box.rolling{border-color:#78d27b}.order-box.locked{border-color:#ffe07a;background:#49974e1c}.box-head{display:grid;grid-template-columns:minmax(0,1fr) 76px;color:#67ba6c;font-size:clamp(10px,.9vw,16px);font-weight:bold}.box-state{text-align:right;font-size:.72em}.box-value{display:flex;align-items:center;justify-content:center;text-align:center;overflow-wrap:anywhere;font-size:clamp(19px,2.15vw,39px);font-weight:bold;line-height:1.03}
+.box-actions{display:flex;justify-content:flex-end;gap:5px}.lock{width:84px;height:30px;border:2px solid #163918;border-radius:5px;background:linear-gradient(#2d6231,#173919);color:var(--green);font:inherit;font-weight:bold;cursor:pointer}.lock.locked{border-color:#625321;background:linear-gradient(#8e7429,#46370e);color:#ffe28a}.lock:disabled{opacity:.3}.sold-button{height:30px;padding:0 7px;border:2px solid #5b2525;border-radius:5px;background:linear-gradient(#753030,#351414);color:#ffc0b5;font:700 clamp(7px,.58vw,10px) "Courier New",monospace;cursor:pointer}.sold-button:disabled{opacity:.3}.terminal{padding-top:1.5%;border-top:1px solid var(--line);font-size:clamp(8px,.7vw,13px)}
+.right{min-height:0;display:grid;grid-template-rows:auto auto auto auto minmax(0,1fr);gap:3%}.download,.assign{width:100%;padding:5% 3%;border-radius:8px;font-family:inherit;font-weight:bold;letter-spacing:.07em}.download{border:3px solid #1d371e;background:linear-gradient(#9dc69b,#557454);color:#132014;cursor:pointer}.assign{border:3px solid #310707;background:#420808;color:#8d7777}.assign.armed{background:#b31212;color:#fff;cursor:pointer;box-shadow:0 0 14px #ff3737a6}.status{padding:3%;background:#aaa699;color:#171817;text-align:center;font-weight:bold}
+.printer{position:relative;min-height:0;overflow:hidden;border:3px solid #252825;background:linear-gradient(#707572,#373b38)}.slot{position:absolute;z-index:2;top:8px;left:5%;right:5%;height:10px;border-radius:7px;background:#101110}.paper-window{position:absolute;top:18px;left:3%;right:3%;bottom:3%;overflow:hidden}.ticket{position:absolute;top:0;left:3%;right:3%;height:112%;padding:0 10%;color:#080d08;background:repeating-linear-gradient(180deg,#f4f0d7 0 22px,#dbe6c9 22px 44px);transform:translateY(-108%);transition:transform 2.25s steps(26);font-size:clamp(8px,.66vw,12px);visibility:hidden}.ticket.printing,.ticket.printed{visibility:visible}.ticket.printed{transform:translateY(0)}.print-line{height:22px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.print-rule:after{content:"";display:block;width:72%;border-top:2px solid #263d25}.outcome-box{display:inline-flex;align-items:center;gap:3px;margin:0 9px;cursor:pointer}.paper-check{appearance:none;width:12px;height:12px;margin:0;border:1px solid #263d25;background:#f7f3dc;cursor:pointer}.paper-check:checked:after{content:"X";display:block;margin-top:-3px;font:bold 14px monospace}.signature{position:relative;width:74%;height:20px;border:0;border-bottom:1px solid #263d25;background:transparent;color:#153919;font:italic bold 17px cursive;cursor:pointer}.signature:before{content:"SIGNATURE";position:absolute;left:0;bottom:1px;font:8px monospace;color:#53644e}.signature.signed:before{display:none}.signature-ink{display:inline-block;width:0;overflow:hidden;white-space:nowrap;transform:rotate(-4deg);transition:width 1.1s steps(3)}.signature.signed .signature-ink{width:38px}
+.loading{position:absolute;z-index:20;inset:0;display:grid;place-items:center;padding:8%;background:repeating-linear-gradient(0deg,#78ff820a 0 1px,transparent 1px 4px),radial-gradient(circle,#102c14 0%,#07170a 68%,#020703 100%);text-align:center;letter-spacing:.13em}.loading.hidden{display:none}.loading-frame{width:min(78%,620px);padding:8%;border:2px solid var(--line);background:#0004;box-shadow:0 0 20px #000,inset 0 0 22px #143b18}.loading-title{padding-bottom:4%;border-bottom:1px solid var(--line);font-size:clamp(15px,1.5vw,26px)}.spinner{position:relative;width:74px;height:74px;margin:7% auto;border:4px solid #285a2b;border-top-color:var(--green);border-radius:50%;box-shadow:0 0 14px #65ff6b55,inset 0 0 12px #65ff6b33;animation:spin .85s steps(12) infinite}.spinner:after{content:"";position:absolute;inset:15px;border:2px dashed #4b9d50;border-radius:50%;animation:spin 1.5s linear infinite reverse}@keyframes spin{to{transform:rotate(360deg)}}.data-line{height:12px;margin:6% 0 3%;border:1px solid var(--line);background:#020703;overflow:hidden}.data-line:after{content:"";display:block;width:35%;height:100%;background:var(--green);box-shadow:0 0 9px var(--green);animation:data 1.25s steps(8) infinite}@keyframes data{from{transform:translateX(-110%)}to{transform:translateX(390%)}}.load-error{color:#ff9a88;line-height:1.5}.retry{margin-top:20px;padding:12px 24px;border:2px solid #4b9d50;background:#102c14;color:var(--green);font:inherit}
+</style>
+</head>
+<body>
+<section class="machine">
+<div class="plate"><span>DARMUNIST M.O.D.</span><span>MISSION ASSIGNMENT TERMINAL</span><span>MODEL WOTWOM IIe</span></div>
+<div class="layout">
+<aside class="panel left"><div class="panel-title">MODE ENABLE</div><div class="mode-grid">
+<div class="toggle-row on" data-row="wwii"><span><span class="lamp"></span>WORLD WAR II</span><label class="toggle"><input id="wwii" type="checkbox" checked><span class="toggle-base"></span><span class="toggle-lever"></span></label></div>
+<div class="toggle-row on" data-row="cold_war"><span><span class="lamp"></span>COLD WAR</span><label class="toggle"><input id="cold_war" type="checkbox" checked><span class="toggle-base"></span><span class="toggle-lever"></span></label></div>
+</div>
+<div class="filter-bank">
+<div class="filter-title"><span>TIER / WWII</span><small>I–X</small></div><div id="tierFilters" class="button-grid levels"></div>
+<div class="filter-title"><span>ERA / COLD WAR</span><small>1–3</small></div><div id="eraFilters" class="button-grid eras"></div>
+<div class="filter-title"><span>NATION / FACTION</span><small>SELECT</small></div><div id="affiliationFilters" class="button-grid affiliations"></div>
+<div class="filter-title"><span>VEHICLE CLASS</span><small>SELECT</small></div><div id="classFilters" class="button-grid classes"></div>
+</div>
+<div class="agent-console"><div class="panel-mode"><span id="comsLabel" class="panel-mode-label active"><span class="lamp"></span>COMS</span><label class="toggle"><input id="panelMode" type="checkbox"><span class="toggle-base"></span><span class="toggle-lever"></span></label><span id="invLabel" class="panel-mode-label"><span class="lamp"></span>INV</span></div><div class="filter-title"><span id="panelTitle">ACTIVE AGENTS</span><small id="agentStatus">UNASSIGNED</small></div><div id="agentScreen" class="agent-screen"><div class="agent-empty">AWAITING CHAT...</div></div><div class="agent-controls"><button id="agentUp" class="agent-control" title="Previous entry">▲</button><button id="agentDown" class="agent-control" title="Next entry">▼</button><button id="clearAgent" class="agent-control clear-agent">CLEAR AGENT</button><button id="confirmAgent" class="agent-control confirm-agent" disabled>CONFIRM AGENT</button></div></div>
+<div class="reset-area"><button id="reset" class="reset">SYSTEM RESET</button><div class="brand">MEANGENE SYSTEMS</div></div></aside>
+<div class="crt-shell"><div class="crt"><div id="loading" class="loading"><div class="loading-frame"><div class="loading-title">GARAGE DATA TERMINAL</div><div class="spinner"></div><strong>LOADING GARAGE DATA</strong><div class="data-line"></div><p id="loadingDetail">CONTACTING WORLD OF TANKS...</p><button id="retry" class="retry" hidden>RETRY</button></div></div><div class="screen-title">GARAGE ORDERS RETRIEVAL SYSTEM</div><div class="order-grid">
+<div id="modeBox" class="order-box"><div class="box-head"><span>GAME MODE</span><span id="modeState" class="box-state">STANDBY</span></div><div id="modeValue" class="box-value">—</div><button id="modeLock" class="lock" disabled>LOCK</button></div>
+<div id="classBox" class="order-box"><div class="box-head"><span>VEHICLE CLASS</span><span id="classState" class="box-state">STANDBY</span></div><div id="classValue" class="box-value">—</div><button id="classLock" class="lock" disabled>LOCK</button></div>
+<div id="tankBox" class="order-box"><div class="box-head"><span>VEHICLE</span><span id="tankState" class="box-state">STANDBY</span></div><div id="tankValue" class="box-value">—</div><div class="box-actions"><button id="markSold" class="sold-button" disabled>MARK SOLD</button><button id="tankLock" class="lock" disabled>LOCK</button></div></div>
+<div id="challengeBox" class="order-box"><div class="box-head"><span>CHALLENGE</span><span id="challengeState" class="box-state">STANDBY</span></div><div id="challengeValue" class="box-value">—</div><button id="challengeLock" class="lock" disabled>LOCK</button></div>
+</div><div id="message" class="terminal">INITIALIZING GARAGE LINK...</div></div></div>
+<aside class="panel right"><div class="panel-title">COMMAND AUTHORITY</div><button id="download" class="download">DOWNLOAD</button><button id="assign" class="assign" disabled>ASSIGN CHALLENGE</button><div id="status" class="status">LOCK STATUS: 0 / 4</div><div class="printer"><div class="slot"></div><div class="paper-window"><article id="ticket" class="ticket"></article></div></div></aside>
+</div></section>
+<audio id="printerAudio" preload="auto" src="/wom_audio/typewriter.wav"></audio>
+<script>
+const challenges=["1 kill","2 kills","3 kills","Win","Win and survive","Ammo rack an enemy","Ram kill"];
+const tankClasses=["Light Tank","Medium Tank","Heavy Tank","Tank Destroyer","Artillery"];
+const wwiiNations=["USA","USSR","Germany","UK","France","Japan","China","Czechoslovakia","Sweden","Poland","Italy","Mercenary"];
+const coldWarFactions=["Western Alliance","Eastern Alliance","Independent"];
+const fields=["mode","class","tank","challenge"],$=id=>document.getElementById(id),pick=a=>a[Math.floor(Math.random()*a.length)],wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const state={vehicles:[],soldVehicles:new Map(),panelMode:"coms",chatters:new Map(),selectedAgent:null,selectedSold:null,agent:null,outcome:null,submitted:false,tiers:new Set([1,2,3,4,5,6,7,8,9,10]),eras:new Set([1,2,3]),affiliations:new Set([...wwiiNations,...coldWarFactions]),classes:new Set(tankClasses),values:{mode:null,class:null,tank:null,challenge:null},locks:{mode:false,class:false,tank:false,challenge:false},busy:false};
+let audioContext;
+function tone(frequency,duration=.045,volume=.025,type="square",delay=0){audioContext||=new(window.AudioContext||window.webkitAudioContext)();if(audioContext.state==="suspended")audioContext.resume();const oscillator=audioContext.createOscillator(),gain=audioContext.createGain(),start=audioContext.currentTime+delay;oscillator.type=type;oscillator.frequency.setValueAtTime(frequency,start);gain.gain.setValueAtTime(volume,start);gain.gain.exponentialRampToValueAtTime(.001,start+duration);oscillator.connect(gain).connect(audioContext.destination);oscillator.start(start);oscillator.stop(start+duration)}
+function buttonBeep(){tone(720,.035,.025,"square");tone(940,.028,.018,"square",.04)}
+function toggleBeep(){tone(190,.055,.035,"triangle");tone(310,.045,.022,"square",.045)}
+function enabledModes(){return ["wwii","cold_war"].filter(mode=>$(mode).checked)}
+function modeLabel(mode){return mode==="cold_war"?"Cold War":"World War II"}
+function count(){return fields.filter(field=>state.locks[field]).length}
+function candidates(){
+  const modes=enabledModes();
+  return state.vehicles.filter(vehicle=>modes.includes(vehicle.mode))
+    .filter(vehicle=>!state.soldVehicles.has(Number(vehicle.tank_id)))
+    .filter(vehicle=>vehicle.mode==="wwii"?state.tiers.has(Number(vehicle.tier)):state.eras.has(Number(vehicle.era)))
+    .filter(vehicle=>state.affiliations.has(vehicle.mode==="wwii"?vehicle.nation:vehicle.faction))
+    .filter(vehicle=>state.classes.has(vehicle.type));
+}
+function choices(field){
+  let pool=candidates();
+  if(field==="mode")return [...new Set(pool.map(vehicle=>vehicle.mode))].map(modeLabel);
+  if(state.values.mode){const selected=state.values.mode==="Cold War"?"cold_war":"wwii";pool=pool.filter(vehicle=>vehicle.mode===selected)}
+  if(field==="class")return [...new Set(pool.map(vehicle=>vehicle.type))];
+  if(state.values.class)pool=pool.filter(vehicle=>vehicle.type===state.values.class);
+  if(field==="tank")return pool.map(vehicle=>vehicle.name);
+  return challenges;
+}
+function updateFilters(){
+  const wwii=$("wwii").checked,coldWar=$("cold_war").checked;
+  document.querySelectorAll("[data-tier]").forEach(button=>{button.disabled=!wwii;button.classList.toggle("active",wwii&&state.tiers.has(Number(button.dataset.tier)))});
+  document.querySelectorAll("[data-era]").forEach(button=>{button.disabled=!coldWar;button.classList.toggle("active",coldWar&&state.eras.has(Number(button.dataset.era)))});
+  document.querySelectorAll("[data-affiliation]").forEach(button=>{const enabled=button.dataset.gameMode==="wwii"?wwii:coldWar;button.disabled=!enabled;button.classList.toggle("active",enabled&&state.affiliations.has(button.dataset.affiliation))});
+  document.querySelectorAll("[data-class]").forEach(button=>{const artillery=button.dataset.class==="Artillery";button.disabled=artillery&&!wwii;button.classList.toggle("active",state.classes.has(button.dataset.class)&&!(artillery&&!wwii))});
+}
+function update(){
+  const locked=count();$("status").textContent=`LOCK STATUS: ${locked} / 4`;
+  fields.forEach(field=>{const button=$(`${field}Lock`);button.disabled=!state.values[field]||state.busy;button.textContent=state.locks[field]?"UNLOCK":"LOCK";button.classList.toggle("locked",state.locks[field]);$(`${field}Box`).classList.toggle("locked",state.locks[field]);$(`${field}State`).textContent=state.locks[field]?"LOCKED":state.values[field]?"READY":"STANDBY"});
+  $("markSold").disabled=!state.values.tank||state.busy;$("assign").disabled=locked!==4||state.busy;$("assign").classList.toggle("armed",locked===4&&!state.busy);$("download").disabled=state.busy;updateFilters();
+}
+function resetFrom(field){
+  const index=fields.indexOf(field);
+  fields.slice(index).forEach(name=>{if(!state.locks[name]){state.values[name]=null;$(`${name}Value`).textContent="—";$(`${name}Box`).className="order-box"}});
+}
+function roll(field,items){const timer=setInterval(()=>{$(`${field}Value`).textContent=pick(items).toUpperCase()},70);$(`${field}Box`).classList.add("rolling");$(`${field}State`).textContent="RECEIVING";return timer}
+async function stop(field,items,timer){await wait(650+Math.random()*500);clearInterval(timer);const value=pick(items);state.values[field]=value;$(`${field}Value`).textContent=value.toUpperCase();$(`${field}Box`).classList.remove("rolling");$(`${field}State`).textContent="READY"}
+async function spin(){
+  if(state.busy)return;
+  if(!enabledModes().length){$("message").textContent="ENABLE AT LEAST ONE GAME MODE.";return}
+  if(!candidates().length){$("message").textContent="NO GARAGE VEHICLES MATCH ENABLED MODES.";return}
+  state.busy=true;$("ticket").className="ticket";update();
+  for(const field of fields){if(state.locks[field])continue;resetFrom(field);const items=choices(field);if(!items.length){state.busy=false;update();$("message").textContent=`NO VALID ${field.toUpperCase()} OPTIONS.`;return}const timer=roll(field,items);await stop(field,items,timer)}
+  state.busy=false;update();$("message").textContent="CHALLENGE DOWNLOAD COMPLETE.";
+}
+async function loadInventory(){
+  $("loading").classList.remove("hidden");$("retry").hidden=true;$("loadingDetail").className="";$("loadingDetail").textContent="CONTACTING WORLD OF TANKS...";
+  try{
+    const response=await fetch("/api/wotwom/inventory",{cache:"no-store"}),payload=await response.json();
+    if(!response.ok)throw new Error(payload.error||"Garage request failed.");
+    state.vehicles=payload.vehicles||[];$("message").textContent=`GARAGE LINK READY: ${state.vehicles.length} VEHICLES FOR ${payload.nickname||"COMMANDER"}.`;$("loading").classList.add("hidden");
+  }catch(error){$("loadingDetail").className="load-error";$("loadingDetail").textContent=error.message;$("retry").hidden=false}
+}
+function applySoldVehicles(vehicles){state.soldVehicles=new Map((vehicles||[]).map(vehicle=>[Number(vehicle.tank_id),vehicle]));renderPanel()}
+async function loadSoldVehicles(){try{const response=await fetch("/api/wotwom/sold",{cache:"no-store"}),payload=await response.json();if(response.ok)applySoldVehicles(payload.vehicles)}catch{}}
+function selectedVehicle(){const mode=state.values.mode==="Cold War"?"cold_war":"wwii";return state.vehicles.find(vehicle=>vehicle.mode===mode&&vehicle.type===state.values.class&&vehicle.name===state.values.tank)}
+async function setSoldStatus(action,vehicleOrId){
+  const body=action==="sold"?{action,vehicle:vehicleOrId}:{action,tank_id:vehicleOrId};
+  const response=await fetch("/api/wotwom/sold",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),payload=await response.json();
+  if(!response.ok)throw new Error(payload.error||"Sold-status update failed.");
+  applySoldVehicles(payload.vehicles);
+}
+function makeFilterButton(label,dataName,value,parentId){
+  const button=document.createElement("button");button.type="button";button.className="filter-button active";button.textContent=label;button.dataset[dataName]=value;$(parentId).appendChild(button);
+  button.addEventListener("click",()=>{const collection=dataName==="tier"?state.tiers:dataName==="era"?state.eras:dataName==="affiliation"?state.affiliations:state.classes;const normalized=["class","affiliation"].includes(dataName)?value:Number(value);collection.has(normalized)?collection.delete(normalized):collection.add(normalized);resetFrom("mode");update()});
+}
+["I","II","III","IV","V","VI","VII","VIII","IX","X"].forEach((label,index)=>makeFilterButton(label,"tier",index+1,"tierFilters"));
+[1,2,3].forEach(era=>makeFilterButton(String(era),"era",era,"eraFilters"));
+wwiiNations.forEach(name=>{makeFilterButton(name.toUpperCase(),"affiliation",name,"affiliationFilters");$("affiliationFilters").lastElementChild.dataset.gameMode="wwii"});
+coldWarFactions.forEach(name=>{makeFilterButton(name.toUpperCase(),"affiliation",name,"affiliationFilters");$("affiliationFilters").lastElementChild.dataset.gameMode="cold_war"});
+tankClasses.forEach((name,index)=>{const labels={"Light Tank":"LIGHT","Medium Tank":"MEDIUM","Heavy Tank":"HEAVY","Tank Destroyer":"TANK DESTROYER","Artillery":"ARTILLERY"};makeFilterButton(labels[name],"class",name,"classFilters");if(index===4)$("classFilters").lastElementChild.classList.add("wide")});
+function renderPanel(){
+  const screen=$("agentScreen"),coms=state.panelMode==="coms";screen.innerHTML="";$("comsLabel").classList.toggle("active",coms);$("invLabel").classList.toggle("active",!coms);$("panelTitle").textContent=coms?"ACTIVE AGENTS":"SOLD VEHICLES";$("agentStatus").textContent=coms?(state.agent?state.agent.toUpperCase():"UNASSIGNED"):`${state.soldVehicles.size} SOLD`;$("clearAgent").textContent=coms?"CLEAR AGENT":"CLEAR STATUS";$("confirmAgent").hidden=!coms;
+  const entries=coms?[...state.chatters.values()].reverse():[...state.soldVehicles.values()];
+  if(!entries.length){screen.innerHTML=`<div class="agent-empty">${coms?"AWAITING CHAT...":"NO SOLD VEHICLES"}</div>`;return}
+  entries.forEach(entry=>{const name=coms?entry:entry.name,key=coms?name:Number(entry.tank_id),selected=coms?state.selectedAgent===key:state.selectedSold===key;const button=document.createElement("button");button.type="button";button.className="agent-name";button.classList.toggle("selected",selected);button.textContent=coms?`> ${name}`:`> ${name} [${entry.mode==="cold_war"?"CW":"WWII"}]`;button.addEventListener("click",()=>{if(coms){state.selectedAgent=name;$("confirmAgent").disabled=false}else state.selectedSold=Number(entry.tank_id);renderPanel();scrollSelectedEntry()});screen.appendChild(button)});
+}
+function scrollSelectedEntry(){const selected=$("agentScreen").querySelector(".agent-name.selected");if(selected)selected.scrollIntoView({block:"nearest"})}
+function stepPanel(direction){const coms=state.panelMode==="coms",entries=coms?[...state.chatters.values()].reverse():[...state.soldVehicles.keys()],current=coms?state.selectedAgent:state.selectedSold;if(!entries.length)return;let index=entries.indexOf(current);if(index<0)index=direction>0?-1:0;index=(index+direction+entries.length)%entries.length;if(coms){state.selectedAgent=entries[index];$("confirmAgent").disabled=false}else state.selectedSold=entries[index];renderPanel();scrollSelectedEntry()}
+function connectAgentFeed(){
+  const protocol=location.protocol==="https:"?"wss":"ws",socket=new WebSocket(`${protocol}://${location.host}/ws`);
+  socket.addEventListener("open",()=>socket.send(JSON.stringify({type:"request_wotwom_chat_roster"})));
+  socket.addEventListener("message",event=>{try{const payload=JSON.parse(event.data);if(payload.type==="wotwom_chat_roster"){state.chatters.clear();(payload.usernames||[]).forEach(username=>state.chatters.set(username.toLowerCase(),username));renderPanel();return}if(payload.type!=="wotwom_chat_user"||!payload.username)return;state.chatters.delete(payload.username.toLowerCase());state.chatters.set(payload.username.toLowerCase(),payload.username);renderPanel()}catch{}});
+  socket.addEventListener("close",()=>setTimeout(connectAgentFeed,3000));
+}
+$("confirmAgent").addEventListener("click",()=>{if(!state.selectedAgent)return;state.agent=state.selectedAgent;$("agentStatus").textContent=state.agent.toUpperCase();$("message").textContent=`AGENT ${state.agent.toUpperCase()} CONFIRMED.`});
+$("agentUp").addEventListener("click",()=>stepPanel(-1));
+$("agentDown").addEventListener("click",()=>stepPanel(1));
+$("panelMode").addEventListener("change",event=>{toggleBeep();state.panelMode=event.target.checked?"inv":"coms";renderPanel()});
+$("clearAgent").addEventListener("click",async()=>{if(state.panelMode==="coms"){state.selectedAgent=null;state.agent=null;$("confirmAgent").disabled=true;renderPanel();$("message").textContent="AGENT ASSIGNMENT CLEARED.";return}if(!state.selectedSold){$("message").textContent="SELECT A SOLD VEHICLE TO CLEAR STATUS.";return}try{await setSoldStatus("restore",state.selectedSold);state.selectedSold=null;renderPanel();$("message").textContent="SOLD STATUS CLEARED. VEHICLE RESTORED."}catch(error){$("message").textContent=error.message}});
+document.addEventListener("click",event=>{if(event.target.closest("button"))buttonBeep()});
+fields.forEach(field=>$(`${field}Lock`).addEventListener("click",()=>{state.locks[field]=!state.locks[field];update()}));
+["wwii","cold_war"].forEach(id=>$(id).addEventListener("change",event=>{toggleBeep();document.querySelector(`[data-row="${id}"]`).classList.toggle("on",event.target.checked);resetFrom("mode");update()}));
+$("download").addEventListener("click",spin);$("retry").addEventListener("click",loadInventory);
+$("markSold").addEventListener("click",async()=>{const vehicle=selectedVehicle();if(!vehicle){$("message").textContent="SELECT A VEHICLE BEFORE MARKING SOLD.";return}try{await setSoldStatus("sold",vehicle);state.values.tank=null;state.values.challenge=null;state.locks.tank=false;state.locks.challenge=false;$("tankValue").textContent="—";$("challengeValue").textContent="—";$("tankBox").className="order-box";$("challengeBox").className="order-box";update();$("message").textContent=`${vehicle.name.toUpperCase()} SET TO SOLD STATUS.`}catch(error){$("message").textContent=error.message}});
+function wireTicket(){
+  const pass=$("resultPass"),fail=$("resultFail"),signature=$("signature");
+  [pass,fail].forEach(box=>box.addEventListener("change",()=>{if(box.checked){(box===pass?fail:pass).checked=false;state.outcome=box.value}else if(!pass.checked&&!fail.checked)state.outcome=null}));
+  signature.addEventListener("click",async()=>{if(state.submitted)return;if(!state.agent){$("message").textContent="CONFIRM AN AGENT BEFORE SIGNING.";return}if(!state.outcome){$("message").textContent="SELECT PASS OR FAIL BEFORE SIGNING.";return}signature.classList.add("signed");signature.querySelector(".signature-ink").textContent="Dar";try{const response=await fetch("/api/wotwom/results",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({agent:state.agent,outcome:state.outcome,orders:state.values})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||"Submission failed");state.submitted=true;signature.disabled=true;$("message").textContent=`OPERATION ${state.outcome.toUpperCase()} FILED FOR ${state.agent.toUpperCase()}.`}catch(error){signature.classList.remove("signed");$("message").textContent=error.message}});
+}
+$("assign").addEventListener("click",()=>{if(count()!==4)return;state.outcome=null;state.submitted=false;const ticket=$("ticket"),agentSection=state.agent?`<div class="print-line print-rule" aria-hidden="true"></div><div class="print-line">AGENT: ${state.agent.toUpperCase()}</div>`:"";ticket.className="ticket";ticket.innerHTML=`<div class="print-line print-rule" aria-hidden="true"></div><div class="print-line">FROM: DIRECTOR DARMUNIST M.O.D.</div><div class="print-line print-rule" aria-hidden="true"></div><div class="print-line">CURRENT ORDERS</div><div class="print-line print-rule" aria-hidden="true"></div>${fields.map(field=>`<div class="print-line">${field.toUpperCase()}: ${state.values[field].toUpperCase()}</div>`).join("")}${agentSection}<div class="print-line print-rule" aria-hidden="true"></div><div class="print-line"><label class="outcome-box"><input id="resultPass" class="paper-check" type="checkbox" value="pass"> PASS</label><label class="outcome-box"><input id="resultFail" class="paper-check" type="checkbox" value="fail"> FAIL</label></div><div class="print-line"><button id="signature" class="signature" type="button"><span class="signature-ink"></span></button></div>`;wireTicket();const audio=$("printerAudio");audio.currentTime=0;audio.play().catch(()=>{});ticket.classList.add("printing");requestAnimationFrame(()=>requestAnimationFrame(()=>ticket.classList.add("printed")))});
+$("reset").addEventListener("click",()=>{state.values={mode:null,class:null,tank:null,challenge:null};state.locks={mode:false,class:false,tank:false,challenge:false};state.outcome=null;state.submitted=false;fields.forEach(field=>{$(`${field}Value`).textContent="—";$(`${field}Box`).className="order-box"});$("ticket").className="ticket";$("ticket").innerHTML="";state.busy=false;update();$("message").textContent="SYSTEM RESET COMPLETE."});
+update();renderPanel();connectAgentFeed();loadSoldVehicles();loadInventory();
+</script>
+</body>
+</html>

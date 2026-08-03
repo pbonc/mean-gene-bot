@@ -481,6 +481,16 @@ class Bot(commands.Bot):
         self._touch_twitch_activity()
         author_name = message.author.name if message.author else "Unknown"
         print(f"Message from {author_name}: {message.content}")
+        if message.author and not getattr(message, "echo", False):
+            try:
+                await broadcast_overlay_message(
+                    {"type": "wotwom_chat_user", "username": author_name}
+                )
+            except Exception:
+                logging.debug(
+                    "[WOTWOM] Failed to broadcast active chatter",
+                    exc_info=True,
+                )
         try:
             content = message.content or ""
             is_command = bool(content.startswith("!"))

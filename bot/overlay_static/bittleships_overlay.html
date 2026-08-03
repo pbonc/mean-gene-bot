@@ -113,6 +113,8 @@
       display: flex;
       flex-direction: column;
       gap: 18px;
+      min-height: 0;
+      overflow: hidden;
     }
     .status {
       display: inline-flex;
@@ -162,17 +164,28 @@
     #leaderboard {
       display: none;
       gap: 5px;
-      max-height: 150px;
-      overflow: hidden;
+      min-height: 0;
+      flex: 1 1 auto;
+      grid-template-columns: repeat(var(--leader-columns, 1), minmax(0, 1fr));
+      grid-template-rows: repeat(var(--leader-rows, 1), minmax(0, 1fr));
+      grid-auto-flow: row;
+      font-size: var(--leader-font-size, 1rem);
     }
     .leader-row {
       display: grid;
-      grid-template-columns: 30px 1fr auto;
-      gap: 8px;
-      padding: 5px 9px;
+      grid-template-columns: minmax(18px, auto) minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      min-height: 0;
+      padding: 3px 7px;
       border-radius: 8px;
       background: rgba(255,255,255,.045);
       font-weight: 700;
+    }
+    .leader-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      line-height: 1.05;
     }
     .leader-row:first-child { color: var(--gold); }
   </style>
@@ -194,7 +207,7 @@
         <div class="stat"><b id="fired">0</b><small>Shots fired</small></div>
       </div>
       <div id="leaderboard"></div>
-      <div class="help">Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!ships A5</b></div>
+      <div class="help">Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!A5</b></div>
       <div id="message">Waiting for battle orders.</div>
     </aside>
   </main>
@@ -281,24 +294,34 @@
         }
         leaderboard.style.display = "grid";
         leaderboard.replaceChildren();
-        for (const [index, player] of (classic.scores || []).slice(0, 6).entries()) {
+        const players = classic.scores || [];
+        const columns = Math.max(1, Math.ceil(players.length / 6));
+        const rows = Math.max(1, Math.ceil(players.length / columns));
+        leaderboard.style.setProperty("--leader-columns", columns);
+        leaderboard.style.setProperty("--leader-rows", rows);
+        leaderboard.style.setProperty(
+          "--leader-font-size",
+          players.length > 18 ? ".68rem" : players.length > 12 ? ".78rem" : players.length > 6 ? ".88rem" : "1rem"
+        );
+        for (const [index, player] of players.entries()) {
           const row = document.createElement("div");
           row.className = "leader-row";
           for (const value of [index + 1, `@${player.name}`, `${player.points} pts`]) {
             const span = document.createElement("span");
             span.textContent = value;
+            if (value === `@${player.name}`) span.className = "leader-name";
             row.append(span);
           }
           leaderboard.append(row);
         }
         help.innerHTML = data.phase === "joining"
           ? "Join the fleet: <b>!ships join</b>"
-          : "Fire on your turn: <b>!ships A5</b><br>Sink bonus: <b>+1 point</b>";
+          : "Fire on your turn: <b>!A5</b><br>Sink bonus: <b>+1 point</b>";
       } else {
         classicInfo.style.display = "none";
         leaderboard.style.display = "none";
         leaderboard.replaceChildren();
-        help.innerHTML = "Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!ships A5</b>";
+        help.innerHTML = "Admiral grants shots: <b>!ships give @viewer</b><br>Viewer fires: <b>!A5</b>";
       }
     }
     function updateTurnCountdown() {

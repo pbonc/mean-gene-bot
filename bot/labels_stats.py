@@ -161,6 +161,15 @@ async def get_ticker_messages():
             if follower_count and follower_count != "N/A":
                 messages.append(f"Followers: {follower_count}")
 
+            # Rotate one Darmunist tank stat and include current WoTWoM agent
+            # leaders immediately before the sports block.
+            try:
+                from bot.wot_ticker import get_wot_ticker_messages
+                wot_messages = await get_wot_ticker_messages()
+                messages.extend(wot_messages)
+            except Exception as e:
+                print(f"Error getting WoTWoM ticker messages: {e}")
+
             # Add sports scores (only when building new ticker)
             try:
                 sports_messages = await sports_manager.get_sports_messages()

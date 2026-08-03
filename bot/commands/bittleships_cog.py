@@ -15,8 +15,13 @@ from bot.overlay_server import broadcast_overlay_message
 
 LOGGER = logging.getLogger("bittleships")
 ACTIVE_WINDOW = timedelta(minutes=10)
+COORDINATE_COMMANDS = [
+    f"{letter.lower()}{number}"
+    for letter in "ABCDEFGHIJ"
+    for number in range(1, 11)
+]
 USAGE = (
-    "Bittleships: !ships status | !ships A5 | !ships join | "
+    "Bittleships: !ships status | !A5 to fire | !ships join | "
     "Admiral: !ships start <ships>, !ships give @user [shots] | "
     "Mod: !ships classic <minutes> [fighter], !ships skip, !ships stop, !ships resume"
 )
@@ -77,7 +82,7 @@ class BittleshipsCog(commands.Cog):
         await channel.send(
             f"⚓ Classic Bittleships begins! Turn order: "
             f"{', '.join('@' + player for player in order)}. "
-            f"@{order[0]}, fire with !ships A5."
+            f"@{order[0]}, fire with !A5."
         )
 
     def _get_classic_channel(self):
@@ -180,7 +185,8 @@ class BittleshipsCog(commands.Cog):
         await self._broadcast()
         await ctx.send(
             f"⚓ @{target} is now the Bittleships admiral. "
-            "They command with !ships start <ships> and !ships give @user [shots], but cannot fire."
+            "They command with !ships start <ships> and !ships give @user [shots]. "
+            "They cannot receive shots in giveaway mode, but may join Classic."
         )
 
     @commands.command(name="ships")
@@ -200,11 +206,6 @@ class BittleshipsCog(commands.Cog):
             await self._handle_join(ctx)
         elif action in ("give", "grant", "shot", "shots"):
             await self._handle_give(ctx, args)
-        elif parse_coordinate(action):
-            if args:
-                await ctx.send("Usage: !ships A5")
-                return
-            await self._handle_fire(ctx, [action])
         elif action in ("status", "info", "board"):
             await self._handle_status(ctx)
         elif action in ("stop", "end"):
@@ -267,7 +268,7 @@ class BittleshipsCog(commands.Cog):
         await self._broadcast()
         await ctx.send(
             f"🎯 @{target} received {count} shot{'s' if count != 1 else ''} "
-            f"({total} available). Fire with !ships A5."
+            f"({total} available). Fire with !A5."
         )
 
     async def _handle_classic(self, ctx, args):
@@ -298,20 +299,48 @@ class BittleshipsCog(commands.Cog):
         )
 
     async def _handle_join(self, ctx):
+        phase = self.manager.state.get("phase")
+        shots_fired = bool(self.manager.state.get("revealed"))
         try:
             player_count = self.manager.join_classic(ctx.author.name)
         except ValueError as exc:
             await ctx.send(str(exc))
             return
         await self._broadcast()
+        if phase == "playing" and shots_fired:
+            await ctx.send(
+                f"@{ctx.author.name} joined Classic Bittleships and will be added "
+                f"to the end of the next round ({player_count} players)."
+            )
+            return
+        if phase == "playing":
+            await ctx.send(
+                f"@{ctx.author.name} joined before the first shot and was added "
+                f"to the end of the current round ({player_count} players)."
+            )
+            return
         await ctx.send(
             f"⚓ @{ctx.author.name} joined Classic Bittleships "
             f"({player_count} player{'s' if player_count != 1 else ''})."
         )
 
+    @commands.command(
+        name=COORDINATE_COMMANDS[0],
+        aliases=COORDINATE_COMMANDS[1:],
+    )
+    async def coordinate_fire_command(self, ctx):
+        parts = ctx.message.content.split()
+        if len(parts) != 1:
+            await ctx.send("Usage: !A5")
+            return
+        command = parts[0].lstrip("!")
+        coordinate = parse_coordinate(command)
+        if coordinate:
+            await self._handle_fire(ctx, [coordinate])
+
     async def _handle_fire(self, ctx, args):
         if len(args) != 1:
-            await ctx.send("Usage: !ships A5")
+            await ctx.send("Usage: !A5")
             return
         if self.manager.state.get("mode") == "classic":
             await self._handle_classic_fire(ctx, args[0])
@@ -342,19 +371,34 @@ class BittleshipsCog(commands.Cog):
             f" {outcome['sunk']} destroyed—bonus point!"
             if outcome["sunk"] else ""
         )
-        if outcome["won"]:
+        if outcome.get("sudden_death_started"):
             self._schedule_classic_turn_timeout()
-            leaders = self.manager.public_payload()["classic"]["scores"]
-            top_score = leaders[0]["points"] if leaders else 0
-            winners = [f"@{row['name']}" for row in leaders if row["points"] == top_score]
+            tied = self.manager.public_payload()["classic"]["sudden_death_players"]
             await ctx.send(
                 f"💥 @{ctx.author.name} fires at {coordinate.upper()}: {result_text}!{sink_text} "
-                f"Fleet destroyed! Winner{'s' if len(winners) != 1 else ''}: "
-                f"{', '.join(winners)} with {top_score} point{'s' if top_score != 1 else ''}."
+                f"Fleet destroyed, but the lead is tied between "
+                f"{', '.join('@' + player for player in tied)}. SUDDEN DEATH! "
+                f"A fighter is in play; first hit wins. Next: @{outcome['next_player']}."
+            )
+            return
+        if outcome["won"]:
+            self._schedule_classic_turn_timeout()
+            winner = outcome.get("winner") or ctx.author.name
+            winner_score = outcome.get("winner_score")
+            if winner_score is None:
+                winner_score = outcome["score"]["points"]
+            await ctx.send(
+                f"💥 @{ctx.author.name} fires at {coordinate.upper()}: {result_text}!{sink_text} "
+                + (
+                    f"Sudden-death fighter destroyed! Winner: @{winner}."
+                    if outcome.get("sudden_death")
+                    else f"Fleet destroyed! Winner: @{winner} with {winner_score} "
+                    f"point{'s' if winner_score != 1 else ''}."
+                )
             )
             winner_summary = (
-                f"Classic complete. Winner{'s' if len(winners) != 1 else ''}: "
-                f"{', '.join(winners)} ({top_score} points). Giveaway board restored."
+                f"Classic complete. Winner: @{winner} ({winner_score} points). "
+                "Giveaway board restored."
             )
             self.manager.restore_suspended_game(winner_summary)
             await self._broadcast()
@@ -384,10 +428,11 @@ class BittleshipsCog(commands.Cog):
                 f" | Leader: @{leader['name']} ({leader['points']} pts)"
                 if leader else ""
             )
+            sudden_death_text = " | SUDDEN DEATH: first fighter hit wins" if classic.get("sudden_death") else ""
             await ctx.send(
                 f"🚢 Classic {payload['phase'].upper()} | Round: {classic['round']} | "
                 f"Turn: @{classic['current_player'] or 'none'} | Ships left: "
-                f"{payload['ships_remaining']}/5{leader_text}"
+                f"{payload['ships_remaining']}/5{leader_text}{sudden_death_text}"
             )
             return
         state = "ACTIVE" if payload["active"] else "ENDED"

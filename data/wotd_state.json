@@ -1,7 +1,7 @@
 {
   "is_active": false,
   "current_word": null,
-  "prize_value": 5,
-  "stream_bias_percent": 15,
-  "winner": "tankahdelphia"
+  "prize_value": 25,
+  "stream_bias_percent": 55,
+  "winner": null
 }
