@@ -2,7 +2,7 @@ import aiohttp
 import asyncio
 import time
 from datetime import datetime, timedelta
-from typing import List
+from typing import Dict, List
 
 class SportsAPIManager:
     def __init__(self):
@@ -19,6 +19,83 @@ class SportsAPIManager:
         self.espn_mlb_base = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
         self.espn_nfl_base = "https://site.api.espn.com/apis/site/v2/sports/football/nfl"
         self.sportsdb_base = "https://www.thesportsdb.com/api/v1/json/3"
+
+    async def fetch_gamewatch_games(self) -> List[Dict]:
+        """Return normalized ESPN scoreboard events for GameWatch.
+
+        This deliberately bypasses the five-minute ticker cache: an active game
+        watcher needs fresh scores and applies its own announcement gates.
+        """
+        leagues = {
+            "NHL": self.espn_nhl_base,
+            "NBA": self.espn_nba_base,
+            "MLB": self.espn_mlb_base,
+            "NFL": self.espn_nfl_base,
+        }
+        timeout = aiohttp.ClientTimeout(total=10, connect=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            results = await asyncio.gather(
+                *(self._fetch_gamewatch_league(session, sport, base) for sport, base in leagues.items()),
+                return_exceptions=True,
+            )
+        games = []
+        for result in results:
+            if isinstance(result, Exception):
+                print(f"[GAMEWATCH] Scoreboard fetch failed: {result}")
+            else:
+                games.extend(result)
+        return sorted(games, key=lambda game: (game["start_time"], game["sport"], game["id"]))
+
+    async def _fetch_gamewatch_league(self, session, sport: str, base: str) -> List[Dict]:
+        today = datetime.now().date()
+        dates = [(today + timedelta(days=offset)).strftime("%Y%m%d") for offset in (-1, 0, 1)]
+        async with session.get(f"{base}/scoreboard", params={"dates": "-".join((dates[0], dates[-1]))}) as response:
+            response.raise_for_status()
+            payload = await response.json()
+        games = []
+        for event in payload.get("events", []):
+            competitions = event.get("competitions") or []
+            if not competitions:
+                continue
+            competition = competitions[0]
+            competitors = competition.get("competitors") or []
+            home = next((row for row in competitors if row.get("homeAway") == "home"), None)
+            away = next((row for row in competitors if row.get("homeAway") == "away"), None)
+            if not home or not away:
+                continue
+            status = competition.get("status") or event.get("status") or {}
+            status_type = status.get("type") or {}
+            start_raw = event.get("date") or competition.get("date")
+            if not start_raw:
+                continue
+            try:
+                start_time = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                continue
+            situation = competition.get("situation") or {}
+            last_play = situation.get("lastPlay") or {}
+            detail = (
+                situation.get("downDistanceText")
+                or last_play.get("text")
+                or status_type.get("shortDetail")
+                or status_type.get("detail")
+                or "Scheduled"
+            )
+            games.append({
+                "id": str(event.get("id")),
+                "sport": sport,
+                "start_time": start_time,
+                "home": home.get("team", {}).get("shortDisplayName") or home.get("team", {}).get("displayName") or "Home",
+                "away": away.get("team", {}).get("shortDisplayName") or away.get("team", {}).get("displayName") or "Away",
+                "home_score": int(home.get("score") or 0),
+                "away_score": int(away.get("score") or 0),
+                "state": status_type.get("state", "pre"),
+                "completed": bool(status_type.get("completed")),
+                "period": int(status.get("period") or 0),
+                "clock": status.get("displayClock") or "",
+                "detail": str(detail)[:120],
+            })
+        return games
 
     def get_current_streaming_day(self):
         """
