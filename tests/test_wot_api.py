@@ -62,6 +62,19 @@ class WotApiNormalizationTests(unittest.TestCase):
             __import__("asyncio").run(client.resolve_account()),
         )
 
+    def test_platform_lookup_is_case_insensitive_and_strict(self):
+        client = WotApiClient(
+            WotConfig("app", player_name="MiXeD Player", platform="x"), None
+        )
+        client._get = AsyncMock(return_value=[
+            {"account_id": 1, "nickname": "mixed player-p"},
+            {"account_id": 2, "nickname": "MIXED PLAYER-X"},
+        ])
+        self.assertEqual(
+            ("2", "MIXED PLAYER-X"),
+            __import__("asyncio").run(client.resolve_account()),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

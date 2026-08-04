@@ -25,6 +25,7 @@ class WotConfig:
     application_id: str
     account_id: str = ""
     player_name: str = ""
+    platform: str = ""
     api_root: str = API_ROOT
 
     @classmethod
@@ -128,15 +129,23 @@ class WotApiClient:
             raise WotApiError("Set WOT_ACCOUNT_ID or WOT_PLAYER_NAME.")
         matches = await self._get("account/list/", search=self.config.player_name)
         requested = self.config.player_name.casefold()
-        exact = [
-            player
-            for player in (matches or [])
-            if str(player.get("nickname", "")).casefold() == requested
-            or str(player.get("nickname", "")).casefold().removesuffix("-x")
-            == requested
-            or str(player.get("nickname", "")).casefold().removesuffix("-p")
-            == requested
-        ]
+        suffix = {"x": "-x", "p": "-p"}.get(self.config.platform.casefold())
+        if suffix:
+            requested = requested.removesuffix(suffix)
+            exact = [
+                player for player in (matches or [])
+                if str(player.get("nickname", "")).casefold() == requested + suffix
+            ]
+        else:
+            exact = [
+                player
+                for player in (matches or [])
+                if str(player.get("nickname", "")).casefold() == requested
+                or str(player.get("nickname", "")).casefold().removesuffix("-x")
+                == requested
+                or str(player.get("nickname", "")).casefold().removesuffix("-p")
+                == requested
+            ]
         if len(exact) != 1:
             raise WotApiError(f'Player "{self.config.player_name}" was not found.')
         player = exact[0]
@@ -146,6 +155,10 @@ class WotApiClient:
         if not self.config.application_id:
             raise WotApiError("Set WOT_APPLICATION_ID before using WoTWoM.")
         account_id, nickname = await self.resolve_account()
+        return await self.inventory_for_account(account_id, nickname)
+
+    async def inventory_for_account(self, account_id: str, nickname: str = "") -> dict[str, Any]:
+        """Build played-vehicle metadata for an already resolved public account."""
         stats = await self._get("tanks/stats/", account_id=account_id)
         if isinstance(stats, dict):
             stats = stats.get(str(account_id)) or stats.get(int(account_id)) or []

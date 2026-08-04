@@ -13,6 +13,8 @@ from bot.wot_api import WotApiClient, WotConfig, fetch_wot_inventory
 
 _cache: tuple[float, dict[str, Any]] | None = None
 _tank_cache: dict[str, tuple[float, str]] = {}
+_player_cache: dict[str, tuple[float, dict[str, str]]] = {}
+_player_tank_cache: dict[str, tuple[float, str]] = {}
 _cache_lock = asyncio.Lock()
 CACHE_SECONDS = 300
 
@@ -164,7 +166,9 @@ def resolve_tank(
     raise TankLookupError(f"Multiple tanks match: {names}{suffix}")
 
 
-def summarize_tank(vehicle: dict[str, Any], stats: dict[str, Any]) -> str:
+def summarize_tank(
+    vehicle: dict[str, Any], stats: dict[str, Any], nickname: str | None = None
+) -> str:
     all_stats = stats.get("all") or {}
     battles = int(all_stats.get("battles") or 0)
     wins = int(all_stats.get("wins") or 0)
@@ -186,8 +190,9 @@ def summarize_tank(vehicle: dict[str, Any], stats: dict[str, Any]) -> str:
         3: "1st Class",
         4: "Ace",
     }.get(int(stats.get("mark_of_mastery") or 0), "unknown")
+    label = f"{nickname} — {vehicle['name']}" if nickname else vehicle["name"]
     return (
-        f"{vehicle['name']} | {_number(battles)} battles | "
+        f"{label} | {_number(battles)} battles | "
         f"{_rate(wins, battles):.1f}% wins | "
         f"{_ratio(kills, deaths):.2f} K/D | "
         f"{_number(_ratio(int(all_stats.get('damage_dealt') or 0), battles))} avg dmg | "
@@ -287,4 +292,94 @@ async def fetch_tank_chat_stats(query: str, force: bool = False) -> str:
             raise TankLookupError(f"No statistics are available for {vehicle['name']}.")
         result = summarize_tank(vehicle, stats)
         _tank_cache[cache_key] = (now, result)
+        return result
+
+
+async def fetch_player_chat_stats(
+    player_name: str, platform: str, force: bool = False
+) -> dict[str, str]:
+    platform = platform.casefold()
+    cache_key = f"{platform}:{player_name.strip().casefold()}"
+    async with _cache_lock:
+        now = time.monotonic()
+        cached = _player_cache.get(cache_key)
+        if not force and cached and now - cached[0] < CACHE_SECONDS:
+            return cached[1]
+        config = WotConfig.from_env()
+        target = WotConfig(
+            application_id=config.application_id,
+            player_name=player_name.strip(),
+            platform=platform,
+            api_root=config.api_root,
+        )
+        async with aiohttp.ClientSession() as session:
+            client = WotApiClient(target, session)
+            account_id, nickname = await client.resolve_account()
+            profile_data, vehicle_data, inventory = await asyncio.gather(
+                client._get("account/info/", account_id=account_id),
+                client._get("tanks/stats/", account_id=account_id),
+                client.inventory_for_account(account_id, nickname),
+            )
+        profile = (profile_data.get(str(account_id)) if isinstance(profile_data, dict) else {}) or {}
+        vehicle_stats = (vehicle_data.get(str(account_id)) if isinstance(vehicle_data, dict) else []) or []
+        tank_names = {int(vehicle["tank_id"]): str(vehicle["name"]) for vehicle in inventory["vehicles"]}
+        result = summarize_stats(
+            nickname or player_name,
+            profile.get("statistics") or {},
+            vehicle_stats,
+            tank_names,
+        )
+        _player_cache[cache_key] = (now, result)
+        return result
+
+
+async def fetch_player_tank_chat_stats(
+    player_name: str, platform: str, query: str, force: bool = False
+) -> str:
+    words = query.strip().split()
+    mode_aliases = {
+        "wwii": "wwii", "ww2": "wwii", "cw": "cold_war",
+        "coldwar": "cold_war", "cold_war": "cold_war",
+    }
+    preferred_mode = mode_aliases.get(words[0].casefold()) if words else None
+    tank_query = " ".join(words[1:] if preferred_mode else words)
+    if not tank_query:
+        raise TankLookupError("Provide a tank name after the player separator.")
+    platform = platform.casefold()
+    cache_key = (
+        f"{platform}:{player_name.strip().casefold()}:"
+        f"{preferred_mode or 'auto'}:{tank_query.casefold()}"
+    )
+    async with _cache_lock:
+        now = time.monotonic()
+        cached = _player_tank_cache.get(cache_key)
+        if not force and cached and now - cached[0] < CACHE_SECONDS:
+            return cached[1]
+        config = WotConfig.from_env()
+        target = WotConfig(
+            application_id=config.application_id,
+            player_name=player_name.strip(),
+            platform=platform,
+            api_root=config.api_root,
+        )
+        async with aiohttp.ClientSession() as session:
+            client = WotApiClient(target, session)
+            account_id, nickname = await client.resolve_account()
+            vehicle_data, inventory = await asyncio.gather(
+                client._get("tanks/stats/", account_id=account_id),
+                client.inventory_for_account(account_id, nickname),
+            )
+        vehicle_stats = (vehicle_data.get(str(account_id)) if isinstance(vehicle_data, dict) else []) or []
+        stats_by_id = {int(row["tank_id"]): row for row in vehicle_stats}
+        vehicle = resolve_tank(
+            tank_query,
+            inventory["vehicles"],
+            stats_by_id=stats_by_id,
+            preferred_mode=preferred_mode,
+        )
+        stats = stats_by_id.get(int(vehicle["tank_id"]))
+        if not stats:
+            raise TankLookupError(f"No statistics are available for {vehicle['name']}.")
+        result = summarize_tank(vehicle, stats, nickname or player_name)
+        _player_tank_cache[cache_key] = (now, result)
         return result

@@ -4,6 +4,24 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List
 
+
+def _mlb_team_has_baserunner(plays: List[Dict], batting_team_id: str) -> bool:
+    """Infer any batter reaching base, including non-hit routes, from ESPN plays."""
+    reached_phrases = (
+        " walked", "hit by pitch", "reached on", "catcher interference",
+        "safe at first", "safe on", "fielder's choice",
+    )
+    hit_types = {"single", "double", "triple", "home-run"}
+    for play in plays:
+        if str((play.get("team") or {}).get("id") or "") != batting_team_id:
+            continue
+        play_type = str((play.get("type") or {}).get("type") or "").casefold()
+        text = f" {str(play.get('text') or '').casefold()}"
+        if play_type in hit_types or any(phrase in text for phrase in reached_phrases):
+            return True
+    return False
+
+
 class SportsAPIManager:
     def __init__(self):
         self.cache = {}
@@ -89,6 +107,10 @@ class SportsAPIManager:
                 "away": away.get("team", {}).get("shortDisplayName") or away.get("team", {}).get("displayName") or "Away",
                 "home_score": int(home.get("score") or 0),
                 "away_score": int(away.get("score") or 0),
+                "home_hits": int(home.get("hits") or 0),
+                "away_hits": int(away.get("hits") or 0),
+                "home_team_id": str(home.get("id") or home.get("team", {}).get("id") or ""),
+                "away_team_id": str(away.get("id") or away.get("team", {}).get("id") or ""),
                 "state": status_type.get("state", "pre"),
                 "completed": bool(status_type.get("completed")),
                 "period": int(status.get("period") or 0),
@@ -97,6 +119,81 @@ class SportsAPIManager:
             })
         return games
 
+    async def enrich_gamewatch_mlb(self, game: Dict) -> Dict:
+        """Add pitcher, scoring-play, and milestone data to a normalized MLB game."""
+        timeout = aiohttp.ClientTimeout(total=10, connect=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{self.espn_mlb_base}/summary", params={"event": game["id"]}
+            ) as response:
+                response.raise_for_status()
+                payload = await response.json()
+
+        enriched = dict(game)
+        plays = payload.get("plays") or []
+        scoring_plays = [play for play in plays if int(play.get("scoreValue") or 0) > 0]
+        enriched["scoring_play"] = (
+            str(scoring_plays[-1].get("text") or "").strip() if scoring_plays else ""
+        )
+
+        pitchers = {}
+        milestones = []
+        player_groups = payload.get("boxscore", {}).get("players") or []
+        for group in player_groups:
+            team = group.get("team") or {}
+            team_id = str(team.get("id") or "")
+            pitching = next(
+                (row for row in (group.get("statistics") or []) if row.get("type") == "pitching"),
+                None,
+            )
+            if not pitching:
+                continue
+            keys = pitching.get("keys") or []
+            athletes = pitching.get("athletes") or []
+            starter = next((row for row in athletes if row.get("starter")), None)
+            active = next((row for row in reversed(athletes) if row.get("active")), None)
+            current = active or (athletes[-1] if athletes else None)
+            if not current:
+                continue
+            current_athlete = current.get("athlete") or {}
+            pitchers[team_id] = {
+                "name": current_athlete.get("displayName") or "Unknown pitcher",
+                "id": str(current_athlete.get("id") or ""),
+                "team": team.get("shortDisplayName") or team.get("displayName") or "Team",
+            }
+            if not starter:
+                continue
+            starter_athlete = starter.get("athlete") or {}
+            stats = dict(zip(keys, starter.get("stats") or []))
+            try:
+                innings = float(stats.get("fullInnings.partInnings") or 0)
+            except (TypeError, ValueError):
+                innings = 0.0
+            starter_id = str(starter_athlete.get("id") or "")
+            if innings < 6.0 or starter_id != pitchers[team_id]["id"]:
+                continue
+            opponent_id = (
+                game.get("away_team_id") if team_id == game.get("home_team_id")
+                else game.get("home_team_id")
+            )
+            opponent_hits = (
+                game.get("away_hits", 0) if opponent_id == game.get("away_team_id")
+                else game.get("home_hits", 0)
+            )
+            if int(opponent_hits or 0) != 0:
+                continue
+            opponent_reached = _mlb_team_has_baserunner(plays, str(opponent_id))
+            kind = "perfect game" if not opponent_reached else "no-hitter"
+            milestones.append({
+                "key": f"{starter_id}:{kind}",
+                "kind": kind,
+                "pitcher": starter_athlete.get("displayName") or "The starter",
+                "team": pitchers[team_id]["team"],
+                "innings": innings,
+            })
+        enriched["current_pitchers"] = pitchers
+        enriched["milestones"] = milestones
+        return enriched
     def get_current_streaming_day(self):
         """
         Get the current 'streaming day' date with 5 AM reset.

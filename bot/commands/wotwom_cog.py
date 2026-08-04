@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import time
 
 from twitchio.ext import commands
 
@@ -13,7 +14,14 @@ from bot.wot_inventory import (
     refresh_wot_snapshot,
     snapshot_status,
 )
-from bot.wot_stats import TankLookupError, fetch_chat_stats, fetch_tank_chat_stats
+from bot.wot_api import WotApiError
+from bot.wot_stats import (
+    TankLookupError,
+    fetch_chat_stats,
+    fetch_player_chat_stats,
+    fetch_player_tank_chat_stats,
+    fetch_tank_chat_stats,
+)
 from bot.wot_operations import operation_stats
 from bot.wot_sold import (
     acknowledge_sold_announcement,
@@ -31,6 +39,7 @@ class WotWomCog(commands.Cog):
         self.sold_announcement_task = bot.loop.create_task(
             self._sold_announcement_monitor()
         )
+        self.last_external_lookup_at = 0.0
 
     async def _announce_pending(self) -> int:
         channels = list(getattr(self.bot, "connected_channels", None) or [])
@@ -121,13 +130,41 @@ class WotWomCog(commands.Cog):
         parts = (ctx.message.content or "").split()
         mode = parts[1].lower() if len(parts) > 1 else "summary"
         try:
+            if mode in {"-x", "-p"}:
+                now = time.monotonic()
+                if now - self.last_external_lookup_at < 3:
+                    await ctx.send("Player lookup is cooling down; try again in a moment.")
+                    return
+                raw = (ctx.message.content or "").strip()
+                payload = raw.split(maxsplit=2)[2].strip() if len(raw.split(maxsplit=2)) > 2 else ""
+                player_name, separator, lookup = payload.partition("|")
+                player_name = player_name.strip()
+                lookup = lookup.strip()
+                if not player_name:
+                    await ctx.send("Usage: !tankstats -x|-p <player> [| records or tank name]")
+                    return
+                self.last_external_lookup_at = now
+                platform = mode[1]
+                if not separator:
+                    stats = await fetch_player_chat_stats(player_name, platform)
+                    await ctx.send(stats["summary"][:480])
+                elif lookup.casefold() in {"summary", "records"}:
+                    stats = await fetch_player_chat_stats(player_name, platform)
+                    await ctx.send(stats[lookup.casefold()][:480])
+                elif lookup:
+                    await ctx.send(
+                        (await fetch_player_tank_chat_stats(player_name, platform, lookup))[:480]
+                    )
+                else:
+                    await ctx.send("Provide records or a tank name after the | separator.")
+                return
             if mode in {"summary", "records"}:
                 stats = await fetch_chat_stats()
                 await ctx.send(stats[mode][:480])
                 return
             query = " ".join(parts[1:]).strip()
             await ctx.send((await fetch_tank_chat_stats(query))[:480])
-        except TankLookupError as exc:
+        except (TankLookupError, WotApiError) as exc:
             await ctx.send(str(exc)[:480])
         except Exception:
             logging.exception("[WOTWOM] !tankstats failed")

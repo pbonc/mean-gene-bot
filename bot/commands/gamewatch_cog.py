@@ -7,7 +7,9 @@ import time
 from twitchio.ext import commands
 
 from bot.commands.tts_cog import _speak_text_with_voice
-from bot.gamewatch import format_listing, format_update, is_watchable, should_announce
+from bot.gamewatch import (
+    format_listing, format_update, is_watchable, mlb_updates, should_announce,
+)
 from bot.sports_api import SportsAPIManager
 
 
@@ -97,6 +99,8 @@ class GameWatchCog(commands.Cog):
             return
         self._stop()
         self.watched_game = selected
+        if self.watched_game["sport"] == "MLB" and self.watched_game.get("state") == "in":
+            self.watched_game = await self.sports.enrich_gamewatch_mlb(self.watched_game)
         self.watched_id = self.watched_game["id"]
         self.channel = ctx.channel
         self.tts_enabled = tts_enabled
@@ -130,15 +134,27 @@ class GameWatchCog(commands.Cog):
                 if not current:
                     LOGGER.warning("Watched game %s missing from scoreboard", self.watched_id)
                     continue
+                if current["sport"] == "MLB":
+                    current = await self.sports.enrich_gamewatch_mlb(current)
                 self.watched_game = current
                 elapsed = time.monotonic() - self.last_announcement_at
-                if should_announce(self.last_announced_game, current, elapsed):
-                    message = format_update(current)
+                if current["sport"] == "MLB":
+                    messages = mlb_updates(self.last_announced_game, current)
+                elif should_announce(self.last_announced_game, current, elapsed):
+                    messages = [format_update(current)]
+                else:
+                    messages = []
+                for message in messages:
                     await self.channel.send(message)
                     if self.tts_enabled:
                         await _speak_text_with_voice(message, None)
+                if messages:
                     self.last_announced_game = dict(current)
                     self.last_announcement_at = time.monotonic()
+                elif current["sport"] == "MLB":
+                    # Pitcher changes and milestones compare against the last poll,
+                    # while NBA deliberately accumulates against its last announcement.
+                    self.last_announced_game = dict(current)
                 if current.get("completed"):
                     self._stop()
                     return

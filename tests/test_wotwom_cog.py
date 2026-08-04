@@ -26,6 +26,11 @@ class WotWomCogAccessTests(unittest.TestCase):
         self.assertIn("_sold_announcement_monitor", self.source)
         self.assertIn("acknowledge_sold_announcement", self.source)
 
+    def test_external_player_lookup_supports_both_console_platforms(self):
+        self.assertIn('mode in {"-x", "-p"}', self.source)
+        self.assertIn('payload.partition("|")', self.source)
+        self.assertIn("fetch_player_tank_chat_stats", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
