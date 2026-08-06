@@ -64,7 +64,7 @@ def mlb_updates(previous, current):
         or previous.get("away_score") != current.get("away_score")
     )
     if score_changed:
-        summary = current.get("scoring_play") or "Scoring play recorded."
+        summary = _mlb_scoring_summary(previous, current)
         updates.append(format_update(current, summary=summary))
 
     previous_pitchers = previous.get("current_pitchers") or {}
@@ -90,6 +90,44 @@ def mlb_updates(previous, current):
     if current.get("completed") and not previous.get("completed") and not score_changed:
         updates.append(format_update(current))
     return updates
+
+
+def _mlb_scoring_summary(previous, current):
+    """Correlate an ESPN scoring play to the team and scoreboard change."""
+    home_delta = int(current.get("home_score", 0)) - int(previous.get("home_score", 0))
+    away_delta = int(current.get("away_score", 0)) - int(previous.get("away_score", 0))
+    changed_team_id = None
+    changed_team_name = None
+    changed_runs = 0
+    if home_delta > 0 and away_delta <= 0:
+        changed_team_id = str(current.get("home_team_id") or "")
+        changed_team_name = current.get("home") or "Home team"
+        changed_runs = home_delta
+    elif away_delta > 0 and home_delta <= 0:
+        changed_team_id = str(current.get("away_team_id") or "")
+        changed_team_name = current.get("away") or "Away team"
+        changed_runs = away_delta
+
+    plays = current.get("scoring_plays") or []
+    exact_score = [
+        play for play in plays
+        if int(play.get("home_score", -1)) == int(current.get("home_score", 0))
+        and int(play.get("away_score", -1)) == int(current.get("away_score", 0))
+        and (not changed_team_id or str(play.get("team_id") or "") == changed_team_id)
+    ]
+    if exact_score:
+        return exact_score[-1].get("text") or "Scoring play recorded"
+    team_and_runs = [
+        play for play in plays
+        if changed_team_id
+        and str(play.get("team_id") or "") == changed_team_id
+        and int(play.get("runs") or 0) == changed_runs
+    ]
+    if team_and_runs:
+        return team_and_runs[-1].get("text") or "Scoring play recorded"
+    if changed_team_name and changed_runs:
+        return f"{changed_team_name} scored {changed_runs} run{'s' if changed_runs != 1 else ''}"
+    return "Score change recorded"
 
 
 def format_listing(game, number, now=None):

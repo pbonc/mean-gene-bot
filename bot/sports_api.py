@@ -132,9 +132,17 @@ class SportsAPIManager:
         enriched = dict(game)
         plays = payload.get("plays") or []
         scoring_plays = [play for play in plays if int(play.get("scoreValue") or 0) > 0]
-        enriched["scoring_play"] = (
-            str(scoring_plays[-1].get("text") or "").strip() if scoring_plays else ""
-        )
+        enriched["scoring_plays"] = [
+            {
+                "id": str(play.get("id") or ""),
+                "team_id": str((play.get("team") or {}).get("id") or ""),
+                "runs": int(play.get("scoreValue") or 0),
+                "home_score": int(play.get("homeScore") or 0),
+                "away_score": int(play.get("awayScore") or 0),
+                "text": str(play.get("text") or "").strip(),
+            }
+            for play in scoring_plays
+        ]
 
         pitchers = {}
         milestones = []

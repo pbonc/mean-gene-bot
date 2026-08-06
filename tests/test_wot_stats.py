@@ -29,6 +29,7 @@ class WotStatsSummaryTests(unittest.TestCase):
             {
                 "tank_id": 1,
                 "all": {
+                    "battles": 72,
                     "damage_assisted_radio": 8000,
                     "damage_assisted_track": 1000,
                     "damage_assisted_wheel": 0,
@@ -37,6 +38,7 @@ class WotStatsSummaryTests(unittest.TestCase):
             {
                 "tank_id": 2,
                 "all": {
+                    "battles": 28,
                     "damage_assisted_radio": 4000,
                     "damage_assisted_track": 1000,
                     "damage_assisted_wheel": 0,
@@ -54,6 +56,7 @@ class WotStatsSummaryTests(unittest.TestCase):
         self.assertIn("2,000 avg dmg", result["summary"])
         self.assertIn("250 avg assisted", result["summary"])
         self.assertIn("1,234 trees", result["summary"])
+        self.assertIn("most played: Tank One (72 battles)", result["summary"])
 
     def test_records_include_resolved_tanks_and_assisted_leader(self):
         result = summarize_stats(

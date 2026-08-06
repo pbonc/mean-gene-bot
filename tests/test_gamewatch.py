@@ -45,10 +45,37 @@ class GameWatchPolicyTests(unittest.TestCase):
         self.assertEqual([], mlb_updates(previous, current))
 
     def test_mlb_scoring_update_uses_scoring_play(self):
-        previous = game("MLB")
-        current = {**game("MLB", home=2), "scoring_play": "Smith homered, Jones scored."}
+        previous = {**game("MLB"), "home_team_id": "1", "away_team_id": "2"}
+        current = {
+            **game("MLB", home=2),
+            "home_team_id": "1",
+            "away_team_id": "2",
+            "scoring_plays": [{
+                "team_id": "1", "runs": 2, "home_score": 2,
+                "away_score": 0, "text": "Smith homered, Jones scored.",
+            }],
+        }
         self.assertEqual(
             ["GameWatch MLB: Away 0, Home 2. Smith homered, Jones scored."],
+            mlb_updates(previous, current),
+        )
+
+    def test_mlb_scoring_play_must_match_scoring_team_and_score(self):
+        previous = {
+            **game("MLB", home=3, away=0),
+            "home_team_id": "29", "away_team_id": "25",
+        }
+        current = {
+            **game("MLB", home=3, away=1),
+            "home": "Diamondbacks", "away": "Padres",
+            "home_team_id": "29", "away_team_id": "25",
+            "scoring_plays": [
+                {"team_id": "25", "runs": 1, "home_score": 3, "away_score": 1, "text": "Campusano singled, France scored."},
+                {"team_id": "29", "runs": 3, "home_score": 3, "away_score": 0, "text": "Tawa homered, two scored."},
+            ],
+        }
+        self.assertEqual(
+            ["GameWatch MLB: Padres 1, Diamondbacks 3. Campusano singled, France scored."],
             mlb_updates(previous, current),
         )
 

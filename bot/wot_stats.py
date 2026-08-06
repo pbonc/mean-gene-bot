@@ -59,6 +59,21 @@ def summarize_stats(
             "damage_assisted_wheel",
         )
     )
+    most_played = max(
+        vehicle_stats,
+        key=lambda row: int((row.get("all") or {}).get("battles") or 0),
+        default=None,
+    )
+    most_played_battles = int(
+        ((most_played or {}).get("all") or {}).get("battles") or 0
+    )
+    most_played_text = ""
+    if most_played and most_played_battles:
+        tank_id = int(most_played.get("tank_id") or 0)
+        most_played_text = (
+            f" | most played: {tank_names.get(tank_id, 'unknown tank')} "
+            f"({_number(most_played_battles)} battles)"
+        )
 
     summary = (
         f"{nickname} | {_number(battles)} battles | "
@@ -69,6 +84,7 @@ def summarize_stats(
         f"{_number(_ratio(xp, battles))} avg XP | "
         f"{_rate(survived, battles):.1f}% survival | "
         f"{_number(account_statistics.get('trees_cut') or 0)} trees"
+        f"{most_played_text}"
     )
 
     top_assisted = None
