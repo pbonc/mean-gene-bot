@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 WATCH_WINDOW = timedelta(minutes=15)
 NBA_POINT_GATE = 10
 NBA_TIME_GATE_SECONDS = 180
+NFL_BIG_PLAY_YARDS = 20
 
 
 def is_watchable(game, now=None):
@@ -90,6 +91,57 @@ def mlb_updates(previous, current):
     if current.get("completed") and not previous.get("completed") and not score_changed:
         updates.append(format_update(current))
     return updates
+
+
+def football_updates(previous, current):
+    """Return score, game-boundary, turnover, and big-play NFL updates."""
+    if previous is None:
+        return []
+
+    updates = []
+    score_changed = (
+        previous.get("home_score") != current.get("home_score")
+        or previous.get("away_score") != current.get("away_score")
+    )
+    period_changed = current.get("period") != previous.get("period")
+    play_changed = (
+        current.get("last_play_id")
+        and current.get("last_play_id") != previous.get("last_play_id")
+    )
+    play_text = str(current.get("last_play_text") or "").strip().rstrip(".")
+
+    if score_changed:
+        updates.append(format_update(current, summary=play_text or "Score change recorded"))
+
+    if current.get("completed") and not previous.get("completed"):
+        if not score_changed:
+            updates.append(format_update(current))
+        return updates
+
+    if period_changed:
+        old_period = int(previous.get("period") or 0)
+        if old_period == 2:
+            boundary = "Halftime"
+        elif old_period > 0:
+            boundary = f"End of the {_ordinal(old_period)} quarter"
+        else:
+            boundary = "Period change"
+        updates.append(format_update(current, summary=boundary))
+
+    if play_changed and not score_changed:
+        if current.get("last_play_turnover"):
+            updates.append(format_update(current, summary=f"Turnover: {play_text}"))
+        elif int(current.get("last_play_yards") or 0) >= NFL_BIG_PLAY_YARDS:
+            updates.append(format_update(current, summary=f"Big play: {play_text}"))
+    return updates
+
+
+def _ordinal(number):
+    if 10 <= number % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
 
 
 def _mlb_scoring_summary(previous, current):

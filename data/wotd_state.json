@@ -1,7 +1,7 @@
 {
   "is_active": false,
   "current_word": null,
-  "prize_value": 5,
+  "prize_value": 70,
   "stream_bias_percent": 15,
   "winner": null,
   "last_word": null,

@@ -67,6 +67,7 @@ class StreamStartCog(commands.Cog):
 
             previous_word = previous_wotd.get("word")
             previous_entries = previous_wotd.get("entries", 5)
+            next_entries = previous_wotd.get("next_entries", previous_entries + 5)
             if previous_word:
                 wotd_summary = f'Previous WOTD was "{previous_word}" for {previous_entries} entries.'
             else:
@@ -74,7 +75,7 @@ class StreamStartCog(commands.Cog):
             await ctx.send(
                 f"Stream startup: ZAP reset to {ZAP_MINUTES} minutes. "
                 f"Raffle opened at {entries} entr{'y' if entries == 1 else 'ies'} per chatter. "
-                f"{wotd_summary} WOTD reset to 5 entries."
+                f"{wotd_summary} WOTD increased by 5 to {next_entries} entries."
             )
 
             queued = []

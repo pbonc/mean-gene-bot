@@ -8,7 +8,8 @@ from twitchio.ext import commands
 
 from bot.commands.tts_cog import _speak_text_with_voice
 from bot.gamewatch import (
-    format_listing, format_update, is_watchable, mlb_updates, should_announce,
+    football_updates, format_listing, format_update, is_watchable, mlb_updates,
+    should_announce,
 )
 from bot.sports_api import SportsAPIManager
 
@@ -28,13 +29,8 @@ class GameWatchCog(commands.Cog):
         self.catalog = []
         self.number_by_id = {}
         self.next_number = 1
-        self.watched_id = None
-        self.watched_game = None
-        self.channel = None
-        self.tts_enabled = False
+        self.watches = {}
         self.poll_task = None
-        self.last_announced_game = None
-        self.last_announcement_at = 0.0
 
     async def _available_games(self):
         games = await self.sports.fetch_gamewatch_games()
@@ -54,21 +50,26 @@ class GameWatchCog(commands.Cog):
             return
         args = ctx.message.content.split()[1:]
         if args and args[0].lower() == "stop":
-            self._stop()
-            await ctx.send("GameWatch stopped.")
+            if len(args) > 1 and args[1].isdigit():
+                stopped = self._stop_number(int(args[1]))
+                await ctx.send("GameWatch stopped for that game." if stopped else "That game is not being watched.")
+            else:
+                self._stop_all()
+                await ctx.send("GameWatch stopped for all games.")
             return
         if args and args[0].lower() == "status":
-            if not self.watched_game:
+            if not self.watches:
                 await ctx.send("GameWatch is idle. Use !gamewatch to list watchable games.")
             else:
-                suffix = " TTS enabled." if self.tts_enabled else ""
-                await ctx.send(f"Watching: {format_update(self.watched_game)}{suffix}")
+                for watch in self.watches.values():
+                    suffix = " TTS enabled." if watch["tts"] else ""
+                    await ctx.send(f"Watching {watch['number']}: {format_update(watch['game'])}{suffix}")
             return
         if args and args[0].isdigit():
             await self._select(ctx, int(args[0]), len(args) > 1 and args[1].lower() == "tts")
             return
         if args:
-            await ctx.send("Usage: !gamewatch | !gamewatch <number> [tts] | !gamewatch status | stop")
+            await ctx.send("Usage: !gamewatch | !gamewatch <number> [tts] | !gamewatch status | !gamewatch stop [number]")
             return
         await self._list(ctx)
 
@@ -97,20 +98,27 @@ class GameWatchCog(commands.Cog):
         if selected is None:
             await ctx.send("That game number is not currently watchable. Run !gamewatch for a fresh list.")
             return
-        self._stop()
-        self.watched_game = selected
-        if self.watched_game["sport"] == "MLB" and self.watched_game.get("state") == "in":
-            self.watched_game = await self.sports.enrich_gamewatch_mlb(self.watched_game)
-        self.watched_id = self.watched_game["id"]
-        self.channel = ctx.channel
-        self.tts_enabled = tts_enabled
-        self.last_announced_game = dict(self.watched_game)
-        self.last_announcement_at = time.monotonic()
-        self.poll_task = self.bot.loop.create_task(self._poll())
+        if selected["sport"] == "MLB" and selected.get("state") == "in":
+            selected = await self.sports.enrich_gamewatch_mlb(selected)
+        self.watches[selected["id"]] = {
+            "game": selected, "channel": ctx.channel, "tts": tts_enabled,
+            "last": dict(selected), "last_at": time.monotonic(), "number": number,
+        }
+        if not self.poll_task or self.poll_task.done():
+            self.poll_task = self.bot.loop.create_task(self._poll())
         suffix = " with TTS" if tts_enabled else ""
-        await ctx.send(f"GameWatch started{suffix}: {format_update(self.watched_game)}")
+        await ctx.send(f"GameWatch started{suffix} for game {number}: {format_update(selected)}")
 
-    def _stop(self):
+    def _stop_number(self, number):
+        game_id = next((key for key, watch in self.watches.items() if watch["number"] == number), None)
+        if game_id is None:
+            return False
+        del self.watches[game_id]
+        if not self.watches:
+            self._cancel_poller()
+        return True
+
+    def _cancel_poller(self):
         task = self.poll_task
         self.poll_task = None
         try:
@@ -119,44 +127,46 @@ class GameWatchCog(commands.Cog):
             current_task = None
         if task and not task.done() and task is not current_task:
             task.cancel()
-        self.watched_id = None
-        self.watched_game = None
-        self.channel = None
-        self.tts_enabled = False
-        self.last_announced_game = None
+
+    def _stop_all(self):
+        self.watches.clear()
+        self._cancel_poller()
 
     async def _poll(self):
-        while self.watched_id:
+        while self.watches:
             await asyncio.sleep(POLL_SECONDS)
             try:
                 games = await self.sports.fetch_gamewatch_games()
-                current = next((game for game in games if game["id"] == self.watched_id), None)
-                if not current:
-                    LOGGER.warning("Watched game %s missing from scoreboard", self.watched_id)
-                    continue
-                if current["sport"] == "MLB":
-                    current = await self.sports.enrich_gamewatch_mlb(current)
-                self.watched_game = current
-                elapsed = time.monotonic() - self.last_announcement_at
-                if current["sport"] == "MLB":
-                    messages = mlb_updates(self.last_announced_game, current)
-                elif should_announce(self.last_announced_game, current, elapsed):
-                    messages = [format_update(current)]
-                else:
-                    messages = []
-                for message in messages:
-                    await self.channel.send(message)
-                    if self.tts_enabled:
-                        await _speak_text_with_voice(message, None)
-                if messages:
-                    self.last_announced_game = dict(current)
-                    self.last_announcement_at = time.monotonic()
-                elif current["sport"] == "MLB":
-                    # Pitcher changes and milestones compare against the last poll,
-                    # while NBA deliberately accumulates against its last announcement.
-                    self.last_announced_game = dict(current)
-                if current.get("completed"):
-                    self._stop()
+                by_id = {game["id"]: game for game in games}
+                for game_id, watch in list(self.watches.items()):
+                    current = by_id.get(game_id)
+                    if not current:
+                        LOGGER.warning("Watched game %s missing from scoreboard", game_id)
+                        continue
+                    if current["sport"] == "MLB":
+                        current = await self.sports.enrich_gamewatch_mlb(current)
+                    elapsed = time.monotonic() - watch["last_at"]
+                    if current["sport"] == "MLB":
+                        messages = mlb_updates(watch["last"], current)
+                    elif current["sport"] == "NFL":
+                        messages = football_updates(watch["last"], current)
+                    elif should_announce(watch["last"], current, elapsed):
+                        messages = [format_update(current)]
+                    else:
+                        messages = []
+                    for message in messages:
+                        await watch["channel"].send(message)
+                        if watch["tts"]:
+                            await _speak_text_with_voice(message, None)
+                    watch["game"] = current
+                    if messages:
+                        watch["last_at"] = time.monotonic()
+                    if messages or current["sport"] in ("MLB", "NFL"):
+                        watch["last"] = dict(current)
+                    if current.get("completed"):
+                        self.watches.pop(game_id, None)
+                if not self.watches:
+                    self.poll_task = None
                     return
             except asyncio.CancelledError:
                 return
@@ -164,7 +174,7 @@ class GameWatchCog(commands.Cog):
                 LOGGER.exception("GameWatch polling failed; will retry")
 
     def cog_unload(self):
-        self._stop()
+        self._stop_all()
 
 
 def prepare(bot):

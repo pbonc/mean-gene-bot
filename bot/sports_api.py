@@ -1,8 +1,15 @@
 import aiohttp
 import asyncio
+import logging
+import socket
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List
+
+
+LOGGER = logging.getLogger("sports_api")
+GAMEWATCH_RETRY_ATTEMPTS = 2
+GAMEWATCH_WARNING_INTERVAL = 300
 
 
 def _mlb_team_has_baserunner(plays: List[Dict], batting_team_id: str) -> bool:
@@ -30,6 +37,7 @@ class SportsAPIManager:
         self.enabled = True  # Can be disabled if causing startup issues
         self.startup_time = time.time()
         self.startup_delay = 5  # Wait 5 seconds after startup before making API calls
+        self._gamewatch_warning_at = {}
         
         # API endpoints - switch to ESPN for current data
         self.espn_nhl_base = "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl"
@@ -50,16 +58,26 @@ class SportsAPIManager:
             "MLB": self.espn_mlb_base,
             "NFL": self.espn_nfl_base,
         }
-        timeout = aiohttp.ClientTimeout(total=10, connect=3)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        timeout = aiohttp.ClientTimeout(total=15, connect=7, sock_read=10)
+        connector = aiohttp.TCPConnector(family=socket.AF_INET)
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             results = await asyncio.gather(
                 *(self._fetch_gamewatch_league(session, sport, base) for sport, base in leagues.items()),
                 return_exceptions=True,
             )
         games = []
-        for result in results:
+        for sport, result in zip(leagues, results):
             if isinstance(result, Exception):
-                print(f"[GAMEWATCH] Scoreboard fetch failed: {result}")
+                now = time.monotonic()
+                last_warning = self._gamewatch_warning_at.get(sport, 0.0)
+                if now - last_warning >= GAMEWATCH_WARNING_INTERVAL:
+                    LOGGER.warning(
+                        "[GAMEWATCH] %s scoreboard unavailable after %d attempts: %s",
+                        sport,
+                        GAMEWATCH_RETRY_ATTEMPTS,
+                        result,
+                    )
+                    self._gamewatch_warning_at[sport] = now
             else:
                 games.extend(result)
         return sorted(games, key=lambda game: (game["start_time"], game["sport"], game["id"]))
@@ -67,9 +85,19 @@ class SportsAPIManager:
     async def _fetch_gamewatch_league(self, session, sport: str, base: str) -> List[Dict]:
         today = datetime.now().date()
         dates = [(today + timedelta(days=offset)).strftime("%Y%m%d") for offset in (-1, 0, 1)]
-        async with session.get(f"{base}/scoreboard", params={"dates": "-".join((dates[0], dates[-1]))}) as response:
-            response.raise_for_status()
-            payload = await response.json()
+        for attempt in range(1, GAMEWATCH_RETRY_ATTEMPTS + 1):
+            try:
+                async with session.get(
+                    f"{base}/scoreboard",
+                    params={"dates": "-".join((dates[0], dates[-1]))},
+                ) as response:
+                    response.raise_for_status()
+                    payload = await response.json()
+                break
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                if attempt == GAMEWATCH_RETRY_ATTEMPTS:
+                    raise
+                await asyncio.sleep(0.75 * attempt)
         games = []
         for event in payload.get("events", []):
             competitions = event.get("competitions") or []
@@ -92,6 +120,11 @@ class SportsAPIManager:
                 continue
             situation = competition.get("situation") or {}
             last_play = situation.get("lastPlay") or {}
+            last_play_text = str(last_play.get("text") or "").strip()
+            last_play_type = str((last_play.get("type") or {}).get("text") or "").casefold()
+            turnover_terms = (
+                "interception", "fumble", "turnover on downs", "downs",
+            )
             detail = (
                 situation.get("downDistanceText")
                 or last_play.get("text")
@@ -116,6 +149,13 @@ class SportsAPIManager:
                 "period": int(status.get("period") or 0),
                 "clock": status.get("displayClock") or "",
                 "detail": str(detail)[:120],
+                "last_play_id": str(last_play.get("id") or ""),
+                "last_play_text": last_play_text[:240],
+                "last_play_yards": int(last_play.get("statYardage") or 0),
+                "last_play_turnover": bool(
+                    last_play.get("turnover")
+                    or any(term in f"{last_play_type} {last_play_text.casefold()}" for term in turnover_terms)
+                ),
             })
         return games
 

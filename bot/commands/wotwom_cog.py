@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 import time
 
 from twitchio.ext import commands
@@ -27,6 +28,21 @@ from bot.wot_sold import (
     acknowledge_sold_announcement,
     pending_sold_announcements,
 )
+
+
+def parse_external_tankstats(content):
+    """Parse -x/-p player lookups with either comma or pipe delimiters."""
+    match = re.match(r"^\s*!?tankstats\s+(-[xp])\s*,?\s*(.*?)\s*$", content or "", re.I)
+    if not match:
+        return None
+    mode, payload = match.group(1).lower(), match.group(2).strip()
+    if "|" in payload:
+        player_name, lookup = payload.split("|", 1)
+    elif "," in payload:
+        player_name, lookup = payload.split(",", 1)
+    else:
+        player_name, lookup = payload, ""
+    return mode, player_name.strip(), lookup.strip()
 
 
 class WotWomCog(commands.Cog):
@@ -130,22 +146,19 @@ class WotWomCog(commands.Cog):
         parts = (ctx.message.content or "").split()
         mode = parts[1].lower() if len(parts) > 1 else "summary"
         try:
-            if mode in {"-x", "-p"}:
+            external = parse_external_tankstats(ctx.message.content or "")
+            if external:
                 now = time.monotonic()
                 if now - self.last_external_lookup_at < 3:
                     await ctx.send("Player lookup is cooling down; try again in a moment.")
                     return
-                raw = (ctx.message.content or "").strip()
-                payload = raw.split(maxsplit=2)[2].strip() if len(raw.split(maxsplit=2)) > 2 else ""
-                player_name, separator, lookup = payload.partition("|")
-                player_name = player_name.strip()
-                lookup = lookup.strip()
+                mode, player_name, lookup = external
                 if not player_name:
-                    await ctx.send("Usage: !tankstats -x|-p <player> [| records or tank name]")
+                    await ctx.send("Usage: !tankstats -x|-p, <player>, [tank name or records]")
                     return
                 self.last_external_lookup_at = now
                 platform = mode[1]
-                if not separator:
+                if not lookup:
                     stats = await fetch_player_chat_stats(player_name, platform)
                     await ctx.send(stats["summary"][:480])
                 elif lookup.casefold() in {"summary", "records"}:
@@ -156,7 +169,7 @@ class WotWomCog(commands.Cog):
                         (await fetch_player_tank_chat_stats(player_name, platform, lookup))[:480]
                     )
                 else:
-                    await ctx.send("Provide records or a tank name after the | separator.")
+                    await ctx.send("Provide records or a tank name after the player name.")
                 return
             if mode in {"summary", "records"}:
                 stats = await fetch_chat_stats()

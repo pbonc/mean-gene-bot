@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from bot.gamewatch import format_update, is_watchable, mlb_updates, should_announce
+from bot.gamewatch import football_updates, format_update, is_watchable, mlb_updates, should_announce
 from bot.sports_api import _mlb_team_has_baserunner
 
 
@@ -99,6 +99,27 @@ class GameWatchPolicyTests(unittest.TestCase):
         walk = [{"team": {"id": "2"}, "type": {"type": "play-result"}, "text": "Smith walked."}]
         self.assertFalse(_mlb_team_has_baserunner(clean, "2"))
         self.assertTrue(_mlb_team_has_baserunner(walk, "2"))
+
+    def test_football_reports_score_without_duplicate_play_message(self):
+        previous = {**game("NFL"), "last_play_id": "10"}
+        current = {**game("NFL", home=7), "last_play_id": "11", "last_play_text": "Smith 25 yard touchdown run", "last_play_yards": 25}
+        updates = football_updates(previous, current)
+        self.assertEqual(1, len(updates))
+        self.assertIn("touchdown", updates[0])
+
+    def test_football_reports_turnover_and_big_play(self):
+        previous = {**game("NFL"), "last_play_id": "10"}
+        turnover = {**game("NFL"), "last_play_id": "11", "last_play_text": "Pass intercepted by Jones", "last_play_turnover": True}
+        big_play = {**game("NFL"), "last_play_id": "12", "last_play_text": "Smith run for 32 yards", "last_play_yards": 32}
+        self.assertIn("Turnover", football_updates(previous, turnover)[0])
+        self.assertIn("Big play", football_updates(turnover, big_play)[0])
+
+    def test_football_reports_quarter_and_halftime_boundaries(self):
+        first = game("NFL", period=1)
+        second = game("NFL", period=2)
+        third = game("NFL", period=3)
+        self.assertIn("End of the 1st quarter", football_updates(first, second)[0])
+        self.assertIn("Halftime", football_updates(second, third)[0])
 
 
 if __name__ == "__main__":

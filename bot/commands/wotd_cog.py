@@ -168,20 +168,22 @@ class WOTDState:
         return True, (word, old_prize, self.prize_value)
 
     def reset_for_stream_start(self):
-        """Return the carried state, then restore a clean base WOTD state."""
+        """Clear the prior WOTD and add five entries to its carried prize."""
+        carried_prize = max(self.prize_value, self.last_entries or 0)
         previous = {
             "word": self.current_word or self.last_word,
-            "entries": self.prize_value if self.current_word else (self.last_entries or self.prize_value),
+            "entries": carried_prize,
             "was_active": self.is_active,
         }
         self.is_active = False
         self.current_word = None
-        self.prize_value = 5
+        self.prize_value = carried_prize + 5
         self.stream_bias_percent = 15
         self.winner = None
         self.last_word = None
         self.last_entries = None
         self.save()
+        previous["next_entries"] = self.prize_value
         return previous
 
 

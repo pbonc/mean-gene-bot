@@ -29,10 +29,13 @@ class StreamStartTests(unittest.TestCase):
                 state.prize_value = 20
                 state.stream_bias_percent = 45
                 previous = state.reset_for_stream_start()
-            self.assertEqual({"word": "treads", "entries": 20, "was_active": True}, previous)
+            self.assertEqual(
+                {"word": "treads", "entries": 20, "next_entries": 25, "was_active": True},
+                previous,
+            )
             self.assertFalse(state.is_active)
             self.assertIsNone(state.current_word)
-            self.assertEqual(5, state.prize_value)
+            self.assertEqual(25, state.prize_value)
             self.assertEqual(15, state.stream_bias_percent)
 
     def test_completed_wotd_is_retained_until_stream_reset(self):
@@ -47,7 +50,18 @@ class StreamStartTests(unittest.TestCase):
                 previous = state.reset_for_stream_start()
             self.assertEqual("ammo", previous["word"])
             self.assertEqual(15, previous["entries"])
+            self.assertEqual(20, previous["next_entries"])
             self.assertIsNone(state.last_word)
+
+    def test_each_stream_start_adds_exactly_five_to_carried_prize(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = f"{directory}/wotd.json"
+            with patch("bot.commands.wotd_cog.WOTD_STATE_FILE", state_file):
+                state = WOTDState()
+                state.prize_value = 50
+                state.reset_for_stream_start()
+                state.reset_for_stream_start()
+            self.assertEqual(60, state.prize_value)
 
 
 if __name__ == "__main__":
