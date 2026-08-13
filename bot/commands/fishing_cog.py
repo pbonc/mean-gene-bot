@@ -83,6 +83,18 @@ class FishingCog(commands.Cog):
     def _is_mod_or_broadcaster(author):
         return bool(getattr(author, "is_mod", False) or getattr(author, "is_broadcaster", False))
 
+    @staticmethod
+    def _personal_records_text(target):
+        stats_by_species = {stat["species"]: stat for stat in target["species"]}
+        records = [
+            f"{config['name']}: {stats_by_species[species]['personal_best']:.1f} lb"
+            for species, config in SPECIES.items()
+            if species in stats_by_species and stats_by_species[species]["personal_best"] is not None
+        ]
+        if not records:
+            return None
+        return f"🎣 {target['display_name']}'s biggest catches • " + " | ".join(records)
+
     @commands.Cog.event()
     async def event_message(self, message):
         if getattr(message, "echo", False):
@@ -117,6 +129,12 @@ class FishingCog(commands.Cog):
         sub = (args[0] if args else "").casefold()
         rest = list(args[1:])
         try:
+            if sub.startswith("@") and rest and rest[0].casefold() == "records":
+                target = await self.service.angler_by_name(sub)
+                if not target:
+                    return await ctx.send("No fishing stats found for that player.")
+                text = self._personal_records_text(target)
+                return await ctx.send(text[:450] if text else f"🎣 {target['display_name']} has not caught any fish yet.")
             if sub in ("on", "off"):
                 if not self._is_mod_or_broadcaster(ctx.author):
                     return await ctx.send("Only moderators or the broadcaster can power fishing on or off.")
@@ -173,6 +191,12 @@ class FishingCog(commands.Cog):
                 await self.service.sink(user_id, rest[0])
                 return
             if sub in ("records", "record"):
+                if sub == "records" and rest and rest[0].startswith("@"):
+                    target = await self.service.angler_by_name(rest[0])
+                    if not target:
+                        return await ctx.send("No fishing stats found for that player.")
+                    text = self._personal_records_text(target)
+                    return await ctx.send(text[:450] if text else f"🎣 {target['display_name']} has not caught any fish yet.")
                 records = await self.service.records()
                 if sub == "record" and rest:
                     species = self.service.species_id(" ".join(rest))
@@ -191,7 +215,7 @@ class FishingCog(commands.Cog):
                     stat = next((s for s in target["species"] if s["species"] == sid), None)
                     if not stat:
                         return await ctx.send("No catches recorded for that species.")
-                    return await ctx.send(f"🎣 {target['display_name']} — {SPECIES[sid]['name']}: {stat['catches']} catches, PB {stat['personal_best']:.1f} lb; B/S/G/D {stat['bronze']}/{stat['silver']}/{stat['gold']}/{stat['diamond']}.")
+                    return await ctx.send(f"🎣 {target['display_name']} — {SPECIES[sid]['name']}: {stat['catches']} catches, biggest {stat['personal_best']:.1f} lb; medals: Bronze {stat['bronze']}, Silver {stat['silver']}, Gold {stat['gold']}, Diamond {stat['diamond']}.")
                 return await ctx.send(f"🎣 {target['display_name']}: {target['total_catches']} catches, {target['fishing_points']:,} Fishing Points, {target['gold']} lifetime gold, tier {target['boat_tier']} {BOATS[target['boat_tier']-1]['name']}, {target['sink_tokens']} sink token(s), {target['steve_strikes']} Steve strike(s).")
             if sub == "boat":
                 row = await self.service.angler(user_id)
@@ -200,7 +224,7 @@ class FishingCog(commands.Cog):
                 next_boat = next((b for b in BOATS if b["tier"] > row["boat_tier"]), None)
                 suffix = f" Next: {next_boat['name']} at {next_boat['unlock']} gold." if next_boat else " Max boat unlocked."
                 return await ctx.send(f"🚤 @{name}: {BOATS[row['boat_tier']-1]['name']}, {row['gold']} gold.{suffix}")
-            return await ctx.send("🎣 !fish join|stop|move|GPS|status|bait [species]|boat|boatcolor #RRGGBB|shirt #RRGGBB|sink @user|stats [@user] [species]|records|record <species> • Mods: !fish on|off")
+            return await ctx.send("🎣 !fish join|stop|move|GPS|status|bait [species]|boat|boatcolor #RRGGBB|shirt #RRGGBB|sink @user|stats [@user] [species]|records [@user]|record <species> • Mods: !fish on|off")
         except ValueError as exc:
             await ctx.send(f"🎣 {exc}")
 

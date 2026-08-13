@@ -197,7 +197,7 @@ def format_update(game, summary=None):
         final = f"{summary} Final" if summary else "Final"
     else:
         final = summary or game.get("detail") or "Live"
-    return (
-        f"GameWatch {game['sport']}: {game['away']} {game['away_score']}, "
-        f"{game['home']} {game['home_score']}. {final}."
-    )
+    away = (game["away"], int(game.get("away_score", 0)))
+    home = (game["home"], int(game.get("home_score", 0)))
+    first, second = (home, away) if home[1] > away[1] else (away, home)
+    return f"GameWatch {game['sport']}: {first[0]} {first[1]}, {second[0]} {second[1]}. {final}."

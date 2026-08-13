@@ -126,6 +126,23 @@ class FishingServiceTests(unittest.TestCase):
         self.assertIn("New PB", alert)
         self.assertIn("NEW LAKE RECORD", alert)
 
+    def test_personal_records_lists_each_species_biggest_catch(self):
+        from bot.commands.fishing_cog import FishingCog
+
+        target = {
+            "display_name": "Nate",
+            "species": [
+                {"species": "bass", "personal_best": 7.4},
+                {"species": "bluegill", "personal_best": 1.8},
+            ],
+        }
+        text = FishingCog._personal_records_text(target)
+        self.assertEqual(
+            text,
+            "🎣 Nate's biggest catches • Bluegill: 1.8 lb | Largemouth Bass: 7.4 lb",
+        )
+        self.assertIsNone(FishingCog._personal_records_text({"display_name": "Nate", "species": []}))
+
     def test_diamond_tier_is_very_rare_and_weights_match_tier(self):
         service = FishingService(str(Path(self.temp.name) / "rarity.db"), rng=random.Random(7231))
         from bot.fishing.config import SPECIES
@@ -170,8 +187,13 @@ class FishingServiceTests(unittest.TestCase):
     def test_gps_targets_only_a_visible_active_boat(self):
         async def scenario():
             await self.service.set_enabled("42", "Nate", True)
+            with closing(self.service._connect()) as db:
+                db.execute("INSERT INTO species_stats(user_id,species,bronze,silver,gold,diamond) VALUES('42','bass',10,2,3,0)")
+                db.commit()
             event = await self.service.gps("42")
             self.assertEqual(event["kind"], "angler_gps")
+            self.assertEqual(event["payload"]["medal_tier"], "gold")
+            self.assertEqual(event["payload"]["medal_count"], 3)
             with closing(self.service._connect()) as db:
                 db.execute("UPDATE anglers SET away_since=1 WHERE user_id='42'")
                 db.commit()
@@ -313,6 +335,8 @@ class FishingRendererContractTests(unittest.TestCase):
         self.assertIn("angler_returned", source)
         self.assertIn("angler_gps", source)
         self.assertIn("compactWander", source)
+        self.assertIn("medal-badge", source)
+        self.assertIn("renderPointsLeaderboard", source)
 
     def test_both_pages_use_shared_renderer(self):
         for name in ("fishing_overlay.html", "fishing_afk_overlay.html"):

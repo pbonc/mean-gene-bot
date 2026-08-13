@@ -241,9 +241,23 @@ class FishingService:
         async with self._lock:
             with closing(self._connect()) as db:
                 row = db.execute("SELECT * FROM anglers WHERE user_id=? AND opted_in=1 AND away_since IS NULL", (user_id,)).fetchone()
+                medals = db.execute(
+                    """SELECT COALESCE(SUM(bronze),0) bronze, COALESCE(SUM(silver),0) silver,
+                              COALESCE(SUM(gold),0) gold, COALESCE(SUM(diamond),0) diamond
+                       FROM species_stats WHERE user_id=?""",
+                    (user_id,),
+                ).fetchone()
         if not row or (row["cooldown_until"] and row["cooldown_until"] > time.time()):
             raise ValueError("Your boat is not currently on the lake.")
-        event = self._event("angler_gps", user_id=user_id, display_name=row["display_name"])
+        medal_tier, medal_count = "bronze", 0
+        for tier in ("diamond", "gold", "silver", "bronze"):
+            if medals[tier]:
+                medal_tier, medal_count = tier, medals[tier]
+                break
+        event = self._event(
+            "angler_gps", user_id=user_id, display_name=row["display_name"],
+            medal_tier=medal_tier, medal_count=medal_count,
+        )
         await self._emit(event, snapshot=False)
         return event
 
@@ -501,12 +515,16 @@ class FishingService:
                     a["active"] = not a["cooldown_until"] or a["cooldown_until"] <= now
                     a["unlocked_baits"] = [b["id"] for b in BAITS if a["fishing_points"] >= b["unlock"]]
                 records = [dict(r) for r in db.execute("SELECT * FROM lake_records ORDER BY species")]
+                points_leaderboard = [dict(r) for r in db.execute(
+                    """SELECT user_id,display_name,fishing_points FROM anglers
+                       ORDER BY fishing_points DESC, lower(display_name) LIMIT 10"""
+                )]
         boosted_species = [
             SPECIES[species]["name"]
             for species, multiplier in sorted(WEATHER[weather]["species"].items(), key=lambda item: item[1], reverse=True)
             if multiplier > 1.0
         ]
-        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records}
+        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records, "points_leaderboard": points_leaderboard}
 
     async def angler(self, user_id: str):
         async with self._lock:

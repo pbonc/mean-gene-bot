@@ -6,6 +6,7 @@
   const label = document.getElementById("weatherLabel");
   const banner = document.getElementById("banner");
   const powerStatus = document.getElementById("fishingPower");
+  const pointsLeaderboard = document.getElementById("pointsLeaderboard");
   const nodes = new Map();
   const seen = new Set();
   let retry = 1000;
@@ -20,7 +21,9 @@
   function moveBoatTo(el,requested){const destination=safeBoatPoint(requested),current={x:Number(el.dataset.x||destination.x),y:Number(el.dataset.y||destination.y)};el.classList.add("moving");animateFishingLine(el);if(mode==="afk"&&pathHitsIsland(current,destination)){const aboveCost=Math.abs(current.y-520)+Math.abs(destination.y-520),belowCost=Math.abs(current.y-820)+Math.abs(destination.y-820),routeY=aboveCost<=belowCost?520:820,legs=[{x:current.x,y:routeY},{x:destination.x,y:routeY},destination];el.classList.add("routing");legs.forEach((leg,index)=>setTimeout(()=>placeBoatAt(el,leg),index*2050));setTimeout(()=>el.classList.remove("moving","routing"),6300)}else{placeBoatAt(el,destination);setTimeout(()=>el.classList.remove("moving"),mode==="afk"?5600:3300)}}
   function sendBoatAway(el,id){const left=(hash(id+"departure")&1)===0;el.classList.add("moving");placeBoatAt(el,{x:left?-8:108,y:Number(el.dataset.y||1026)});setTimeout(()=>{el.remove();nodes.delete(id)},mode==="afk"?5700:3400)}
   function welcomeBoat(a){if(!a||!a.active)return;const destination=safeBoatPoint(position(a)),startLeft=(hash(a.user_id+"return")&1)===0;a={...a};boat(a);const el=nodes.get(a.user_id);placeBoatAt(el,{x:startLeft?-8:108,y:destination.y});requestAnimationFrame(()=>requestAnimationFrame(()=>moveBoatTo(el,destination)))}
-  function showGps(p){const el=nodes.get(p.user_id);if(!el)return;const pin=document.createElement("div");pin.className="gps-pin";pin.textContent=p.display_name;pin.style.left=`${Number(el.dataset.x)}%`;pin.style.top=`${Number(el.dataset.y)-(mode==="afk"?18:12)}px`;lake.appendChild(pin);setTimeout(()=>pin.remove(),6500)}
+  function compactNumber(value){const n=Number(value)||0;if(n<1000)return String(n);return `${Math.floor(n/100)/10}K`}
+  function showGps(p){const el=nodes.get(p.user_id);if(!el)return;const pin=document.createElement("div");pin.className="gps-pin";pin.innerHTML=`<span class="gps-name"></span><span class="medal-badge ${p.medal_tier||"bronze"}"><i></i>${compactNumber(p.medal_count)}</span>`;pin.querySelector(".gps-name").textContent=p.display_name;pin.style.left=`${Number(el.dataset.x)}%`;pin.style.top=`${Number(el.dataset.y)-(mode==="afk"?18:12)}px`;lake.appendChild(pin);setTimeout(()=>pin.remove(),6500)}
+  function renderPointsLeaderboard(rows=[]){if(!pointsLeaderboard)return;pointsLeaderboard.innerHTML='<strong>FISHING POINTS</strong>'+rows.map((row,index)=>`<div><b>${index+1}</b><span></span><em>${compactNumber(row.fishing_points)}</em></div>`).join("");rows.forEach((row,index)=>{const name=pointsLeaderboard.children[index+1]?.querySelector("span");if(name)name.textContent=row.display_name})}
   function boat(a){
     let el=nodes.get(a.user_id),isNew=!el;
     if(!a.active){if(el)el.remove();nodes.delete(a.user_id);return}
@@ -31,7 +34,7 @@
     document.body.classList.toggle("powered-off",msg.enabled===false);
     if(powerStatus){powerStatus.classList.toggle("off",msg.enabled===false);powerStatus.innerHTML=msg.enabled===false?'<strong>FISHING OFF</strong><span>The lake is empty. Join again when it reopens.</span>':'<strong>FISHING ON</strong><span>Type !fish join to launch your boat.</span><span>Treasure Gold upgrades boats automatically.</span><span>Customize: !fish boatcolor #RRGGBB</span>'}
     const current=new Set(msg.anglers.map(a=>a.user_id));for(const [id,el] of nodes){if(!current.has(id)){el.remove();nodes.delete(id)}}
-    msg.anglers.forEach(boat);setWeather(msg.weather,msg.weather_boosted_species||[]);if(mode==="afk")label.style.display=msg.enabled===false?"none":"";else if(msg.enabled===false)label.textContent="⏻";
+    msg.anglers.forEach(boat);renderPointsLeaderboard(msg.points_leaderboard||[]);setWeather(msg.weather,msg.weather_boosted_species||[]);if(mode==="afk")label.style.display=msg.enabled===false?"none":"";else if(msg.enabled===false)label.textContent="⏻";
   }
   function setWeather(value,boosted=[]){const icons={sunny:"☀️",cloudy:"☁️",windy:"💨",rainy:"🌧️",night:"🌙"};if(mode==="compact")label.textContent=icons[value]||"🎣";else label.innerHTML=`<strong>${value.toUpperCase()}</strong><span>Improved catch rates: ${boosted.length?boosted.join(", "):"None"}</span>`;label.title=value;lake.classList.remove("night","weather-sunny","weather-cloudy","weather-windy","weather-rainy");lake.classList.add(value==="night"?"night":`weather-${value}`);weather.innerHTML="";if(value==="rainy")spawnRain();if(mode==="afk")renderAfkWeather(value)}
   function spawnRain(){const count=mode==="compact"?35:190;for(let i=0;i<count;i++){const d=document.createElement("i");d.className="rain";d.style.left=`${ambientInt(0,10000)/100}%`;d.style.height=`${ambientInt(13,30)}px`;d.style.opacity=String(ambientInt(38,88)/100);d.style.setProperty("--rain-x",`${-ambientInt(12,58)}px`);d.style.animationDuration=`${ambientInt(52,112)/100}s`;d.style.animationDelay=`-${ambientInt(0,240)/100}s`;weather.appendChild(d)}}

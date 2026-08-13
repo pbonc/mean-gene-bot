@@ -36,7 +36,17 @@ class GameWatchPolicyTests(unittest.TestCase):
 
     def test_update_contains_score_and_summary(self):
         text = format_update(game(home=3, away=2))
-        self.assertEqual("GameWatch NHL: Away 2, Home 3. 2nd 4:20.", text)
+        self.assertEqual("GameWatch NHL: Home 3, Away 2. 2nd 4:20.", text)
+
+    def test_update_lists_leading_team_first_and_preserves_tie_order(self):
+        self.assertEqual(
+            "GameWatch NFL: Away 14, Home 7. 2nd 4:20.",
+            format_update(game("NFL", home=7, away=14)),
+        )
+        self.assertEqual(
+            "GameWatch NFL: Away 7, Home 7. 2nd 4:20.",
+            format_update(game("NFL", home=7, away=7)),
+        )
 
     def test_mlb_does_not_announce_inning_or_pitch_noise(self):
         previous = game("MLB", period=1)
@@ -56,7 +66,7 @@ class GameWatchPolicyTests(unittest.TestCase):
             }],
         }
         self.assertEqual(
-            ["GameWatch MLB: Away 0, Home 2. Smith homered, Jones scored."],
+            ["GameWatch MLB: Home 2, Away 0. Smith homered, Jones scored."],
             mlb_updates(previous, current),
         )
 
@@ -75,7 +85,7 @@ class GameWatchPolicyTests(unittest.TestCase):
             ],
         }
         self.assertEqual(
-            ["GameWatch MLB: Padres 1, Diamondbacks 3. Campusano singled, France scored."],
+            ["GameWatch MLB: Diamondbacks 3, Padres 1. Campusano singled, France scored."],
             mlb_updates(previous, current),
         )
 
