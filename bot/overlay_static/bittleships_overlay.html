@@ -103,6 +103,24 @@
       border-radius: 50%;
       box-shadow: 0 0 13px var(--miss);
     }
+    .destroyed-marker {
+      position: absolute;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      inset: -8%;
+      color: #ff1515;
+      font-family: Arial, sans-serif;
+      font-size: clamp(34px, 5vw, 76px);
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 0 3px #fff, 0 0 9px rgba(0, 0, 0, .9);
+      pointer-events: none;
+    }
+    .destroyed-marker.fighter {
+      color: #050505;
+      text-shadow: 0 0 2px #fff, 0 0 7px #fff;
+    }
     @keyframes impact {
       0% { transform: scale(.5); filter: brightness(3); }
       70% { transform: scale(1.12); }
@@ -265,11 +283,19 @@
       }
       knownRevealedCells = currentCells;
       for (const cell of cellElements.values()) cell.className = "cell";
+      for (const marker of board.querySelectorAll(".destroyed-marker")) marker.remove();
       for (const [coordinate, record] of Object.entries(data.cells || {})) {
         const cell = cellElements.get(coordinate);
         if (cell && (record.result === "hit" || record.result === "miss")) {
           cell.classList.add(record.result);
           cell.title = record.player ? `Fired by ${record.player}` : "";
+          if (record.destroyed === "ship" || record.destroyed === "fighter") {
+            const marker = document.createElement("span");
+            marker.className = `destroyed-marker ${record.destroyed}`;
+            marker.textContent = "X";
+            marker.setAttribute("aria-label", `${record.destroyed} destroyed`);
+            cell.append(marker);
+          }
         }
       }
       const status = document.getElementById("status");
@@ -316,7 +342,7 @@
         }
         help.innerHTML = data.phase === "joining"
           ? "Join the fleet: <b>!ships join</b>"
-          : "Fire on your turn: <b>!A5</b><br>Sink bonus: <b>+1 point</b>";
+          : "Fire on your turn: <b>!A5</b><br>Destroy a target: <b>extra shot</b>";
       } else {
         classicInfo.style.display = "none";
         leaderboard.style.display = "none";

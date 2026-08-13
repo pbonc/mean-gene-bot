@@ -9,400 +9,364 @@
       "name": "Destroyer",
       "length": 2,
       "cells": [
-        "D3",
-        "D4"
+        "B2",
+        "B3"
       ]
     },
     {
       "name": "Submarine",
       "length": 3,
       "cells": [
-        "A4",
-        "B4",
-        "C4"
+        "H5",
+        "H6",
+        "H7"
       ]
     },
     {
       "name": "Cruiser",
       "length": 3,
       "cells": [
-        "F10",
-        "G10",
-        "H10"
+        "D2",
+        "E2",
+        "F2"
       ]
     },
     {
       "name": "Battleship",
       "length": 4,
       "cells": [
-        "G4",
-        "H4",
-        "I4",
-        "J4"
+        "B7",
+        "C7",
+        "D7",
+        "E7"
       ]
     },
     {
       "name": "Aircraft Carrier",
       "length": 5,
       "cells": [
-        "F2",
-        "G2",
-        "H2",
-        "I2",
-        "J2"
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9"
       ]
     }
   ],
   "shots": {},
   "revealed": {
-    "D7": {
-      "result": "miss",
-      "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:45:52.106698+00:00"
-    },
     "F6": {
-      "result": "miss",
-      "target": null,
+      "result": "hit",
+      "target": "Aircraft Carrier",
       "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:46:05.226886+00:00"
+      "fired_at": "2026-08-10T02:36:49.844022+00:00"
     },
-    "B4": {
+    "F5": {
       "result": "hit",
-      "target": "Submarine",
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:46:09.678973+00:00"
-    },
-    "A10": {
-      "result": "miss",
-      "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:46:17.794830+00:00"
-    },
-    "B3": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:46:39.116032+00:00"
-    },
-    "C4": {
-      "result": "hit",
-      "target": "Submarine",
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:46:53.552458+00:00"
-    },
-    "D4": {
-      "result": "hit",
-      "target": "Destroyer",
+      "target": "Aircraft Carrier",
       "player": "iamdar",
-      "fired_at": "2026-08-07T03:46:59.144884+00:00"
-    },
-    "A4": {
-      "result": "hit",
-      "target": "Submarine",
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:47:05.147255+00:00"
-    },
-    "E4": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:47:35.582936+00:00"
-    },
-    "D5": {
-      "result": "miss",
-      "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:47:55.030134+00:00"
-    },
-    "D3": {
-      "result": "hit",
-      "target": "Destroyer",
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:47:58.768595+00:00"
-    },
-    "G4": {
-      "result": "hit",
-      "target": "Battleship",
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:48:11.194836+00:00"
-    },
-    "G3": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:48:25.964597+00:00"
-    },
-    "H4": {
-      "result": "hit",
-      "target": "Battleship",
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:48:44.144722+00:00"
+      "fired_at": "2026-08-10T02:37:01.179180+00:00"
     },
     "F4": {
       "result": "miss",
       "target": null,
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:48:49.126880+00:00"
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:37:07.765356+00:00"
     },
-    "I4": {
+    "F7": {
       "result": "hit",
-      "target": "Battleship",
-      "player": "livesuieng",
-      "fired_at": "2026-08-07T03:48:56.209388+00:00"
+      "target": "Aircraft Carrier",
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:38:17.223009+00:00"
     },
-    "J4": {
+    "F8": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:38:33.803232+00:00"
+    },
+    "F9": {
+      "result": "hit",
+      "target": "Aircraft Carrier",
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:38:41.500941+00:00"
+    },
+    "H2": {
+      "result": "miss",
+      "target": null,
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:38:51.506837+00:00"
+    },
+    "A2": {
+      "result": "miss",
+      "target": null,
+      "player": "livesuieng",
+      "fired_at": "2026-08-10T02:39:30.962393+00:00"
+    },
+    "D7": {
       "result": "hit",
       "target": "Battleship",
       "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:49:02.895453+00:00"
+      "fired_at": "2026-08-10T02:40:02.944690+00:00"
     },
-    "F8": {
+    "D6": {
       "result": "miss",
       "target": null,
       "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:49:23.153362+00:00"
+      "fired_at": "2026-08-10T02:40:18.028506+00:00"
     },
-    "I9": {
-      "result": "miss",
-      "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:49:43.286255+00:00"
-    },
-    "B9": {
+    "D8": {
       "result": "miss",
       "target": null,
       "player": "iamdar",
-      "fired_at": "2026-08-07T03:49:56.747414+00:00"
+      "fired_at": "2026-08-10T02:40:26.318897+00:00"
     },
-    "J2": {
+    "C7": {
       "result": "hit",
-      "target": "Aircraft Carrier",
+      "target": "Battleship",
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:40:43.365298+00:00"
+    },
+    "E7": {
+      "result": "hit",
+      "target": "Battleship",
       "player": "livesuieng",
-      "fired_at": "2026-08-07T03:50:01.695993+00:00"
+      "fired_at": "2026-08-10T02:40:58.275118+00:00"
+    },
+    "B7": {
+      "result": "hit",
+      "target": "Battleship",
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:42:23.772537+00:00"
+    },
+    "C4": {
+      "result": "miss",
+      "target": null,
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:43:32.352243+00:00"
+    },
+    "I6": {
+      "result": "miss",
+      "target": null,
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:43:43.328545+00:00"
     },
     "J1": {
       "result": "miss",
       "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:50:17.361271+00:00"
-    },
-    "I2": {
-      "result": "hit",
-      "target": "Aircraft Carrier",
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:50:30.076342+00:00"
-    },
-    "H2": {
-      "result": "hit",
-      "target": "Aircraft Carrier",
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:50:41.714855+00:00"
-    },
-    "G2": {
-      "result": "hit",
-      "target": "Aircraft Carrier",
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:50:46.024846+00:00"
-    },
-    "F2": {
-      "result": "hit",
-      "target": "Aircraft Carrier",
       "player": "livesuieng",
-      "fired_at": "2026-08-07T03:50:55.306144+00:00"
+      "fired_at": "2026-08-10T02:43:51.091581+00:00"
     },
-    "J10": {
+    "D4": {
       "result": "miss",
       "target": null,
       "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:51:10.226326+00:00"
+      "fired_at": "2026-08-10T02:44:13.658379+00:00"
+    },
+    "D2": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:44:26.130682+00:00"
+    },
+    "C2": {
+      "result": "miss",
+      "target": null,
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:44:33.868489+00:00"
+    },
+    "J7": {
+      "result": "miss",
+      "target": null,
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:45:09.923816+00:00"
+    },
+    "E2": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "livesuieng",
+      "fired_at": "2026-08-10T02:45:20.828323+00:00"
+    },
+    "F2": {
+      "result": "hit",
+      "target": "Cruiser",
+      "player": "fal_the_warlock",
+      "fired_at": "2026-08-10T02:45:36.587457+00:00"
+    },
+    "H3": {
+      "result": "miss",
+      "target": null,
+      "player": "fal_the_warlock",
+      "fired_at": "2026-08-10T02:45:52.559951+00:00"
+    },
+    "I4": {
+      "result": "miss",
+      "target": null,
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:46:17.213252+00:00"
+    },
+    "H8": {
+      "result": "miss",
+      "target": null,
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:46:38.593878+00:00"
+    },
+    "A10": {
+      "result": "miss",
+      "target": null,
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:46:49.670271+00:00"
+    },
+    "G6": {
+      "result": "miss",
+      "target": null,
+      "player": "livesuieng",
+      "fired_at": "2026-08-10T02:47:07.308389+00:00"
+    },
+    "H4": {
+      "result": "miss",
+      "target": null,
+      "player": "fal_the_warlock",
+      "fired_at": "2026-08-10T02:47:17.192384+00:00"
+    },
+    "H5": {
+      "result": "hit",
+      "target": "Submarine",
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:47:26.486120+00:00"
+    },
+    "H6": {
+      "result": "hit",
+      "target": "Submarine",
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:48:05.124699+00:00"
+    },
+    "H7": {
+      "result": "hit",
+      "target": "Submarine",
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:48:23.146837+00:00"
+    },
+    "A4": {
+      "result": "miss",
+      "target": null,
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:48:28.177894+00:00"
+    },
+    "B5": {
+      "result": "miss",
+      "target": null,
+      "player": "livesuieng",
+      "fired_at": "2026-08-10T02:48:41.583118+00:00"
+    },
+    "C10": {
+      "result": "miss",
+      "target": null,
+      "player": "fal_the_warlock",
+      "fired_at": "2026-08-10T02:48:50.635085+00:00"
+    },
+    "J3": {
+      "result": "miss",
+      "target": null,
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:49:01.849267+00:00"
+    },
+    "I10": {
+      "result": "miss",
+      "target": null,
+      "player": "iamdar",
+      "fired_at": "2026-08-10T02:49:31.650073+00:00"
     },
     "A1": {
       "result": "miss",
       "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:51:19.073941+00:00"
+      "player": "nate048",
+      "fired_at": "2026-08-10T02:49:37.864005+00:00"
     },
-    "I7": {
+    "B3": {
+      "result": "hit",
+      "target": "Destroyer",
+      "player": "livesuieng",
+      "fired_at": "2026-08-10T02:49:59.357466+00:00"
+    },
+    "C9": {
       "result": "miss",
       "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:51:25.049754+00:00"
-    },
-    "E1": {
-      "result": "miss",
-      "target": null,
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:51:30.342391+00:00"
+      "player": "fal_the_warlock",
+      "fired_at": "2026-08-10T02:50:02.450841+00:00"
     },
     "B2": {
-      "result": "miss",
-      "target": null,
-      "player": "livesuieng",
-      "fired_at": "2026-08-07T03:51:36.631348+00:00"
-    },
-    "F9": {
-      "result": "miss",
-      "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:52:05.491559+00:00"
-    },
-    "I3": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:52:14.124415+00:00"
-    },
-    "E3": {
-      "result": "miss",
-      "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:52:34.022220+00:00"
-    },
-    "D9": {
-      "result": "miss",
-      "target": null,
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:52:50.539936+00:00"
-    },
-    "C1": {
-      "result": "miss",
-      "target": null,
-      "player": "livesuieng",
-      "fired_at": "2026-08-07T03:52:54.898693+00:00"
-    },
-    "A7": {
-      "result": "miss",
-      "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:52:57.612109+00:00"
-    },
-    "H1": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:53:04.396404+00:00"
-    },
-    "H6": {
-      "result": "miss",
-      "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:53:11.005821+00:00"
-    },
-    "B6": {
-      "result": "miss",
-      "target": null,
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:53:24.828436+00:00"
-    },
-    "D2": {
-      "result": "miss",
-      "target": null,
-      "player": "livesuieng",
-      "fired_at": "2026-08-07T03:53:29.095956+00:00"
-    },
-    "C8": {
-      "result": "miss",
-      "target": null,
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:53:31.375752+00:00"
-    },
-    "F1": {
-      "result": "miss",
-      "target": null,
-      "player": "deputydawg777",
-      "fired_at": "2026-08-07T03:53:40.342020+00:00"
-    },
-    "J6": {
-      "result": "miss",
-      "target": null,
-      "player": "legendcrypt",
-      "fired_at": "2026-08-07T03:53:48.032181+00:00"
-    },
-    "G10": {
       "result": "hit",
-      "target": "Cruiser",
-      "player": "iamdar",
-      "fired_at": "2026-08-07T03:54:07.256264+00:00"
-    },
-    "F10": {
-      "result": "hit",
-      "target": "Cruiser",
-      "player": "livesuieng",
-      "fired_at": "2026-08-07T03:54:30.781401+00:00"
-    },
-    "H10": {
-      "result": "hit",
-      "target": "Cruiser",
-      "player": "fal_the_warlock",
-      "fired_at": "2026-08-07T03:54:48.170791+00:00"
+      "target": "Destroyer",
+      "player": "deputydawg777",
+      "fired_at": "2026-08-10T02:50:27.671540+00:00"
     }
   },
   "hits": 17,
-  "misses": 30,
+  "misses": 24,
   "classic": {
-    "join_deadline": "2026-08-07T03:44:57.568419+00:00",
+    "join_deadline": "2026-08-10T02:36:00.400013+00:00",
     "players": [
-      "fal_the_warlock",
-      "legendcrypt",
-      "deputydawg777",
       "iamdar",
-      "livesuieng"
+      "nate048",
+      "deputydawg777",
+      "livesuieng",
+      "fal_the_warlock"
     ],
     "pending_players": [],
     "turn_order": [
-      "fal_the_warlock",
       "deputydawg777",
-      "legendcrypt",
       "iamdar",
-      "livesuieng"
+      "nate048",
+      "livesuieng",
+      "fal_the_warlock"
     ],
     "turn_index": 0,
-    "round": 11,
+    "round": 9,
     "turn_deadline": null,
     "scores": {
-      "fal_the_warlock": {
-        "hits": 4,
-        "sinks": 3,
-        "points": 7
-      },
-      "legendcrypt": {
-        "hits": 4,
+      "iamdar": {
+        "hits": 3,
         "sinks": 0,
-        "points": 4
+        "points": 3
+      },
+      "nate048": {
+        "hits": 3,
+        "sinks": 2,
+        "points": 3
       },
       "deputydawg777": {
-        "hits": 1,
-        "sinks": 0,
-        "points": 1
-      },
-      "iamdar": {
-        "hits": 4,
-        "sinks": 1,
-        "points": 5
+        "hits": 6,
+        "sinks": 2,
+        "points": 6
       },
       "livesuieng": {
-        "hits": 4,
+        "hits": 3,
+        "sinks": 0,
+        "points": 3
+      },
+      "fal_the_warlock": {
+        "hits": 2,
         "sinks": 1,
-        "points": 5
+        "points": 2
       }
     },
     "sunk": [
-      "Submarine",
-      "Destroyer",
-      "Battleship",
       "Aircraft Carrier",
-      "Cruiser"
+      "Battleship",
+      "Cruiser",
+      "Submarine",
+      "Destroyer"
     ],
     "fighter_enabled": false,
     "fighter_alive": false,
     "fighter_cell": null,
     "sudden_death": false,
     "sudden_death_players": [],
-    "winner": "fal_the_warlock"
+    "winner": "deputydawg777"
   },
   "suspended_game": null,
-  "last_event": "@fal_the_warlock fired at H10: HIT! Cruiser destroyed! Bonus point! The fleet has been sunk!",
-  "started_at": "2026-08-07T03:44:57.571803+00:00",
-  "updated_at": "2026-08-07T03:54:48.170791+00:00"
+  "last_event": "@deputydawg777 fired at B2: HIT! Destroyer destroyed! Extra shot! The fleet has been sunk!",
+  "started_at": "2026-08-10T02:36:00.398022+00:00",
+  "updated_at": "2026-08-10T02:50:27.671540+00:00"
 }

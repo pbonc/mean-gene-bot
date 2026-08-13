@@ -374,6 +374,11 @@ class Bot(commands.Bot):
                     ])
                 except Exception:
                     pass
+                try:
+                    from bot.fishing.service import get_fishing_service
+                    core_messages.extend(await get_fishing_service().ticker_messages())
+                except Exception as fishing_ticker_error:
+                    logging.warning(f"[FISHING] Could not add fishing ticker stats: {fishing_ticker_error}")
 
                 unified = always_present + core_messages
                 seen = set(unified)

@@ -459,6 +459,11 @@ class BittleshipsManager:
         ).isoformat()
         return new_round
 
+    def _renew_classic_turn(self) -> None:
+        self.state["classic"]["turn_deadline"] = (
+            datetime.now(timezone.utc) + timedelta(seconds=CLASSIC_TURN_SECONDS)
+        ).isoformat()
+
     def classic_fire(self, username: str, coordinate: str) -> Dict[str, Any]:
         player = normalize_username(username)
         cell = parse_coordinate(coordinate)
@@ -483,10 +488,8 @@ class BittleshipsManager:
         )
         hit = target_ship is not None or fighter_hit
         sunk_name = None
-        bonus = 0
         if fighter_hit:
             sunk_name = "Fighter"
-            bonus = 1
             classic["fighter_alive"] = False
             classic["fighter_cell"] = None
         elif target_ship:
@@ -499,7 +502,6 @@ class BittleshipsManager:
                 sunk_name = target_ship["name"]
                 if sunk_name not in classic["sunk"]:
                     classic["sunk"].append(sunk_name)
-                    bonus = 1
 
         result = "hit" if hit else "miss"
         revealed[cell] = {
@@ -512,8 +514,8 @@ class BittleshipsManager:
         score = classic["scores"][player]
         if hit:
             score["hits"] += 1
-            score["points"] += 1 + bonus
-        if bonus:
+            score["points"] += 1
+        if sunk_name:
             score["sinks"] += 1
 
         fleet_destroyed = len(classic["sunk"]) == len(CLASSIC_FLEET)
@@ -522,6 +524,7 @@ class BittleshipsManager:
         winner = None
         winner_score = None
         won = sudden_death and fighter_hit
+        extra_shot = bool(sunk_name)
         new_round = False
         if fleet_destroyed and not sudden_death:
             top_score = max(record["points"] for record in classic["scores"].values())
@@ -547,11 +550,14 @@ class BittleshipsManager:
             classic["turn_deadline"] = None
             classic["winner"] = winner
         elif not sudden_death_started:
-            new_round = self._advance_classic_turn()
+            if extra_shot:
+                self._renew_classic_turn()
+            else:
+                new_round = self._advance_classic_turn()
         next_player = None if won else classic["turn_order"][classic["turn_index"]]
         event = f"@{player} fired at {cell}: {result.upper()}!"
         if sunk_name:
-            event += f" {sunk_name} destroyed! Bonus point!"
+            event += f" {sunk_name} destroyed! Extra shot!"
         if sudden_death_started:
             event += " The fleet is sunk with the lead tied; fighter sudden death begins!"
         elif won and sudden_death:
@@ -565,7 +571,8 @@ class BittleshipsManager:
         return {
             "result": result,
             "sunk": sunk_name,
-            "bonus": bonus,
+            "bonus": 0,
+            "extra_shot": extra_shot and not won and not sudden_death_started,
             "won": won,
             "winner": winner,
             "winner_score": winner_score,
@@ -600,16 +607,22 @@ class BittleshipsManager:
 
     def public_payload(self, message: Optional[str] = None) -> Dict[str, Any]:
         revealed = self.state.get("revealed", {})
+        classic = self.state.get("classic", {})
+        sunk = set(classic.get("sunk", []))
         cells = {
             coordinate: {
                 "result": record.get("result"),
                 "player": record.get("player"),
+                "destroyed": (
+                    "fighter" if record.get("target") == "Fighter"
+                    else "ship" if record.get("target") in sunk
+                    else None
+                ),
             }
             for coordinate, record in revealed.items()
             if isinstance(record, dict)
         }
         mode = self.state.get("mode", "single")
-        classic = self.state.get("classic", {})
         if mode == "classic":
             ships_remaining = max(0, len(CLASSIC_FLEET) - len(classic.get("sunk", [])))
         else:

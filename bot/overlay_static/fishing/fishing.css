@@ -1,0 +1,120 @@
+:root { --water:#2876a8; --deep:#174d70; }
+* { box-sizing:border-box; }
+html, body { margin:0; width:100%; height:100%; overflow:hidden; background:transparent; font-family:ui-monospace,Consolas,monospace; color:#fff; }
+#lake { position:relative; overflow:hidden; image-rendering:pixelated; }
+
+/* Compact is a native OBS canvas. Only a shallow grounding ripple is opaque. */
+.compact #lake { width:1920px; height:1080px; background:transparent; }
+.compact #water { position:absolute; left:0; right:0; bottom:0; height:14px; background:linear-gradient(#2876a8cc,#174d70dd); border-top:1px solid #bee1ebaa; opacity:.9; }
+.compact #weather { top:auto; bottom:0; height:90px; }
+.compact #lake.night { background:transparent; filter:none; }
+.compact #lake.night #water { background:linear-gradient(#092a43,#061c2d); }
+
+.afk #lake { width:1920px; height:1080px; transform-origin:top left; background:linear-gradient(#86cbed 0 23%,#507c3b 23% 28%,#a88b55 28% 31%,#2876a8 31% 100%); }
+.afk #water { position:absolute; inset:31% 0 0; background:repeating-linear-gradient(0deg,transparent 0 18px,#ffffff20 18px 20px,transparent 20px 38px); animation:water 9s linear infinite; }
+.afk #lake.night { background:linear-gradient(#07162d 0 18%,#132849 18% 23%,#4c713e 23% 28%,#a68a59 28% 31%,#2876a8 31% 100%); filter:none; }
+.afk #lake.weather-rainy { background:linear-gradient(#596875 0 18%,#70808b 18% 23%,#4c713e 23% 28%,#a68a59 28% 31%,#2876a8 31% 100%); }
+.afk #scenery, .afk #ambient { position:absolute; inset:0; pointer-events:none; }
+.afk #scenery { z-index:7; }
+.afk #ambient { z-index:6; overflow:hidden; }
+.shore-tree { position:absolute; top:170px; font-size:112px; line-height:1; filter:drop-shadow(5px 8px 3px #0003); }
+.shore-tree.left { left:70px; }
+.shore-tree.right { right:95px; transform:scale(.88); }
+.shore-tree.mid-left { left:485px; top:145px; font-size:142px; }
+.shore-tree.center-left { left:780px; top:188px; font-size:96px; }
+.shore-tree.mid-right { right:710px; top:128px; font-size:152px; }
+.shore-tree.far-right { right:245px; top:178px; font-size:118px; }
+.dock { position:absolute; left:235px; top:308px; width:270px; height:30px; background:repeating-linear-gradient(90deg,#765333 0 28px,#5c3d25 29px 33px); border:4px solid #3e291b; box-shadow:20px 65px 0 -10px #49311f,220px 65px 0 -10px #49311f; }
+.island { position:absolute; width:310px; height:82px; border-radius:50%; background:#52783e; border-bottom:25px solid #8d744b; }
+.island.one { right:185px; top:390px; }
+.island.two { left:720px; top:610px; transform:scale(.7); opacity:1; }
+.reeds { position:absolute; color:#425f2e; font-size:45px; letter-spacing:-16px; text-shadow:12px -9px #577438,24px 3px #344d28; }
+.reeds.one { left:70px; top:385px; }
+.reeds.two { right:90px; top:525px; }
+.boathouse { position:absolute; right:420px; top:230px; width:150px; height:100px; background:#855b38; border:5px solid #49311f; box-shadow:inset 0 -18px #654329; }
+.boathouse:before { content:""; position:absolute; left:-18px; top:-48px; width:176px; height:60px; background:#643c29; clip-path:polygon(50% 0,100% 100%,0 100%); }
+.boathouse:after { content:""; position:absolute; left:50px; bottom:0; width:50px; height:62px; background:#283542; }
+.fish-silhouette { position:absolute; width:55px; height:25px; --swim-y:600px; --swim-drift:35px; background:#092b42aa; opacity:.58; clip-path:polygon(100% 50%,86% 20%,42% 8%,22% 30%,0 12%,9% 50%,0 88%,22% 70%,42% 92%,86% 80%); animation-timing-function:linear; animation-iteration-count:infinite; }
+.fish-silhouette:before { content:""; position:absolute; right:10px; top:9px; width:3px; height:3px; border-radius:50%; background:#6c9aae; }
+.fish-silhouette.faces-left { transform:scaleX(-1); }
+.duck-ambient { position:absolute; font-size:32px; --swim-y:540px; --swim-drift:55px; animation-timing-function:linear; animation-iteration-count:infinite; filter:drop-shadow(2px 3px 2px #0005); }
+.duck-ambient.second { animation-delay:-25s; animation-duration:63s; }
+.duck-ambient.faces-right { transform:scaleX(-1); }
+.weather-cloud { position:absolute; font-size:82px; opacity:.78; animation:cloudCross linear infinite; filter:drop-shadow(5px 8px 5px #0002); }
+.wind-streak { position:absolute; width:110px; height:3px; border-radius:50%; background:#ffffff65; animation:windCross 2.4s linear infinite; }
+.celestial { position:absolute; right:170px; top:105px; font-size:92px; filter:drop-shadow(0 0 18px #fff8); }
+.star { position:absolute; width:3px; height:3px; border-radius:50%; background:#fffde7; box-shadow:0 0 7px #fff; animation:twinkle 2s ease-in-out infinite; }
+
+#weather { position:absolute; inset:0; pointer-events:none; z-index:10; overflow:hidden; }
+.weather-label { position:absolute; z-index:800; background:#050c17cc; border:1px solid #ffffff33; }
+.compact .weather-label { right:8px; bottom:18px; padding:0; font-size:20px; line-height:1; background:transparent; border:0; filter:drop-shadow(1px 1px 2px #000); }
+.afk .weather-label { left:34px; top:30px; display:flex; max-width:620px; flex-direction:column; gap:5px; padding:14px 18px; }
+.afk .weather-label strong { font-size:22px; }
+.afk .weather-label span { font-size:13px; line-height:1.35; color:#dbeafe; }
+
+.boat { position:absolute; transform-origin:center bottom; transition:left 3.2s ease,top 3.2s ease; animation:bob 2.3s ease-in-out infinite; }
+.afk .boat { transition-duration:5.5s; }
+.afk .boat.routing { transition-duration:2s; }
+.boat.facing-left { animation-name:bobLeft; }
+.compact .boat { width:104px; height:66px; }
+.afk .boat { width:150px; height:100px; }
+.boat-art { position:absolute; background:var(--boat-color); border:3px solid #40281d; clip-path:polygon(0 0,100% 0,84% 100%,14% 100%); box-shadow:inset 0 -6px #0003; }
+.compact .boat-art { left:18px; top:28px; width:68px; height:18px; }
+.afk .boat-art { left:24px; top:44px; width:102px; height:25px; }
+.boat.tier-1 .boat-art { background:repeating-linear-gradient(90deg,#7a5230 0 12px,#5d3d24 12px 16px); }
+.boat.tier-3 .boat-art { transform:scaleX(1.28); }
+.boat.tier-4 .boat-art { transform:scale(1.6); background:linear-gradient(#f2f4f6,#cbd5df); }
+.person { position:absolute; background:var(--shirt-color); border:2px solid #131b38; }
+.compact .person { left:47px; top:15px; width:12px; height:18px; }
+.afk .person { left:68px; top:26px; width:18px; height:28px; }
+.person:before { content:""; position:absolute; background:#e6b78c; border:2px solid #5a3f2d; width:80%; aspect-ratio:1; left:0; top:-85%; }
+.rod { position:absolute; background:#2c2017; height:2px; transform:rotate(-20deg); transform-origin:left; }
+.compact .rod { width:39px; top:20px; left:57px; }
+.afk .rod { width:58px; top:34px; left:82px; }
+.fishing-line { position:absolute; width:1px; height:0; opacity:0; background:#e9f6ffdd; transform-origin:top; }
+.fishing-line:after { content:""; position:absolute; left:-3px; bottom:-5px; width:7px; height:7px; border-radius:50%; background:linear-gradient(#ef4444 0 45%,#f8fafc 46%); }
+.compact .fishing-line { left:94px; top:8px; }
+.afk .fishing-line { left:138px; top:17px; }
+.compact .boat.line-active .fishing-line { animation:compactLine 1.25s ease-in-out; }
+.afk .boat.line-active .fishing-line { animation:afkLine 1.45s ease-in-out; }
+.boat.moving .rod { transform:rotate(18deg); }
+.boat.fishing .rod { animation:cast .65s ease-in-out 2; }
+.boat.sunk { animation:sink .9s forwards!important; }
+.gps-pin { position:absolute; z-index:1200; min-width:220px; transform:translate(-50%,-100%); padding:10px 16px; border:3px solid #ffe66d; border-radius:12px; background:#07111aee; color:#fff; font-size:28px; font-weight:900; text-align:center; text-shadow:2px 2px #000; box-shadow:0 0 22px #ffe66daa; animation:gpsPulse .7s ease-in-out infinite alternate; pointer-events:none; }
+.gps-pin:after { content:"▼"; position:absolute; left:50%; bottom:-31px; transform:translateX(-50%); color:#ffe66d; font-size:34px; text-shadow:2px 2px #000; }
+.compact .gps-pin { min-width:150px; padding:6px 10px; font-size:20px; }
+
+.celebrate { position:absolute; z-index:900; font-size:28px; animation:celebrate 2s ease forwards; pointer-events:none; }
+.afk .celebrate { font-size:52px; }
+.banner { position:absolute; left:50%; top:60px; transform:translate(-50%,-120px); opacity:0; z-index:1000; background:#050c17ef; border:3px solid #ffffff55; padding:16px 28px; font-size:25px; text-align:center; transition:.3s; }
+.banner.show { transform:translate(-50%,0); opacity:1; }
+.compact .banner { display:none; }
+.firework { position:absolute; z-index:950; font-size:38px; animation:burst 1.1s forwards; }
+.compact .firework { font-size:18px; }
+.afk .title { position:absolute; right:35px; top:30px; z-index:800; background:#08101cbc; border:2px solid #ffffff2a; padding:12px 16px; text-align:right; font-size:34px; }
+.power-status { display:none; }
+.afk .power-status { display:flex; position:absolute; right:35px; top:130px; z-index:800; min-width:310px; flex-direction:column; align-items:flex-end; gap:4px; padding:10px 14px; background:#08101cbc; border:2px solid #ffffff2a; }
+.afk .power-status strong { font-size:20px; color:#86efac; }
+.afk .power-status span { font-size:14px; color:#e2e8f0; }
+.afk .power-status.off strong { color:#fca5a5; }
+.compact .title { display:none; }
+.rain { position:absolute; top:-30px; width:2px; height:22px; --rain-x:-30px; background:#e1f2ffbb; animation:rain .8s linear infinite; }
+.afk .rain { animation-name:rainAfk; }
+
+@keyframes water { to { transform:translateX(80px); } }
+@keyframes bob { 50% { transform:translateY(3px) rotate(.5deg); } }
+@keyframes bobLeft { 0%,100% { transform:scaleX(-1) translateY(0) rotate(-.4deg); } 50% { transform:scaleX(-1) translateY(3px) rotate(.5deg); } }
+@keyframes cast { 50% { transform:rotate(-42deg); } }
+@keyframes compactLine { 0% { height:0; opacity:0; transform:rotate(-18deg); } 22% { height:42px; opacity:1; transform:rotate(7deg); } 68% { height:35px; opacity:1; transform:rotate(-4deg); } 100% { height:0; opacity:0; transform:rotate(-16deg); } }
+@keyframes afkLine { 0% { height:0; opacity:0; transform:rotate(-18deg); } 22% { height:72px; opacity:1; transform:rotate(8deg); } 68% { height:62px; opacity:1; transform:rotate(-5deg); } 100% { height:0; opacity:0; transform:rotate(-16deg); } }
+@keyframes sink { to { transform:translateY(45px) rotate(28deg) scale(.55); opacity:0; } }
+@keyframes celebrate { 20% { transform:translateY(-35px) scale(1.2); } 80% { opacity:1; } to { transform:translateY(-10px); opacity:0; } }
+@keyframes burst { from { transform:scale(.2); opacity:1; } to { transform:scale(2); opacity:0; } }
+@keyframes rain { to { transform:translate(-30px,120px); } }
+@keyframes rainAfk { to { transform:translate(var(--rain-x),1150px); } }
+@keyframes swimRight { 0% { left:-130px; top:calc(var(--swim-y) - var(--swim-drift)); } 25% { top:calc(var(--swim-y) + var(--swim-drift)); } 55% { top:var(--swim-y); } 78% { top:calc(var(--swim-y) + var(--swim-drift)); } 100% { left:2050px; top:var(--swim-y); } }
+@keyframes swimLeft { 0% { left:2050px; top:calc(var(--swim-y) + var(--swim-drift)); } 28% { top:calc(var(--swim-y) - var(--swim-drift)); } 58% { top:var(--swim-y); } 82% { top:calc(var(--swim-y) - var(--swim-drift)); } 100% { left:-130px; top:var(--swim-y); } }
+@keyframes cloudCross { from { transform:translateX(-260px); } to { transform:translateX(2200px); } }
+@keyframes windCross { from { transform:translateX(-250px); opacity:0; } 25% { opacity:.8; } to { transform:translateX(2100px); opacity:0; } }
+@keyframes twinkle { 50% { opacity:.25; transform:scale(.65); } }
+@keyframes gpsPulse { from { opacity:.82; } to { opacity:1; } }

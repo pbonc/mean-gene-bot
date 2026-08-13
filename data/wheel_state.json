@@ -1,17 +1,23 @@
 {
-  "slots": {
-    "livesuieng": 1
+  "slots": {},
+  "scores": {
+    "fal_the_warlock": 1,
+    "karnave": 1,
+    "deputydawg777": 1,
+    "snipah201z": 1,
+    "swfc_ricardo": 1
   },
-  "scores": {},
-  "last_winner": null,
+  "last_winner": "swfc_ricardo",
   "remove_on_win": true,
   "wheel_locked": false,
   "last_man_standing": false,
-  "order": [
-    "livesuieng"
-  ],
+  "order": [],
   "colors": {
-    "livesuieng": "#a55455"
+    "deputydawg777": "#080808",
+    "fal_the_warlock": "#fc0303",
+    "snipah201z": "#6366f1",
+    "swfc_ricardo": "#f472b6",
+    "karnave": "#fb7185"
   },
   "multiplier": 1,
   "manual_users": []

@@ -214,6 +214,25 @@ async def websocket_handler(request):
                                 await ws.send_json(payload)
                             except Exception:
                                 pass
+                    if data.get('type') == 'request_giveaway_state':
+                        payload = latest_giveaway_state
+                        if not payload:
+                            try:
+                                from bot.giveaway_state import GiveawayState
+                                payload = GiveawayState().payload()
+                            except Exception:
+                                payload = None
+                        if payload:
+                            try:
+                                await ws.send_json(payload)
+                            except Exception:
+                                pass
+                    if data.get('type') == 'request_fishing_state':
+                        try:
+                            from bot.fishing.service import get_fishing_service
+                            await ws.send_json(await get_fishing_service().snapshot())
+                        except Exception:
+                            pass
                     if data.get('type') == 'request_wotwom_chat_roster':
                         try:
                             await ws.send_json(
@@ -265,6 +284,9 @@ async def cards_afk_overlay(request):
 async def raffle_numbers_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "raffle_numbers.html"))
 
+async def giveaway_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "giveaway_overlay.html"))
+
 async def as_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "as_overlay.html"))
 
@@ -309,6 +331,12 @@ async def wom_overlay(request):
 
 async def wotwom_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "wotwom_overlay.html"))
+
+async def fishing_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "fishing_overlay.html"))
+
+async def fishing_afk_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "fishing_afk_overlay.html"))
 
 async def get_wotwom_inventory(request):
     """Return server-side normalized WoTMA data without exposing the application ID."""
@@ -596,6 +624,7 @@ latest_rpg_v2_expedition = None
 latest_rpg_v2_battle = None
 latest_grid_state = None
 latest_bittleships_state = None
+latest_giveaway_state = None
 
 
 async def rpg_state_task(interval: float = 2.0):
@@ -637,7 +666,7 @@ async def as_overlay_task():
 
 async def broadcast_overlay_message(message: dict):
     """Broadcast a message to all overlay clients (WebSocket). Also update latest ticker message if type is 'ticker'."""
-    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_rpg_v2_expedition, latest_rpg_v2_battle, latest_grid_state, latest_bittleships_state
+    global latest_ticker_message, latest_wheel_state, latest_rpg_state, latest_rpg_v2_expedition, latest_rpg_v2_battle, latest_grid_state, latest_bittleships_state, latest_giveaway_state
     if message.get("type") == "ticker" and "text" in message:
         latest_ticker_message = message["text"]
     if message.get("type") == "wheel_state":
@@ -652,6 +681,8 @@ async def broadcast_overlay_message(message: dict):
         latest_grid_state = message
     if message.get("type") == "bittleships_state":
         latest_bittleships_state = message
+    if message.get("type") == "giveaway_state":
+        latest_giveaway_state = message
     if message.get("type") == "wotwom_chat_user":
         username = str(message.get("username") or "").strip()
         if username:
@@ -683,6 +714,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/afk", afk_overlay)
     app.router.add_get("/cards", cards_afk_overlay)
     app.router.add_get("/raffle", raffle_numbers_overlay)
+    app.router.add_get("/giveaway", giveaway_overlay)
     app.router.add_get("/as", as_overlay)
     app.router.add_get("/anime", anime_overlay)
     app.router.add_get("/ag", allen_ginter_overlay)
@@ -698,6 +730,8 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/bittleships", bittleships_overlay)
     app.router.add_get("/wom", wom_overlay)
     app.router.add_get("/wotwom", wotwom_overlay)
+    app.router.add_get("/fishing", fishing_overlay)
+    app.router.add_get("/fishing-afk", fishing_afk_overlay)
 
     # Tetris card drop overlay
     app.router.add_get("/tetris", tetris_cards_overlay)
@@ -731,6 +765,9 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     wom_audio_dir = os.path.join(STATIC_DIR, "wom_audio")
     if os.path.isdir(wom_audio_dir):
         app.router.add_static('/wom_audio', wom_audio_dir)
+    fishing_assets_dir = os.path.join(STATIC_DIR, "fishing")
+    if os.path.isdir(fishing_assets_dir):
+        app.router.add_static('/fishing-assets', fishing_assets_dir)
     
     # Serve trading card images
     cards_dir = CARDS_DIR

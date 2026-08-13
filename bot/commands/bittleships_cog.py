@@ -368,7 +368,7 @@ class BittleshipsCog(commands.Cog):
         await self._broadcast()
         result_text = "HIT" if outcome["result"] == "hit" else "MISS"
         sink_text = (
-            f" {outcome['sunk']} destroyed—bonus point!"
+            f" {outcome['sunk']} destroyed—extra shot!"
             if outcome["sunk"] else ""
         )
         if outcome.get("sudden_death_started"):
@@ -407,7 +407,11 @@ class BittleshipsCog(commands.Cog):
         await ctx.send(
             f"{'💥' if outcome['result'] == 'hit' else '🌊'} @{ctx.author.name} fires at "
             f"{coordinate.upper()}: {result_text}!{sink_text} "
-            f"Next: @{outcome['next_player']} (Round {outcome['round']})."
+            + (
+                f"@{ctx.author.name} fires again (Round {outcome['round']})."
+                if outcome.get("extra_shot")
+                else f"Next: @{outcome['next_player']} (Round {outcome['round']})."
+            )
         )
 
     async def _handle_status(self, ctx):

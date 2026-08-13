@@ -192,16 +192,18 @@ class BittleshipsManagerTests(unittest.TestCase):
         outcome = self.manager.classic_fire("theadmiral", "A1")
         self.assertIn(outcome["result"], ("hit", "miss"))
 
-    def test_classic_sink_awards_hit_and_bonus_point(self):
+    def test_classic_sink_awards_extra_shot_instead_of_bonus_point(self):
         self._start_classic()
         destroyer = self.manager.state["ships"][0]
         first = self.manager.classic_fire("alpha", destroyer["cells"][0])
         second = self.manager.classic_fire("alpha", destroyer["cells"][1])
         self.assertEqual(first["score"]["points"], 1)
         self.assertEqual(second["sunk"], "Destroyer")
-        self.assertEqual(second["score"], {"hits": 2, "sinks": 1, "points": 3})
+        self.assertTrue(second["extra_shot"])
+        self.assertEqual(second["next_player"], "alpha")
+        self.assertEqual(second["score"], {"hits": 2, "sinks": 1, "points": 2})
 
-    def test_fighter_moves_after_round_and_awards_destroy_bonus(self):
+    def test_fighter_moves_after_round_and_awards_extra_shot(self):
         self._start_classic(fighter=True)
         classic = self.manager.state["classic"]
         original = classic["fighter_cell"]
@@ -215,7 +217,8 @@ class BittleshipsManagerTests(unittest.TestCase):
         self.assertNotEqual(moved, original)
         outcome = self.manager.classic_fire("alpha", moved)
         self.assertEqual(outcome["sunk"], "Fighter")
-        self.assertEqual(outcome["bonus"], 1)
+        self.assertEqual(outcome["bonus"], 0)
+        self.assertTrue(outcome["extra_shot"])
         self.assertFalse(self.manager.state["classic"]["fighter_alive"])
 
     def test_classic_ends_when_all_five_ships_are_sunk(self):
@@ -227,12 +230,28 @@ class BittleshipsManagerTests(unittest.TestCase):
         self.assertTrue(last_outcome["won"])
         self.assertEqual(self.manager.state["phase"], "ended")
         score = self.manager.state["classic"]["scores"]["alpha"]
-        self.assertEqual(score, {"hits": 17, "sinks": 5, "points": 22})
+        self.assertEqual(score, {"hits": 17, "sinks": 5, "points": 17})
+
+    def test_destroyed_targets_keep_hits_and_expose_distinct_markers(self):
+        self._start_classic(fighter=True)
+        destroyer = self.manager.state["ships"][0]
+        self.manager.classic_fire("alpha", destroyer["cells"][0])
+        self.manager.classic_fire("alpha", destroyer["cells"][1])
+        payload = self.manager.public_payload()
+        for cell in destroyer["cells"]:
+            self.assertEqual(payload["cells"][cell]["result"], "hit")
+            self.assertEqual(payload["cells"][cell]["destroyed"], "ship")
+
+        fighter_cell = self.manager.state["classic"]["fighter_cell"]
+        self.manager.classic_fire("alpha", fighter_cell)
+        fighter = self.manager.public_payload()["cells"][fighter_cell]
+        self.assertEqual(fighter["result"], "hit")
+        self.assertEqual(fighter["destroyed"], "fighter")
 
     def test_tied_fleet_destruction_starts_fighter_sudden_death(self):
         order = self._start_classic(players=("alpha", "bravo"))
         classic = self.manager.state["classic"]
-        classic["scores"]["alpha"] = {"hits": 1, "sinks": 0, "points": 20}
+        classic["scores"]["alpha"] = {"hits": 1, "sinks": 0, "points": 21}
         classic["scores"]["bravo"] = {"hits": 0, "sinks": 0, "points": 22}
         classic["sunk"] = [name for name, _ in CLASSIC_FLEET[:-1]]
         last_ship = self.manager.state["ships"][-1]
@@ -320,6 +339,8 @@ class BittleshipsOverlayTests(unittest.TestCase):
         self.assertNotIn(".slice(0, 6)", overlay)
         self.assertIn("--leader-columns", overlay)
         self.assertIn("overflow-wrap: anywhere", overlay)
+        self.assertIn('marker.textContent = "X"', overlay)
+        self.assertIn(".destroyed-marker.fighter", overlay)
 
 
 if __name__ == "__main__":
