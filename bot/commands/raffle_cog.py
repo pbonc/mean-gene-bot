@@ -458,8 +458,7 @@ class SimpleRaffleState:
         if self.zap_trigger_type != trigger_type:
             return False, None
         
-        # Mark winner and re-arm for the next cycle. Entry payout is handled by the cog
-        # so faction/relic modifiers can be applied exactly once.
+        # Mark winner and re-arm for the next cycle. Entry payout is handled by the cog.
         self.zap_awarded_user = user
         self.save()
         self._reset_zap_cycle()
@@ -467,85 +466,18 @@ class SimpleRaffleState:
 
 class RaffleCog(commands.Cog):
     def _award_zap_trigger_entry(self, trigger_user: str):
-        faction_cog = self.bot.get_cog("FactionCog")
-        if faction_cog and hasattr(faction_cog, "award_entry_reward"):
-            return faction_cog.award_entry_reward(
-                trigger_user,
-                1,
-                reward_type="zap_trigger",
-            )
-
         if hasattr(self.state, "add_entries_capped"):
             capped = self.state.add_entries_capped(trigger_user, 1)
             return {
                 "applied": int(capped.get("applied", 0)),
-                "gmb_applied": False,
                 "capacity_reason": capped.get("truncation_reason"),
             }
 
         ok = self.state.add_entries(trigger_user, 1)
         return {
             "applied": 1 if ok else 0,
-            "gmb_applied": False,
             "capacity_reason": None if ok else "entry_grant_failed",
         }
-
-    async def _apply_zap_faction_bonus(self, trigger_user: str, channel):
-        faction_cog = self.bot.get_cog("FactionCog")
-        if not faction_cog or not hasattr(faction_cog, "service"):
-            return
-
-        service = faction_cog.service
-        faction = service.add_influence_for_user_faction(trigger_user, influence_amount=1)
-        if not faction:
-            return
-
-        stream_active_members = service.get_recent_active_members()
-        if len(stream_active_members) < 2:
-            return
-
-        active_members = service.get_recent_active_members_for_faction(faction.id)
-        if len(active_members) < 2:
-            return
-
-        candidates = [user for user in active_members if user != trigger_user]
-        if not candidates:
-            candidates = [trigger_user] if trigger_user in active_members else []
-        if not candidates:
-            return
-
-        recipient = random.choice(candidates)
-        reward_result = None
-        if hasattr(faction_cog, "award_entry_reward"):
-            reward_result = faction_cog.award_entry_reward(
-                recipient,
-                1,
-                reward_type="zap_faction_echo",
-            )
-
-        if not reward_result:
-            if hasattr(self.state, "add_entries_capped"):
-                capped = self.state.add_entries_capped(recipient, 1)
-                reward_result = {
-                    "applied": int(capped.get("applied", 0)),
-                    "gmb_applied": False,
-                }
-            else:
-                ok = self.state.add_entries(recipient, 1)
-                reward_result = {"applied": 1 if ok else 0, "gmb_applied": False}
-
-        if reward_result.get("applied", 0) <= 0:
-            return
-
-        flavor = ""
-        if reward_result.get("derpdawg_floor_applied"):
-            flavor += " 🐾 The Derp relic raised this 1-entry reward to 2 before multipliers."
-        if reward_result.get("gmb_applied"):
-            flavor += " ⚡ Golden Milkbone resonance doubled the payout."
-
-        await channel.send(
-            f"⚡ {faction.name} faction echo: @{recipient} gains +{reward_result['applied']} bonus entries from @{trigger_user}'s zap!{flavor}"
-        )
 
     @commands.command(name="badbeat")
     async def badbeat_command(self, ctx):
@@ -593,7 +525,6 @@ class RaffleCog(commands.Cog):
             # Add a small delay to allow the SFX command to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
-            await self._apply_zap_faction_bonus(username.lower(), ctx)
 
     async def trigger_zap_song(self, username, ctx):
         """Called when a song request (!srx) is used. Pass username and ctx for messaging."""
@@ -603,7 +534,6 @@ class RaffleCog(commands.Cog):
             # Add a small delay to allow the song request to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
-            await self._apply_zap_faction_bonus(username.lower(), ctx)
 
     async def trigger_zap_gif(self, username, ctx):
         """Called when a GIF command is used. Pass username and ctx for messaging."""
@@ -613,7 +543,6 @@ class RaffleCog(commands.Cog):
             # Add a small delay to allow the GIF command to appear in chat first
             await asyncio.sleep(0.5)
             await ctx.send(message)
-            await self._apply_zap_faction_bonus(username.lower(), ctx)
         
     def __init__(self, bot):
         self.bot = bot
@@ -1204,7 +1133,6 @@ class RaffleCog(commands.Cog):
             # Add a small delay to allow the triggering message to appear in chat first
             await asyncio.sleep(0.5)
             await message.channel.send(zap_message)
-            await self._apply_zap_faction_bonus(user, message.channel)
         
         if self.state.is_open and user not in self.state.chat_awarded and not self.state.is_ignored(user):
             if not self.state.first_chatter_awarded:

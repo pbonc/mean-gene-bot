@@ -13,7 +13,7 @@ This is a read-only inventory of runtime data plus a small reliability review. R
 7. **P2 — sports polling repeats four implementations.** NHL, NBA, MLB, and NFL each create a new HTTP session and repeat parsing/cache code. Fetches run sequentially, so a ticker rebuild can wait on four independent timeouts. Empty/error results are not consistently negative-cached, inviting repeated requests during provider or DNS failures.
 8. **P2 — source recovery artifacts remain active-looking.** Examples include two compiled `rpg_cog` files for different Python versions, `rpg_cog_restored.py`, disabled cogs, `archive/`, root `tmp_*` scripts, `temp_fix.txt`, a 1.19 MiB disassembly, and an empty README/Dockerfile. These should be classified as active, test fixture, recovery artifact, or removable.
 9. **P2 — environment/startup drift.** Windows startup checks/creates `venv` but ultimately runs `.venv`; the Unix script uses `venv`. Several files contain mojibake. Dependency checks execute at import time, complicating tests and diagnostics.
-10. **P2 — working runtime state is tracked.** Several `data/*.json` and `data/factions.db` files are tracked and currently modified. Separate immutable seed/config data from mutable state before broad cleanup.
+10. **P2 — working runtime state is tracked.** Several `data/*.json` files are tracked and currently modified. Separate immutable seed/config data from mutable state before broad cleanup. The retired faction database is preserved under `archive/factions_2026-08-19/`.
 
 ## Proposed sprints
 
