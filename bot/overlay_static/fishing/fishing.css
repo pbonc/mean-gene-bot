@@ -58,27 +58,52 @@ html, body { margin:0; width:100%; height:100%; overflow:hidden; background:tran
 .boat.facing-left { animation-name:bobLeft; }
 .compact .boat { width:104px; height:66px; }
 .afk .boat { width:150px; height:100px; }
-.boat-art { position:absolute; background:var(--boat-color); border:3px solid #40281d; clip-path:polygon(0 0,100% 0,84% 100%,14% 100%); box-shadow:inset 0 -6px #0003; }
+.boat-art { position:absolute; z-index:3; background:var(--boat-color); border:3px solid #40281d; clip-path:polygon(0 0,100% 0,84% 100%,14% 100%); box-shadow:inset 0 -6px #0003; }
+.boat-details { display:none; position:absolute; z-index:4; pointer-events:none; }
 .compact .boat-art { left:18px; top:28px; width:68px; height:18px; }
 .afk .boat-art { left:24px; top:44px; width:102px; height:25px; }
 .boat.tier-1 .boat-art { background:repeating-linear-gradient(90deg,#7a5230 0 12px,#5d3d24 12px 16px); }
-.boat.tier-3 .boat-art { transform:scaleX(1.28); }
-.boat.tier-4 .boat-art { transform:scale(1.6); background:linear-gradient(#f2f4f6,#cbd5df); }
-.person { position:absolute; background:var(--shirt-color); border:2px solid #131b38; }
+.boat.tier-3 .boat-art { background:var(--boat-color); border-color:#27313a; clip-path:none; border-radius:2px; box-shadow:inset 0 -5px #0004; transform:scaleX(1.38); }
+.boat.tier-3 .boat-art:before { content:""; position:absolute; left:-9px; right:-9px; top:calc(100% - 2px); height:8px; border:2px solid #27313a; border-radius:999px; background:#aeb9c4; }
+.boat.tier-3 .boat-details { display:block; background:var(--boat-color); border:3px solid #27313a; border-radius:2px; box-shadow:inset 0 -4px #0003; }
+.boat.tier-3 .boat-details:before { content:""; position:absolute; width:3px; background:#27313a; box-shadow:var(--barge-post-gap) 0 #27313a; }
+.boat.tier-3 .boat-details:after { content:none; }
+.boat.tier-4 .boat-art { background:var(--boat-color); border-color:#243242; clip-path:polygon(0 0,100% 0,88% 72%,68% 100%,12% 100%,0 38%); box-shadow:inset 0 -8px #0004; transform:scale(1.58,1.34); }
+.boat.tier-4 .boat-details { display:block; background:#f8fafc; border:3px solid #243242; border-radius:14px 5px 2px 2px; box-shadow:inset 0 -5px #cbd5e1; }
+.boat.tier-4 .boat-details:before { content:""; position:absolute; background:repeating-linear-gradient(90deg,#17324b 0 11px,#dbeafe 11px 15px); border:2px solid #243242; border-radius:3px; }
+.boat.tier-4 .boat-details:after { content:""; position:absolute; width:3px; background:#243242; box-shadow:8px 0 0 -1px #f8fafc; }
+.compact .boat.tier-3 .boat-details { left:25px; top:-14px; width:54px; height:10px; --barge-post-gap:46px; }
+.compact .boat.tier-3 .boat-details:before { left:2px; top:8px; height:34px; }
+.afk .boat.tier-3 .boat-details { left:36px; top:-18px; width:78px; height:14px; --barge-post-gap:67px; }
+.afk .boat.tier-3 .boat-details:before { left:3px; top:11px; height:51px; }
+.compact .boat.tier-4 .boat-details { left:30px; top:17px; width:54px; height:19px; }
+.compact .boat.tier-4 .boat-details:before { left:8px; top:4px; width:34px; height:8px; }
+.compact .boat.tier-4 .boat-details:after { left:30px; bottom:16px; height:18px; }
+.afk .boat.tier-4 .boat-details { left:42px; top:23px; width:78px; height:29px; }
+.afk .boat.tier-4 .boat-details:before { left:12px; top:6px; width:49px; height:12px; }
+.afk .boat.tier-4 .boat-details:after { left:44px; bottom:25px; height:29px; }
+.person { position:absolute; z-index:2; background:var(--shirt-color); border:2px solid #131b38; }
 .compact .person { left:47px; top:15px; width:12px; height:18px; }
 .afk .person { left:68px; top:26px; width:18px; height:28px; }
 .person:before { content:""; position:absolute; background:#e6b78c; border:2px solid #5a3f2d; width:80%; aspect-ratio:1; left:0; top:-85%; }
-.rod { position:absolute; background:#2c2017; height:2px; transform:rotate(-20deg); transform-origin:left; }
+.rod { position:absolute; z-index:5; background:#2c2017; height:2px; transform:rotate(-20deg); transform-origin:left; }
 .compact .rod { width:39px; top:20px; left:57px; }
 .afk .rod { width:58px; top:34px; left:82px; }
-.fishing-line { position:absolute; width:1px; height:0; opacity:0; background:#e9f6ffdd; transform-origin:top; }
+.fishing-line { position:absolute; z-index:5; width:1px; height:0; opacity:0; background:#e9f6ffdd; transform-origin:top; }
 .fishing-line:after { content:""; position:absolute; left:-3px; bottom:-5px; width:7px; height:7px; border-radius:50%; background:linear-gradient(#ef4444 0 45%,#f8fafc 46%); }
 .compact .fishing-line { left:94px; top:8px; }
 .afk .fishing-line { left:138px; top:17px; }
+.compact .boat.tier-4 .person { left:14px; top:15px; }
+.afk .boat.tier-4 .person { left:20px; top:26px; }
+.compact .boat.tier-4 .rod { left:20px; top:20px; transform:rotate(200deg); }
+.afk .boat.tier-4 .rod { left:29px; top:34px; transform:rotate(200deg); }
+.compact .boat.tier-4 .fishing-line { left:-13px; top:9px; }
+.afk .boat.tier-4 .fishing-line { left:-20px; top:17px; }
 .compact .boat.line-active .fishing-line { animation:compactLine 1.25s ease-in-out; }
 .afk .boat.line-active .fishing-line { animation:afkLine 1.45s ease-in-out; }
 .boat.moving .rod { transform:rotate(18deg); }
 .boat.fishing .rod { animation:cast .65s ease-in-out 2; }
+.boat.tier-4.fishing .rod { animation:yachtCast .65s ease-in-out 2; }
 .boat.sunk { animation:sink .9s forwards!important; }
 .gps-pin { position:absolute; z-index:1200; min-width:220px; transform:translate(-50%,-100%); padding:10px 16px; border:3px solid #ffe66d; border-radius:12px; background:#07111aee; color:#fff; font-size:28px; font-weight:900; text-align:center; text-shadow:2px 2px #000; box-shadow:0 0 22px #ffe66daa; animation:gpsPulse .7s ease-in-out infinite alternate; pointer-events:none; }
 .gps-pin:after { content:"▼"; position:absolute; left:50%; bottom:-31px; transform:translateX(-50%); color:#ffe66d; font-size:34px; text-shadow:2px 2px #000; }
@@ -94,6 +119,7 @@ html, body { margin:0; width:100%; height:100%; overflow:hidden; background:tran
 .banner.show { transform:translate(-50%,0); opacity:1; }
 .compact .banner { display:none; }
 .firework { position:absolute; z-index:950; font-size:38px; animation:burst 1.1s forwards; }
+.rocket-blast { position:absolute; z-index:1300; font-size:120px; transform:translate(-20%,-30%); animation:rocketBlast 1.7s ease-out forwards; pointer-events:none; filter:drop-shadow(0 0 28px #ff7b00); }
 .compact .firework { font-size:18px; }
 .afk .title { position:absolute; right:35px; top:30px; z-index:800; background:#08101cbc; border:2px solid #ffffff2a; padding:12px 16px; text-align:right; font-size:34px; }
 .power-status { display:none; }
@@ -106,6 +132,11 @@ html, body { margin:0; width:100%; height:100%; overflow:hidden; background:tran
 .points-leaderboard>strong { display:block; margin-bottom:8px; color:#fde68a; font-size:19px; letter-spacing:1px; }
 .points-leaderboard div { display:grid; grid-template-columns:24px 1fr auto; gap:8px; padding:3px 0; font-size:15px; }
 .points-leaderboard div b { color:#94a3b8; }.points-leaderboard div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.points-leaderboard div em { color:#86efac; font-style:normal; font-weight:800; }
+.diamond-leaderboard { display:none; }
+.afk .diamond-leaderboard { display:block; position:absolute; right:35px; top:535px; z-index:800; width:310px; padding:12px 14px; background:#08101cdd; border:2px solid #67e8f977; box-shadow:0 0 16px #22d3ee33; }
+.diamond-leaderboard>strong { display:block; margin-bottom:8px; color:#67e8f9; font-size:19px; letter-spacing:1px; }
+.diamond-leaderboard div { display:grid; grid-template-columns:24px 1fr auto; gap:8px; padding:4px 0; font-size:16px; }
+.diamond-leaderboard div b { color:#94a3b8; }.diamond-leaderboard div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.diamond-leaderboard div em { color:#67e8f9; font-style:normal; font-weight:900; }
 .compact .title { display:none; }
 .rain { position:absolute; top:-30px; width:2px; height:22px; --rain-x:-30px; background:#e1f2ffbb; animation:rain .8s linear infinite; }
 .afk .rain { animation-name:rainAfk; }
@@ -114,11 +145,13 @@ html, body { margin:0; width:100%; height:100%; overflow:hidden; background:tran
 @keyframes bob { 50% { transform:translateY(3px) rotate(.5deg); } }
 @keyframes bobLeft { 0%,100% { transform:scaleX(-1) translateY(0) rotate(-.4deg); } 50% { transform:scaleX(-1) translateY(3px) rotate(.5deg); } }
 @keyframes cast { 50% { transform:rotate(-42deg); } }
+@keyframes yachtCast { 0%,100% { transform:rotate(200deg); } 50% { transform:rotate(225deg); } }
 @keyframes compactLine { 0% { height:0; opacity:0; transform:rotate(-18deg); } 22% { height:42px; opacity:1; transform:rotate(7deg); } 68% { height:35px; opacity:1; transform:rotate(-4deg); } 100% { height:0; opacity:0; transform:rotate(-16deg); } }
 @keyframes afkLine { 0% { height:0; opacity:0; transform:rotate(-18deg); } 22% { height:72px; opacity:1; transform:rotate(8deg); } 68% { height:62px; opacity:1; transform:rotate(-5deg); } 100% { height:0; opacity:0; transform:rotate(-16deg); } }
 @keyframes sink { to { transform:translateY(45px) rotate(28deg) scale(.55); opacity:0; } }
 @keyframes celebrate { 20% { transform:translateY(-35px) scale(1.2); } 80% { opacity:1; } to { transform:translateY(-10px); opacity:0; } }
 @keyframes burst { from { transform:scale(.2); opacity:1; } to { transform:scale(2); opacity:0; } }
+@keyframes rocketBlast { 0% { transform:scale(.15); opacity:1; } 45% { transform:scale(2.4); opacity:1; } 100% { transform:scale(3.2); opacity:0; } }
 @keyframes rain { to { transform:translate(-30px,120px); } }
 @keyframes rainAfk { to { transform:translate(var(--rain-x),1150px); } }
 @keyframes swimRight { 0% { left:-130px; top:calc(var(--swim-y) - var(--swim-drift)); } 25% { top:calc(var(--swim-y) + var(--swim-drift)); } 55% { top:var(--swim-y); } 78% { top:calc(var(--swim-y) + var(--swim-drift)); } 100% { left:2050px; top:var(--swim-y); } }

@@ -50,7 +50,7 @@ class FishingServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unlocks at 3,000"):
                 await self.service.set_bait("42", "Nate", "2")
             with self.assertRaisesRegex(ValueError, "Unknown species"):
-                await self.service.set_bait("42", "Nate", "7")
+                await self.service.set_bait("42", "Nate", "10")
         asyncio.run(scenario())
 
     def test_fish_award_points_not_gold_and_unlock_event_only_on_crossing(self):
@@ -85,15 +85,90 @@ class FishingServiceTests(unittest.TestCase):
 
     def test_balancing_tables_match_long_term_thresholds(self):
         from bot.fishing.config import BAITS, BAIT_CATCH_WEIGHTS, BOATS, GUN_CACHE_CHANCE, TREASURE_CHANCE
-        self.assertEqual([bait["unlock"] for bait in BAITS], [0, 3000, 10000, 25000, 50000, 100000])
+        self.assertEqual([bait["unlock"] for bait in BAITS], [0, 3000, 7000, 15000, 25000, 40000, 60000, 85000, 120000])
         self.assertEqual([boat["unlock"] for boat in BOATS], [0, 150, 500, 1250])
         for bait in BAITS:
             weights = BAIT_CATCH_WEIGHTS[bait["id"]]
             self.assertEqual(weights[bait["target"]], 98)
             off_target = sum(weight for species, weight in weights.items() if species != bait["target"])
-            self.assertAlmostEqual(off_target, .25)
+            self.assertAlmostEqual(off_target, .40)
         self.assertAlmostEqual(TREASURE_CHANCE, 1 / 100)
         self.assertAlmostEqual(GUN_CACHE_CHANCE, 1 / 300)
+
+    def test_new_species_have_lures_aliases_and_weather_tuning(self):
+        from bot.fishing.config import BAITS, SPECIES, SPECIES_ALIASES, WEATHER
+        for species in ("trout", "catfish", "sturgeon"):
+            self.assertIn(species, SPECIES)
+            self.assertEqual(SPECIES_ALIASES[species], species)
+            self.assertTrue(any(bait["target"] == species for bait in BAITS))
+            self.assertTrue(all(species in condition["species"] for condition in WEATHER.values()))
+
+    def test_steve_catch_awards_prizes_and_protects_lake_for_hour(self):
+        class SteveCatchRng:
+            def choices(self, population, weights=None, k=1):
+                return ["__steve__"]
+
+        async def scenario():
+            await self.service.set_enabled("42", "Nate", True)
+            await self.service.set_enabled("84", "Fal", True)
+            before = __import__("time").time()
+            with closing(self.service._connect()) as db:
+                row = db.execute("SELECT * FROM anglers WHERE user_id='42'").fetchone()
+                self.service.rng = SteveCatchRng()
+                events = self.service._roll_successful_catch(db, row, "sunny")
+                db.commit()
+                safe_until = float(db.execute("SELECT value FROM fishing_meta WHERE key='steve_safe_until'").fetchone()["value"])
+            angler = await self.service.angler("42")
+            self.assertEqual([event["kind"] for event in events], ["steve_caught"])
+            self.assertEqual(angler["steve_catches"], 1)
+            self.assertEqual(angler["fishing_points"], 1000)
+            self.assertEqual(angler["gold"], 100)
+            self.assertGreaterEqual(safe_until, before + 3599)
+            with closing(self.service._connect()) as db:
+                db.execute("UPDATE anglers SET next_action_at=99999999999")
+                db.execute("UPDATE anglers SET next_action_at=0,steve_immune_until=0 WHERE user_id='84'")
+                db.commit()
+            self.service.rng = random.Random(1)
+            protected_events = await self.service.tick()
+            self.assertNotIn("steve_attack", [event["kind"] for event in protected_events])
+        asyncio.run(scenario())
+
+    def test_mk1220_is_consumed_and_awards_exactly_five_fish(self):
+        async def scenario():
+            await self.service.set_enabled("42", "Nate", True)
+            with closing(self.service._connect()) as db:
+                db.execute("UPDATE anglers SET mk1220=1 WHERE user_id='42'")
+                db.commit()
+            self.service.rng = random.Random(12)
+            events = await self.service.launch_mk1220("42")
+            self.assertEqual(events[0]["kind"], "mk1220_launched")
+            self.assertEqual(len(events[0]["payload"]["catches"]), 5)
+            self.assertTrue(all("species" in fish and "weight" in fish for fish in events[0]["payload"]["catches"]))
+            self.assertEqual(sum(event["kind"] == "catch" for event in events), 5)
+            angler = await self.service.angler("42")
+            self.assertEqual(angler["mk1220"], 0)
+            self.assertEqual(angler["total_catches"], 5)
+        asyncio.run(scenario())
+
+    def test_existing_angler_gold_grant_migration_is_idempotent(self):
+        async def scenario():
+            await self.service.set_enabled("1", "Viewer", True)
+            await self.service.set_enabled("2", "iamdar", True)
+            with closing(self.service._connect()) as db:
+                db.execute("UPDATE anglers SET gold=5,boat_tier=1")
+                db.execute("DELETE FROM fishing_meta WHERE key='gold_grant_2026_v1'")
+                db.commit()
+            restarted = FishingService(self.service.db_path)
+            self.assertEqual((await restarted.angler("1"))["gold"], 150)
+            self.assertEqual((await restarted.angler("1"))["boat_tier"], 2)
+            self.assertEqual((await restarted.angler("2"))["gold"], 1250)
+            self.assertEqual((await restarted.angler("2"))["boat_tier"], 4)
+            with closing(restarted._connect()) as db:
+                db.execute("UPDATE anglers SET gold=2000 WHERE user_id='1'")
+                db.commit()
+            FishingService(self.service.db_path)
+            self.assertEqual((await restarted.angler("1"))["gold"], 2000)
+        asyncio.run(scenario())
 
     def test_ticker_returns_one_record_and_one_personal_summary(self):
         async def scenario():
@@ -142,6 +217,19 @@ class FishingServiceTests(unittest.TestCase):
             "🎣 Nate's biggest catches • Bluegill: 1.8 lb | Largemouth Bass: 7.4 lb",
         )
         self.assertIsNone(FishingCog._personal_records_text({"display_name": "Nate", "species": []}))
+
+    def test_diamond_leaderboard_returns_top_three_positive_totals(self):
+        async def scenario():
+            for user_id, name in (("1", "One"), ("2", "Two"), ("3", "Three"), ("4", "Zero"), ("5", "Five")):
+                await self.service.set_enabled(user_id, name, True)
+            with closing(self.service._connect()) as db:
+                for user_id, species, diamonds in (("1", "bass", 2), ("1", "pike", 3), ("2", "bass", 8), ("3", "bass", 1), ("4", "bass", 0), ("5", "bass", 4)):
+                    db.execute("INSERT INTO species_stats(user_id,species,diamond) VALUES(?,?,?)", (user_id, species, diamonds))
+                db.commit()
+            leaders = await self.service.diamond_leaders()
+            self.assertEqual([(row["display_name"], row["diamond_count"]) for row in leaders], [("Two", 8), ("One", 5), ("Five", 4)])
+            self.assertEqual((await self.service.snapshot())["diamond_leaderboard"], leaders)
+        asyncio.run(scenario())
 
     def test_diamond_tier_is_very_rare_and_weights_match_tier(self):
         service = FishingService(str(Path(self.temp.name) / "rarity.db"), rng=random.Random(7231))
@@ -337,6 +425,10 @@ class FishingRendererContractTests(unittest.TestCase):
         self.assertIn("compactWander", source)
         self.assertIn("medal-badge", source)
         self.assertIn("renderPointsLeaderboard", source)
+        self.assertIn("renderDiamondLeaderboard", source)
+        self.assertIn("mk1220_launched", source)
+        self.assertIn("rocket-blast", source)
+        self.assertIn("p.catches||[]", source)
 
     def test_both_pages_use_shared_renderer(self):
         for name in ("fishing_overlay.html", "fishing_afk_overlay.html"):
@@ -369,6 +461,17 @@ class FishingRendererContractTests(unittest.TestCase):
         self.assertIn("facing-left", renderer)
         self.assertIn("animateFishingLine", renderer)
         self.assertIn("fishing-line", css)
+        self.assertIn("boat-details", renderer)
+        self.assertIn(".boat.tier-3 .boat-details", css)
+        self.assertIn(".boat.tier-4 .boat-details", css)
+        self.assertIn(".boat.tier-3 .boat-art { background:var(--boat-color)", css)
+        self.assertIn(".boat.tier-4 .boat-art { background:var(--boat-color)", css)
+        self.assertNotIn(".boat.tier-4 .boat-art { transform:scale(1.6); background:linear-gradient", css)
+        self.assertIn(".boat.tier-3 .boat-art:before", css)
+        self.assertIn("border-radius:2px", css)
+        self.assertIn(".compact .boat.tier-4 .person { left:14px", css)
+        self.assertIn(".boat.tier-4.fishing .rod", css)
+        self.assertIn("@keyframes yachtCast", css)
         self.assertIn("pathHitsIsland", renderer)
         self.assertIn("moveBoatTo", renderer)
         self.assertIn("centralIsland", renderer)

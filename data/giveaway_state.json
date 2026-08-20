@@ -1,22 +1,17 @@
 {
   "is_open": false,
-  "prize": "KISS War Chest",
-  "entry_phrase": "!roefart",
+  "prize": "war chest",
+  "entry_phrase": "!throat",
   "entrants": [
     "fal_the_warlock",
-    "livesuieng",
+    "snipah201z",
     "nate048",
-    "hoplon5",
-    "tankahdelphia",
     "deputydawg777",
-    "littlewoodv1",
-    "popeonice",
-    "hannahmaria1995",
-    "desktoppilotsociety"
+    "livesuieng"
   ],
-  "winner": "tankahdelphia",
-  "draw_id": 4,
-  "opened_at": "2026-08-13T02:49:22.657458+00:00",
-  "closed_at": "2026-08-13T03:14:56.677196+00:00",
-  "updated_at": "2026-08-13T03:18:45.975384+00:00"
+  "winner": "nate048",
+  "draw_id": 12,
+  "opened_at": "2026-08-19T04:19:53.133823+00:00",
+  "closed_at": "2026-08-19T04:56:34.717357+00:00",
+  "updated_at": "2026-08-19T04:56:37.591418+00:00"
 }

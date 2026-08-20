@@ -16,6 +16,7 @@ API_BASE = "https://api.twitch.tv/helix"
 POLL_SECONDS = 15
 WARNING_INTERVAL_SECONDS = 300
 FOLLOW_BONUS_ENTRIES = 10
+MAX_WELCOMED_CHATTERS = 5000
 STATE_FILE = Path(__file__).resolve().parents[2] / "data" / "new_follower_state.json"
 
 
@@ -36,26 +37,34 @@ def _prize_text(amount):
 
 
 def follower_message(username, prize_amount, raffle_open, variant):
-    """Build one of four conversational welcome messages."""
+    """Build one of four concise follow-conversion messages."""
     mention = f"@{str(username).strip().lstrip('@')}"
     prize = _prize_text(prize_amount)
-    action = "Try" if raffle_open else "When the raffle opens, try"
+    if raffle_open:
+        messages = (
+            f"Thanks for the follow, {mention}! Your FNG kit includes 10 free entries toward {prize}. Put them in play with !raffle random all. Glad you're here!",
+            f"{mention}, follow confirmed! We added 10 free entries for {prize}. Use !raffle random all whenever you're ready. Welcome to the crew!",
+            f"Welcome aboard, {mention}! Following unlocked 10 free entries toward {prize}. One command gets you playing: !raffle random all.",
+            f"FNG kit delivered to {mention}: 10 free entries for {prize}. Try !raffle random all to use them automatically. Thanks for following!",
+        )
+    else:
+        messages = (
+            f"Thanks for the follow, {mention}! Your FNG kit has 10 free entries banked for {prize}. While the raffle is closed, launch a boat with !fish join.",
+            f"{mention}, follow confirmed! Your 10 free entries are waiting for the next raffle. For now, try !fish join and head onto MeanGene Lake.",
+            f"Welcome aboard, {mention}! We banked 10 free entries for {prize}. The raffle is closed, but !fish join is ready now.",
+            f"FNG kit delivered to {mention}: 10 free entries for the next raffle. In the meantime, use !fish join to launch your boat.",
+        )
+    return messages[int(variant) % len(messages)]
+
+
+def first_chatter_message(username, variant):
+    """Give a first-time chatter one easy action and one conversational hook."""
+    mention = f"@{str(username).strip().lstrip('@')}"
     messages = (
-        f"Welcome in, {mention}! Thanks for the follow. You're officially today's FNG: Friendly New Guy. "
-        f"You received 10 free raffle entries, and the prize is {prize}. {action} !raffle random all "
-        f"to pick automatically or !raffle pick 123 456 to choose your own. Where are you joining us from?",
-
-        f"Hey {mention}, thanks for the follow! You're our newest FNG with 10 free entries toward {prize}. "
-        f"{action} !raffle random all for automatic picks or !raffle pick 123 456 to choose your own. "
-        f"Use !raffle picks to see your numbers. What games have you been playing lately?",
-
-        f"{mention} has entered the chat! Welcome to the crew. We started you with 10 free entries, and the "
-        f"prize is {prize}. {action} !raffle random all or choose numbers with !raffle pick 123 456. "
-        f"Use !raffle entries to check unused entries. What game could you replay forever?",
-
-        f"Welcome, {mention}! Your FNG package includes 10 free entries for {prize}. {action} !raffle random all "
-        f"or !raffle pick 123 456, then use !raffle picks to see your numbers. Important question: which video "
-        f"game has the best soundtrack?",
+        f"Welcome in, {mention}! Great first message. Grab a boat with !fish join—what have you been playing lately?",
+        f"Hey {mention}, welcome to the crew! Your first mission is easy: try !fish join. What game could you replay forever?",
+        f"Glad you spoke up, {mention}! Launch onto MeanGene Lake with !fish join. What brought you into the stream today?",
+        f"First message spotted—welcome, {mention}! Try !fish join for a free boat. Important question: which game has the best soundtrack?",
     )
     return messages[int(variant) % len(messages)]
 
@@ -84,10 +93,12 @@ class NewFollowerCog(commands.Cog):
                     "initialized": bool(data.get("initialized")),
                     "handled_events": list(data.get("handled_events") or [])[-1000:],
                     "next_variant": int(data.get("next_variant") or 0) % 4,
+                    "welcomed_chatters": list(data.get("welcomed_chatters") or [])[-MAX_WELCOMED_CHATTERS:],
+                    "next_chatter_variant": int(data.get("next_chatter_variant") or 0) % 4,
                 }
         except (OSError, ValueError, TypeError):
             pass
-        return {"initialized": False, "handled_events": [], "next_variant": 0}
+        return {"initialized": False, "handled_events": [], "next_variant": 0, "welcomed_chatters": [], "next_chatter_variant": 0}
 
     def _save_state(self):
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -161,7 +172,38 @@ class NewFollowerCog(commands.Cog):
         self._remember_event(event_key)
         await channel.send(message[:500])
         self.state["next_variant"] = (self.state["next_variant"] + 1) % 4
+        self._save_state()
         return True
+
+    async def _handle_first_chatter(self, message):
+        author = getattr(message, "author", None)
+        channel = getattr(message, "channel", None)
+        if not author or not channel or getattr(message, "echo", False):
+            return False
+        username = str(getattr(author, "display_name", None) or getattr(author, "name", "")).strip()
+        user_id = str(getattr(author, "id", None) or getattr(author, "name", "")).casefold()
+        if not username or not user_id:
+            return False
+        welcomed = self.state.setdefault("welcomed_chatters", [])
+        if user_id in welcomed:
+            return False
+        variant = int(self.state.setdefault("next_chatter_variant", 0)) % 4
+        # Persist before chat I/O so reconnects or send failures cannot spam a newcomer.
+        welcomed.append(user_id)
+        self.state["welcomed_chatters"] = welcomed[-MAX_WELCOMED_CHATTERS:]
+        self.state["next_chatter_variant"] = (variant + 1) % 4
+        self._save_state()
+        await channel.send(first_chatter_message(username, variant))
+        LOGGER.info("Welcomed first-time chatter @%s", username)
+        return True
+
+    @commands.Cog.event()
+    async def event_message(self, message):
+        if getattr(message, "first", False):
+            try:
+                await self._handle_first_chatter(message)
+            except Exception:
+                LOGGER.exception("First-time chatter welcome failed")
 
     async def _poll_once(self):
         channels = list(getattr(self.bot, "connected_channels", None) or [])

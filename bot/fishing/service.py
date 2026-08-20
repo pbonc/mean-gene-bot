@@ -13,10 +13,11 @@ from typing import Awaitable, Callable
 
 from .config import (
     BAITS, BAIT_CATCH_WEIGHTS, BOATS, CHEST_TIERS,
-    GUN_CACHE_CHANCE,
+    GUN_CACHE_CHANCE, MK1220_CATCH_CHANCE,
     JUNK_CATCHES, LAKE_RECORD_BONUS, MEDAL_MULTIPLIERS, PALETTE,
     PERSONAL_BEST_BONUS, PLAYER_SINK_REPAIR_SECONDS, SPECIES, SPECIES_ALIASES, TIER_CHANCES,
-    STEVE_ATTACK_CHANCE, STEVE_JOIN_IMMUNITY_SECONDS,
+    STEVE_ATTACK_CHANCE, STEVE_CATCH_CHANCE, STEVE_CATCH_GOLD, STEVE_CATCH_POINTS,
+    STEVE_JOIN_IMMUNITY_SECONDS, STEVE_SAFE_SECONDS,
     STEVE_REPAIR_MAX_SECONDS, STEVE_REPAIR_MIN_SECONDS,
     TREASURE_CHANCE, WEATHER,
 )
@@ -52,7 +53,8 @@ class FishingService:
               gold INTEGER NOT NULL DEFAULT 0, fishing_points INTEGER NOT NULL DEFAULT 0, boat_tier INTEGER NOT NULL DEFAULT 1,
               boat_color TEXT NOT NULL, shirt_color TEXT NOT NULL, active_bait TEXT NOT NULL DEFAULT 'worms',
               sink_tokens INTEGER NOT NULL DEFAULT 0, total_catches INTEGER NOT NULL DEFAULT 0,
-              steve_strikes INTEGER NOT NULL DEFAULT 0,
+              steve_strikes INTEGER NOT NULL DEFAULT 0, steve_catches INTEGER NOT NULL DEFAULT 0,
+              mk1220 INTEGER NOT NULL DEFAULT 0,
               total_weight REAL NOT NULL DEFAULT 0, cooldown_until REAL, cooldown_reason TEXT,
               next_action_at REAL, deployment_until REAL, steve_immune_until REAL,
               last_chat_at REAL, away_since REAL, created_at REAL NOT NULL, updated_at REAL NOT NULL
@@ -74,6 +76,7 @@ class FishingService:
             db.execute("INSERT OR IGNORE INTO fishing_meta(key,value) VALUES('weather_changed_at',?)", (str(time.time()),))
             db.execute("INSERT OR IGNORE INTO fishing_meta(key,value) VALUES('enabled','1')")
             db.execute("INSERT OR IGNORE INTO fishing_meta(key,value) VALUES('steve_last_target','')")
+            db.execute("INSERT OR IGNORE INTO fishing_meta(key,value) VALUES('steve_safe_until','0')")
             previous_target = db.execute("SELECT value FROM fishing_meta WHERE key='steve_last_target'").fetchone()
             initial_history = [previous_target["value"]] if previous_target and previous_target["value"] else []
             db.execute(
@@ -93,12 +96,21 @@ class FishingService:
                 db.execute("ALTER TABLE anglers ADD COLUMN last_chat_at REAL")
             if "away_since" not in columns:
                 db.execute("ALTER TABLE anglers ADD COLUMN away_since REAL")
+            if "steve_catches" not in columns:
+                db.execute("ALTER TABLE anglers ADD COLUMN steve_catches INTEGER NOT NULL DEFAULT 0")
+            if "mk1220" not in columns:
+                db.execute("ALTER TABLE anglers ADD COLUMN mk1220 INTEGER NOT NULL DEFAULT 0")
             migrated = db.execute("SELECT value FROM fishing_meta WHERE key='currency_split_v1'").fetchone()
             if not migrated:
                 # Pre-split builds incorrectly stored fish points in gold. Preserve
                 # that progress as points and restart treasure-only lifetime gold.
                 db.execute("UPDATE anglers SET fishing_points=gold, gold=0, boat_tier=1")
                 db.execute("INSERT INTO fishing_meta(key,value) VALUES('currency_split_v1','1')")
+            gold_grant = db.execute("SELECT value FROM fishing_meta WHERE key='gold_grant_2026_v1'").fetchone()
+            if not gold_grant:
+                db.execute("UPDATE anglers SET gold=max(gold,150),boat_tier=max(boat_tier,2) WHERE lower(display_name)!='iamdar'")
+                db.execute("UPDATE anglers SET gold=max(gold,1250),boat_tier=4 WHERE lower(display_name)='iamdar'")
+                db.execute("INSERT INTO fishing_meta(key,value) VALUES('gold_grant_2026_v1','1')")
             db.commit()
 
     def set_broadcaster(self, broadcaster: Broadcaster):
@@ -355,6 +367,34 @@ class FishingService:
         await self._emit(event, snapshot=True)
         return event
 
+    async def launch_mk1220(self, user_id: str):
+        if not await self.is_powered_on():
+            raise ValueError("MeanGene Lake is currently powered off.")
+        async with self._lock:
+            with closing(self._connect()) as db:
+                angler = db.execute(
+                    "SELECT * FROM anglers WHERE user_id=? AND opted_in=1 AND away_since IS NULL",
+                    (user_id,),
+                ).fetchone()
+                if not angler or (angler["cooldown_until"] and angler["cooldown_until"] > time.time()):
+                    raise ValueError("Your boat is not currently on the lake.")
+                if angler["mk1220"] < 1:
+                    raise ValueError("You do not have a Mk. 1220 rocket.")
+                db.execute("UPDATE anglers SET mk1220=mk1220-1 WHERE user_id=?", (user_id,))
+                catch_events = []
+                for _ in range(5):
+                    current = db.execute("SELECT * FROM anglers WHERE user_id=?", (user_id,)).fetchone()
+                    catch_events.extend(self._award_species_catch(db, current, self.rng.choice(list(SPECIES)), special="mk1220"))
+                catches = [
+                    {"species": event["payload"]["species_name"], "weight": event["payload"]["weight"]}
+                    for event in catch_events if event["kind"] == "catch"
+                ]
+                events = [self._event("mk1220_launched", user_id=user_id, display_name=angler["display_name"], catches=catches)] + catch_events
+                db.commit()
+        for index, event in enumerate(events):
+            await self._emit(event, snapshot=index == len(events) - 1)
+        return events
+
     async def tick(self):
         now = time.time()
         events = []
@@ -375,12 +415,14 @@ class FishingService:
                     events.append(self._event("angler_redeployed", **dict(row)))
                 due = db.execute("SELECT * FROM anglers WHERE opted_in=1 AND away_since IS NULL AND (cooldown_until IS NULL OR cooldown_until<=?) AND next_action_at<=? ORDER BY next_action_at LIMIT 4", (now, now)).fetchall()
                 recent_targets_row = db.execute("SELECT value FROM fishing_meta WHERE key='steve_recent_targets'").fetchone()
+                safe_row = db.execute("SELECT value FROM fishing_meta WHERE key='steve_safe_until'").fetchone()
+                steve_safe_until = float(safe_row["value"] or 0) if safe_row else 0
                 try:
                     recent_steve_targets = list(json.loads(recent_targets_row["value"]))[-2:] if recent_targets_row else []
                 except (TypeError, ValueError, json.JSONDecodeError):
                     recent_steve_targets = []
                 for row in due:
-                    steve_eligible = not row["steve_immune_until"] or row["steve_immune_until"] <= now
+                    steve_eligible = now >= steve_safe_until and (not row["steve_immune_until"] or row["steve_immune_until"] <= now)
                     steve_target_allowed = row["user_id"] not in recent_steve_targets
                     if steve_eligible and steve_target_allowed and self.rng.random() < STEVE_ATTACK_CHANCE:
                         until = now + self.rng.uniform(STEVE_REPAIR_MIN_SECONDS, STEVE_REPAIR_MAX_SECONDS)
@@ -392,7 +434,10 @@ class FishingService:
                         activity = "cruising" if self.rng.random() < .32 else "casting"
                         events.append(self._event("angler_activity", user_id=row["user_id"], display_name=row["display_name"], activity=activity))
                         if activity == "casting":
-                            events.extend(self._roll_catch(db, row, weather))
+                            catch_events = self._roll_catch(db, row, weather)
+                            events.extend(catch_events)
+                            if any(event["kind"] == "steve_caught" for event in catch_events):
+                                steve_safe_until = now + STEVE_SAFE_SECONDS
                         db.execute("UPDATE anglers SET next_action_at=? WHERE user_id=?", (now + self.rng.uniform(12, 25), row["user_id"]))
                 db.commit()
         for event in events:
@@ -429,8 +474,10 @@ class FishingService:
         remaining = max(0.0, 100.0 - sum(fish_weights.values()))
         treasure_weight = TREASURE_CHANCE * 100
         cache_weight = GUN_CACHE_CHANCE * 100
-        choices.extend(("__treasure__", "__cache__", "__junk__"))
-        weights.extend((treasure_weight, cache_weight, max(.01, remaining - treasure_weight - cache_weight)))
+        steve_weight = STEVE_CATCH_CHANCE * 100
+        rocket_weight = MK1220_CATCH_CHANCE * 100
+        choices.extend(("__treasure__", "__cache__", "__steve__", "__mk1220__", "__junk__"))
+        weights.extend((treasure_weight, cache_weight, steve_weight, rocket_weight, max(.01, remaining - treasure_weight - cache_weight - steve_weight - rocket_weight)))
         outcome = self.rng.choices(choices, weights=weights, k=1)[0]
         common = {"user_id": angler["user_id"], "display_name": angler["display_name"], "second_line": second_line}
         if outcome == "__treasure__":
@@ -448,9 +495,31 @@ class FishingService:
         if outcome == "__cache__":
             db.execute("UPDATE anglers SET sink_tokens=sink_tokens+1 WHERE user_id=?", (angler["user_id"],))
             return [self._event("gun_cache", **common)]
+        if outcome == "__steve__":
+            old_gold = angler["gold"]
+            new_gold = old_gold + STEVE_CATCH_GOLD
+            old_tier = angler["boat_tier"]
+            new_tier = max(b["tier"] for b in BOATS if new_gold >= b["unlock"])
+            safe_until = time.time() + STEVE_SAFE_SECONDS
+            db.execute(
+                "UPDATE anglers SET fishing_points=fishing_points+?,gold=?,boat_tier=?,steve_catches=steve_catches+1 WHERE user_id=?",
+                (STEVE_CATCH_POINTS, new_gold, new_tier, angler["user_id"]),
+            )
+            db.execute("INSERT OR REPLACE INTO fishing_meta(key,value) VALUES('steve_safe_until',?)", (str(safe_until),))
+            events = [self._event("steve_caught", **common, points=STEVE_CATCH_POINTS, gold=STEVE_CATCH_GOLD, safe_until=safe_until)]
+            if new_tier > old_tier:
+                events.append(self._event("boat_unlocked", **common, boat_tier=new_tier, boat_name=BOATS[new_tier - 1]["name"]))
+            return events
+        if outcome == "__mk1220__":
+            db.execute("UPDATE anglers SET mk1220=mk1220+1 WHERE user_id=?", (angler["user_id"],))
+            return [self._event("mk1220_caught", **common)]
         if outcome == "__junk__":
             return [self._event("junk", **common, item=self.rng.choice(JUNK_CATCHES))]
-        species = outcome
+        return self._award_species_catch(db, angler, outcome, second_line=second_line, bait=bait)
+
+    def _award_species_catch(self, db, angler, species, second_line=False, bait=None, special=None):
+        bait = bait or next((b for b in BAITS if b["id"] == angler["active_bait"]), BAITS[0])
+        common = {"user_id": angler["user_id"], "display_name": angler["display_name"], "second_line": second_line}
         cfg = SPECIES[species]
         tier, weight = self._roll_tier_and_weight(cfg)
         stats = db.execute("SELECT personal_best FROM species_stats WHERE user_id=? AND species=?", (angler["user_id"], species)).fetchone()
@@ -471,7 +540,7 @@ class FishingService:
         target_bait = next(b for b in BAITS if b["target"] == species)
         accidental_locked = old_points < target_bait["unlock"]
         db.execute("UPDATE anglers SET fishing_points=?,total_catches=total_catches+1,total_weight=total_weight+? WHERE user_id=?", (new_points, weight, angler["user_id"]))
-        events = [self._event("catch", **common, species=species, species_name=cfg["name"], weight=weight, tier=tier, points=points, total_points=new_points, personal_best=personal_best, lake_record=lake_record, bait=bait["id"], bait_label=bait["label"], accidental_locked=accidental_locked)]
+        events = [self._event("catch", **common, species=species, species_name=cfg["name"], weight=weight, tier=tier, points=points, total_points=new_points, personal_best=personal_best, lake_record=lake_record, bait=bait["id"], bait_label=bait["label"], accidental_locked=accidental_locked, special=special)]
         for unlocked in BAITS:
             if old_points < unlocked["unlock"] <= new_points:
                 events.append(self._event("bait_unlocked", **common, bait=unlocked["id"], bait_label=unlocked["label"], species=unlocked["target"], species_name=SPECIES[unlocked["target"]]["name"], threshold=unlocked["unlock"]))
@@ -519,12 +588,28 @@ class FishingService:
                     """SELECT user_id,display_name,fishing_points FROM anglers
                        ORDER BY fishing_points DESC, lower(display_name) LIMIT 10"""
                 )]
+                diamond_leaderboard = [dict(r) for r in db.execute(
+                    """SELECT a.user_id,a.display_name,SUM(s.diamond) diamond_count
+                       FROM anglers a JOIN species_stats s ON s.user_id=a.user_id
+                       GROUP BY a.user_id,a.display_name HAVING SUM(s.diamond)>0
+                       ORDER BY diamond_count DESC, lower(a.display_name) LIMIT 3"""
+                )]
         boosted_species = [
             SPECIES[species]["name"]
             for species, multiplier in sorted(WEATHER[weather]["species"].items(), key=lambda item: item[1], reverse=True)
             if multiplier > 1.0
         ]
-        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records, "points_leaderboard": points_leaderboard}
+        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records, "points_leaderboard": points_leaderboard, "diamond_leaderboard": diamond_leaderboard}
+
+    async def diamond_leaders(self):
+        async with self._lock:
+            with closing(self._connect()) as db:
+                return [dict(r) for r in db.execute(
+                    """SELECT a.user_id,a.display_name,SUM(s.diamond) diamond_count
+                       FROM anglers a JOIN species_stats s ON s.user_id=a.user_id
+                       GROUP BY a.user_id,a.display_name HAVING SUM(s.diamond)>0
+                       ORDER BY diamond_count DESC, lower(a.display_name) LIMIT 3"""
+                )]
 
     async def angler(self, user_id: str):
         async with self._lock:

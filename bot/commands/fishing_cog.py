@@ -44,6 +44,8 @@ class FishingCog(commands.Cog):
     @staticmethod
     def _chat_alert(event):
         p, kind = event["payload"], event["kind"]
+        if kind == "catch" and p.get("special") == "mk1220":
+            return None
         if kind == "bait_unlocked":
             return f"🎣 {p['display_name']} unlocked {p['bait_label']}! {p['species_name']} can now be targeted with !fish bait {p['species']}"
         if kind == "boat_unlocked":
@@ -60,6 +62,13 @@ class FishingCog(commands.Cog):
             return f"💰 {p['display_name']} found a treasure chest worth {p['gold']} gold."
         if kind == "gun_cache":
             return f"📦 {p['display_name']} found a mysterious cache from a boating accident and gained a !fish sink token."
+        if kind == "steve_caught":
+            return f"🦈🎣 {p['display_name']} CAUGHT STEVE! +{p['points']:,} Fishing Points, +{p['gold']} gold. The lake is safe from Steve for 1 hour!"
+        if kind == "mk1220_caught":
+            return f"🚀 {p['display_name']} hauled up a giant Mk. 1220 rocket! Fire it with !fish 1220."
+        if kind == "mk1220_launched":
+            catches = " | ".join(f"{fish['weight']:.1f} lb {fish['species']}" for fish in p["catches"])
+            return f"💥 {p['display_name']}'s Mk. 1220 caught: {catches}"
         if kind == "steve_attack":
             return f"🦈 Steve destroyed {p['display_name']}'s boat. Repairs underway."
         if kind == "boat_sunk":
@@ -190,6 +199,9 @@ class FishingCog(commands.Cog):
                 # The service event is formatted once by _publish for chat and both renderers.
                 await self.service.sink(user_id, rest[0])
                 return
+            if sub == "1220":
+                await self.service.launch_mk1220(user_id)
+                return
             if sub in ("records", "record"):
                 if sub == "records" and rest and rest[0].startswith("@"):
                     target = await self.service.angler_by_name(rest[0])
@@ -205,6 +217,15 @@ class FishingCog(commands.Cog):
                     return await ctx.send("No matching lake record yet.")
                 text = " | ".join(f"{SPECIES[r['species']]['name']}: {r['weight']:.1f} lb ({r['display_name']})" for r in records)
                 return await ctx.send("🏆 " + text[:450])
+            if sub == "diamonds":
+                leaders = await self.service.diamond_leaders()
+                if not leaders:
+                    return await ctx.send("💎 No Diamond fish have been caught yet.")
+                ranking = " | ".join(
+                    f"{index}. {row['display_name']} — {row['diamond_count']:,}"
+                    for index, row in enumerate(leaders, 1)
+                )
+                return await ctx.send("💎 Diamond leaders: " + ranking)
             if sub == "stats":
                 target = await (self.service.angler_by_name(rest[0]) if rest and rest[0].startswith("@") else self.service.angler(user_id))
                 species_arg = " ".join(rest[1:] if rest and rest[0].startswith("@") else rest)
@@ -216,7 +237,7 @@ class FishingCog(commands.Cog):
                     if not stat:
                         return await ctx.send("No catches recorded for that species.")
                     return await ctx.send(f"🎣 {target['display_name']} — {SPECIES[sid]['name']}: {stat['catches']} catches, biggest {stat['personal_best']:.1f} lb; medals: Bronze {stat['bronze']}, Silver {stat['silver']}, Gold {stat['gold']}, Diamond {stat['diamond']}.")
-                return await ctx.send(f"🎣 {target['display_name']}: {target['total_catches']} catches, {target['fishing_points']:,} Fishing Points, {target['gold']} lifetime gold, tier {target['boat_tier']} {BOATS[target['boat_tier']-1]['name']}, {target['sink_tokens']} sink token(s), {target['steve_strikes']} Steve strike(s).")
+                return await ctx.send(f"🎣 {target['display_name']}: {target['total_catches']} fish, {target['fishing_points']:,} Fishing Points, {target['gold']} lifetime gold, tier {target['boat_tier']} {BOATS[target['boat_tier']-1]['name']}, {target['steve_catches']} Steve catch(es), {target['steve_strikes']} Steve strike(s), {target['mk1220']} Mk. 1220 rocket(s), {target['sink_tokens']} sink token(s).")
             if sub == "boat":
                 row = await self.service.angler(user_id)
                 if not row:
@@ -224,7 +245,7 @@ class FishingCog(commands.Cog):
                 next_boat = next((b for b in BOATS if b["tier"] > row["boat_tier"]), None)
                 suffix = f" Next: {next_boat['name']} at {next_boat['unlock']} gold." if next_boat else " Max boat unlocked."
                 return await ctx.send(f"🚤 @{name}: {BOATS[row['boat_tier']-1]['name']}, {row['gold']} gold.{suffix}")
-            return await ctx.send("🎣 !fish join|stop|move|GPS|status|bait [species]|boat|boatcolor #RRGGBB|shirt #RRGGBB|sink @user|stats [@user] [species]|records [@user]|record <species> • Mods: !fish on|off")
+            return await ctx.send("🎣 !fish join|stop|move|GPS|status|bait [species]|boat|boatcolor #RRGGBB|shirt #RRGGBB|sink @user|1220|stats [@user] [species]|records [@user]|record <species>|diamonds • Mods: !fish on|off")
         except ValueError as exc:
             await ctx.send(f"🎣 {exc}")
 
