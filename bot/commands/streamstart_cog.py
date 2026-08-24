@@ -55,6 +55,11 @@ class StreamStartCog(commands.Cog):
             return
 
         async with self._start_lock:
+            coup_cog = self.bot.get_cog("CoupCog")
+            if coup_cog is not None:
+                coup_cog.service.begin_stream()
+                await coup_cog.publish()
+
             # Restart rather than merely start so crash-persisted ZAP state cannot block it.
             raffle_cog.state.stop_zap()
             zap_success, _ = raffle_cog.state.start_zap(ZAP_MINUTES)

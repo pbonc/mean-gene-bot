@@ -201,6 +201,40 @@ class FishingServiceTests(unittest.TestCase):
         self.assertIn("New PB", alert)
         self.assertIn("NEW LAKE RECORD", alert)
 
+    def test_chat_alerts_only_unlocks_diamonds_personal_bests_and_lake_records(self):
+        from bot.commands.fishing_cog import FishingCog
+
+        ordinary = FishingService._event(
+            "catch", display_name="Nate", species_name="Bass", weight=7.2,
+            bait_label="Minnows", tier="gold", points=500,
+            personal_best=False, lake_record=False, accidental_locked=False,
+        )
+        self.assertIsNone(FishingCog._chat_alert(ordinary))
+        for kind, payload in (
+            ("treasure", {"display_name": "Nate", "gold": 10}),
+            ("steve_caught", {"display_name": "Nate", "points": 1000, "gold": 100}),
+            ("angler_returned", {"display_name": "Nate"}),
+        ):
+            self.assertIsNone(FishingCog._chat_alert(FishingService._event(kind, **payload)))
+
+        diamond = dict(ordinary)
+        diamond["payload"] = dict(ordinary["payload"], tier="diamond")
+        self.assertIn("Diamond", FishingCog._chat_alert(diamond))
+
+    def test_mk1220_chat_summary_is_compact_unless_catch_is_noteworthy(self):
+        from bot.commands.fishing_cog import FishingCog
+
+        plain = FishingService._event("mk1220_launched", display_name="Nate", catches=[
+            {"species": "Bass", "weight": 7.2, "tier": "gold", "personal_best": False, "lake_record": False}
+        ] * 5)
+        self.assertEqual("💥 Nate fired a Mk. 1220 and caught 5 fish.", FishingCog._chat_alert(plain))
+        notable = FishingService._event("mk1220_launched", display_name="Nate", catches=[
+            {"species": "Walleye", "weight": 12.3, "tier": "diamond", "personal_best": True, "lake_record": True}
+        ])
+        alert = FishingCog._chat_alert(notable)
+        self.assertIn("12.3 lb Walleye", alert); self.assertIn("Diamond", alert)
+        self.assertIn("PB", alert); self.assertIn("LR", alert)
+
     def test_personal_records_lists_each_species_biggest_catch(self):
         from bot.commands.fishing_cog import FishingCog
 
@@ -229,6 +263,24 @@ class FishingServiceTests(unittest.TestCase):
             leaders = await self.service.diamond_leaders()
             self.assertEqual([(row["display_name"], row["diamond_count"]) for row in leaders], [("Two", 8), ("One", 5), ("Five", 4)])
             self.assertEqual((await self.service.snapshot())["diamond_leaderboard"], leaders)
+        asyncio.run(scenario())
+
+    def test_big_screen_separates_iamdar_from_competitive_leaderboards(self):
+        async def scenario():
+            await self.service.set_enabled("dar", "iAmDar", True)
+            await self.service.set_enabled("42", "Nate", True)
+            with closing(self.service._connect()) as db:
+                db.execute("UPDATE anglers SET fishing_points=9999 WHERE user_id='dar'")
+                db.execute("UPDATE anglers SET fishing_points=500 WHERE user_id='42'")
+                db.execute("INSERT INTO species_stats(user_id,species,diamond) VALUES('dar','bass',12)")
+                db.execute("INSERT INTO species_stats(user_id,species,diamond) VALUES('42','bass',2)")
+                db.commit()
+            snapshot = await self.service.snapshot()
+            self.assertEqual("iAmDar", snapshot["iamdar_stats"]["display_name"])
+            self.assertEqual(9999, snapshot["iamdar_stats"]["fishing_points"])
+            self.assertEqual(12, snapshot["iamdar_stats"]["diamond_count"])
+            self.assertNotIn("iamdar", [row["display_name"].casefold() for row in snapshot["points_leaderboard"]])
+            self.assertNotIn("iamdar", [row["display_name"].casefold() for row in snapshot["diamond_leaderboard"]])
         asyncio.run(scenario())
 
     def test_diamond_tier_is_very_rare_and_weights_match_tier(self):
@@ -426,6 +478,8 @@ class FishingRendererContractTests(unittest.TestCase):
         self.assertIn("medal-badge", source)
         self.assertIn("renderPointsLeaderboard", source)
         self.assertIn("renderDiamondLeaderboard", source)
+        self.assertIn("renderDarFishingStats", source)
+        self.assertIn("withoutDar", source)
         self.assertIn("mk1220_launched", source)
         self.assertIn("rocket-blast", source)
         self.assertIn("p.catches||[]", source)
@@ -441,6 +495,11 @@ class FishingRendererContractTests(unittest.TestCase):
         renderer = Path("bot/overlay_static/fishing/fishing.js").read_text(encoding="utf-8")
         self.assertIn('id="scenery"', page)
         self.assertIn('id="ambient"', page)
+        self.assertIn('id="darFishingStats"', page)
+        self.assertIn(".dar-fishing-stats", css)
+        self.assertIn(".afk .power-status { display:flex; position:absolute; right:35px; top:130px; z-index:800; width:310px; min-width:0", css)
+        self.assertIn(".afk .dar-fishing-stats { display:block; position:absolute; right:35px; top:255px; z-index:800; width:310px", css)
+        self.assertIn(".afk .points-leaderboard { display:block; position:absolute; right:35px; top:345px; z-index:800; width:310px", css)
         for token in ("fish-silhouette", "duck-ambient", "weather-cloud", "boathouse", "star"):
             self.assertIn(token, css)
         self.assertIn("clip-path:polygon", css)

@@ -53,32 +53,21 @@ class FishingCog(commands.Cog):
                 return f"🛳️ {p['display_name'].upper()} HAS ACQUIRED A YACHT."
             icon = "🛥️" if p["boat_tier"] == 3 else "🚤"
             return f"{icon} {p['display_name']} unlocked the {p['boat_name']}!"
-        if kind == "catch" and p.get("accidental_locked") and not (p["personal_best"] or p["lake_record"]):
-            return f"😳 {p['display_name']} somehow caught a {p['weight']:.1f} lb {p['species_name']} on {p['bait_label'].upper()}."
-        if kind == "catch" and (p["tier"] != "bronze" or p["personal_best"] or p["lake_record"]):
+        if kind == "catch" and (p.get("tier") == "diamond" or p.get("personal_best") or p.get("lake_record")):
             tags = " • ".join(x for x in ("New PB" if p["personal_best"] else "", "NEW LAKE RECORD" if p["lake_record"] else "") if x)
             return f"🎣 {p['display_name']} caught a {p['weight']:.1f} lb {p['tier'].title()} {p['species_name']} • +{p['points']} Fishing Points" + (f" • {tags}" if tags else "")
-        if kind == "treasure":
-            return f"💰 {p['display_name']} found a treasure chest worth {p['gold']} gold."
-        if kind == "gun_cache":
-            return f"📦 {p['display_name']} found a mysterious cache from a boating accident and gained a !fish sink token."
-        if kind == "steve_caught":
-            return f"🦈🎣 {p['display_name']} CAUGHT STEVE! +{p['points']:,} Fishing Points, +{p['gold']} gold. The lake is safe from Steve for 1 hour!"
-        if kind == "mk1220_caught":
-            return f"🚀 {p['display_name']} hauled up a giant Mk. 1220 rocket! Fire it with !fish 1220."
         if kind == "mk1220_launched":
-            catches = " | ".join(f"{fish['weight']:.1f} lb {fish['species']}" for fish in p["catches"])
-            return f"💥 {p['display_name']}'s Mk. 1220 caught: {catches}"
-        if kind == "steve_attack":
-            return f"🦈 Steve destroyed {p['display_name']}'s boat. Repairs underway."
-        if kind == "boat_sunk":
-            return f"💥 {p['attacker']} sank {p['display_name']}'s boat. Hull repairs will take 2 minutes."
-        if kind == "angler_left" and p.get("reason") == "session_complete":
-            return f"🎣 {p['display_name']} leaves MeanGene Lake for now. Use !fish join to head back out."
-        if kind == "angler_inactive":
-            return f"🚤 {p['display_name']} left the lake — {p['reason']}."
-        if kind == "angler_returned":
-            return f"🎣 Welcome back to the lake, {p['display_name']}! Your boat is heading back out."
+            noteworthy = [fish for fish in p.get("catches", []) if fish.get("tier") == "diamond" or fish.get("personal_best") or fish.get("lake_record")]
+            if not noteworthy:
+                return f"💥 {p['display_name']} fired a Mk. 1220 and caught 5 fish."
+            details = " | ".join(
+                f"{fish['weight']:.1f} lb {fish['species']}"
+                + (" ♦ Diamond" if fish.get("tier") == "diamond" else "")
+                + (" • PB" if fish.get("personal_best") else "")
+                + (" • LR" if fish.get("lake_record") else "")
+                for fish in noteworthy
+            )
+            return f"💥 {p['display_name']}'s Mk. 1220 caught 5 fish • {details}"
         return None
 
     @staticmethod

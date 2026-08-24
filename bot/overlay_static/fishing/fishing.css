@@ -123,17 +123,22 @@ html, body { margin:0; width:100%; height:100%; overflow:hidden; background:tran
 .compact .firework { font-size:18px; }
 .afk .title { position:absolute; right:35px; top:30px; z-index:800; background:#08101cbc; border:2px solid #ffffff2a; padding:12px 16px; text-align:right; font-size:34px; }
 .power-status { display:none; }
-.afk .power-status { display:flex; position:absolute; right:35px; top:130px; z-index:800; min-width:310px; flex-direction:column; align-items:flex-end; gap:4px; padding:10px 14px; background:#08101cbc; border:2px solid #ffffff2a; }
+.afk .power-status { display:flex; position:absolute; right:35px; top:130px; z-index:800; width:310px; min-width:0; flex-direction:column; align-items:flex-end; gap:4px; padding:10px 14px; background:#08101cbc; border:2px solid #ffffff2a; }
 .afk .power-status strong { font-size:20px; color:#86efac; }
 .afk .power-status span { font-size:14px; color:#e2e8f0; }
 .afk .power-status.off strong { color:#fca5a5; }
+.dar-fishing-stats { display:none; }
+.afk .dar-fishing-stats { display:block; position:absolute; right:35px; top:255px; z-index:800; width:310px; padding:9px 14px; background:linear-gradient(135deg,#172554ee,#0c4a6eee); border:2px solid #fbbf24aa; box-shadow:0 0 18px #fbbf2433; }
+.dar-fishing-stats>strong { display:block; margin-bottom:5px; color:#fde68a; font-size:17px; letter-spacing:1px; }
+.dar-fishing-stats div { display:flex; justify-content:space-between; gap:10px; padding:2px 0; color:#dbeafe; font-size:14px; }
+.dar-fishing-stats div em { color:#fff; font-style:normal; font-weight:900; }
 .points-leaderboard { display:none; }
-.afk .points-leaderboard { display:block; position:absolute; right:35px; top:250px; z-index:800; width:310px; padding:12px 14px; background:#08101cdd; border:2px solid #ffffff2a; }
+.afk .points-leaderboard { display:block; position:absolute; right:35px; top:345px; z-index:800; width:310px; padding:12px 14px; background:#08101cdd; border:2px solid #ffffff2a; }
 .points-leaderboard>strong { display:block; margin-bottom:8px; color:#fde68a; font-size:19px; letter-spacing:1px; }
 .points-leaderboard div { display:grid; grid-template-columns:24px 1fr auto; gap:8px; padding:3px 0; font-size:15px; }
 .points-leaderboard div b { color:#94a3b8; }.points-leaderboard div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.points-leaderboard div em { color:#86efac; font-style:normal; font-weight:800; }
 .diamond-leaderboard { display:none; }
-.afk .diamond-leaderboard { display:block; position:absolute; right:35px; top:535px; z-index:800; width:310px; padding:12px 14px; background:#08101cdd; border:2px solid #67e8f977; box-shadow:0 0 16px #22d3ee33; }
+.afk .diamond-leaderboard { display:block; position:absolute; right:35px; top:665px; z-index:800; width:310px; padding:12px 14px; background:#08101cdd; border:2px solid #67e8f977; box-shadow:0 0 16px #22d3ee33; }
 .diamond-leaderboard>strong { display:block; margin-bottom:8px; color:#67e8f9; font-size:19px; letter-spacing:1px; }
 .diamond-leaderboard div { display:grid; grid-template-columns:24px 1fr auto; gap:8px; padding:4px 0; font-size:16px; }
 .diamond-leaderboard div b { color:#94a3b8; }.diamond-leaderboard div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.diamond-leaderboard div em { color:#67e8f9; font-style:normal; font-weight:900; }

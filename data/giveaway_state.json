@@ -1,17 +1,20 @@
 {
   "is_open": false,
-  "prize": "war chest",
-  "entry_phrase": "!throat",
+  "prize": "WAR CHEST",
+  "entry_phrase": "!nda",
   "entrants": [
     "fal_the_warlock",
     "snipah201z",
-    "nate048",
+    "tankahdelphia",
     "deputydawg777",
-    "livesuieng"
+    "dangerzonerando",
+    "legendcrypt",
+    "livesuieng",
+    "desktoppilotsociety"
   ],
-  "winner": "nate048",
-  "draw_id": 12,
-  "opened_at": "2026-08-19T04:19:53.133823+00:00",
-  "closed_at": "2026-08-19T04:56:34.717357+00:00",
-  "updated_at": "2026-08-19T04:56:37.591418+00:00"
+  "winner": "snipah201z",
+  "draw_id": 14,
+  "opened_at": "2026-08-24T02:02:26.427240+00:00",
+  "closed_at": "2026-08-24T02:33:43.960212+00:00",
+  "updated_at": "2026-08-24T02:33:48.876070+00:00"
 }

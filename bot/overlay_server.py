@@ -233,6 +233,12 @@ async def websocket_handler(request):
                             await ws.send_json(await get_fishing_service().snapshot())
                         except Exception:
                             pass
+                    if data.get('type') == 'request_coup_state':
+                        try:
+                            from bot.coup_service import get_coup_service
+                            await ws.send_json(get_coup_service().snapshot())
+                        except Exception:
+                            pass
                     if data.get('type') == 'request_wotwom_chat_roster':
                         try:
                             await ws.send_json(
@@ -277,6 +283,13 @@ async def index(request):
 
 async def afk_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "afk_overlay.html"))
+
+async def coup_overlay(request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "coup_overlay.html"))
+
+async def get_coup_state(request):
+    from bot.coup_service import get_coup_service
+    return web.json_response(get_coup_service().snapshot())
 
 async def cards_afk_overlay(request):
     return web.FileResponse(os.path.join(STATIC_DIR, "cards_afk_overlay.html"))
@@ -732,6 +745,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     app.router.add_get("/wotwom", wotwom_overlay)
     app.router.add_get("/fishing", fishing_overlay)
     app.router.add_get("/fishing-afk", fishing_afk_overlay)
+    app.router.add_get("/election-central", coup_overlay)
 
     # Tetris card drop overlay
     app.router.add_get("/tetris", tetris_cards_overlay)
@@ -739,6 +753,7 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     # API routes
     app.router.add_get("/api/cards", get_card_data)
     app.router.add_get("/api/raffle", get_raffle_data)
+    app.router.add_get("/api/coup", get_coup_state)
     app.router.add_get("/api/wotwom/inventory", get_wotwom_inventory)
     app.router.add_get("/api/wotwom/auth/start", wotwom_auth_start)
     app.router.add_get("/api/wotwom/auth/callback", wotwom_auth_callback)

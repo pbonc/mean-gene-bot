@@ -386,7 +386,13 @@ class FishingService:
                     current = db.execute("SELECT * FROM anglers WHERE user_id=?", (user_id,)).fetchone()
                     catch_events.extend(self._award_species_catch(db, current, self.rng.choice(list(SPECIES)), special="mk1220"))
                 catches = [
-                    {"species": event["payload"]["species_name"], "weight": event["payload"]["weight"]}
+                    {
+                        "species": event["payload"]["species_name"],
+                        "weight": event["payload"]["weight"],
+                        "tier": event["payload"]["tier"],
+                        "personal_best": event["payload"]["personal_best"],
+                        "lake_record": event["payload"]["lake_record"],
+                    }
                     for event in catch_events if event["kind"] == "catch"
                 ]
                 events = [self._event("mk1220_launched", user_id=user_id, display_name=angler["display_name"], catches=catches)] + catch_events
@@ -586,20 +592,30 @@ class FishingService:
                 records = [dict(r) for r in db.execute("SELECT * FROM lake_records ORDER BY species")]
                 points_leaderboard = [dict(r) for r in db.execute(
                     """SELECT user_id,display_name,fishing_points FROM anglers
+                       WHERE lower(display_name)!='iamdar'
                        ORDER BY fishing_points DESC, lower(display_name) LIMIT 10"""
                 )]
                 diamond_leaderboard = [dict(r) for r in db.execute(
                     """SELECT a.user_id,a.display_name,SUM(s.diamond) diamond_count
                        FROM anglers a JOIN species_stats s ON s.user_id=a.user_id
+                       WHERE lower(a.display_name)!='iamdar'
                        GROUP BY a.user_id,a.display_name HAVING SUM(s.diamond)>0
                        ORDER BY diamond_count DESC, lower(a.display_name) LIMIT 3"""
                 )]
+                iamdar_row = db.execute(
+                    """SELECT a.user_id,a.display_name,a.fishing_points,
+                              COALESCE(SUM(s.diamond),0) diamond_count
+                       FROM anglers a LEFT JOIN species_stats s ON s.user_id=a.user_id
+                       WHERE lower(a.display_name)='iamdar'
+                       GROUP BY a.user_id,a.display_name,a.fishing_points LIMIT 1"""
+                ).fetchone()
+                iamdar_stats = dict(iamdar_row) if iamdar_row else None
         boosted_species = [
             SPECIES[species]["name"]
             for species, multiplier in sorted(WEATHER[weather]["species"].items(), key=lambda item: item[1], reverse=True)
             if multiplier > 1.0
         ]
-        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records, "points_leaderboard": points_leaderboard, "diamond_leaderboard": diamond_leaderboard}
+        return {"type": "fishing_state", "version": 1, "server_time": now, "enabled": enabled, "weather": weather, "weather_boosted_species": boosted_species, "anglers": anglers, "lake_records": records, "points_leaderboard": points_leaderboard, "diamond_leaderboard": diamond_leaderboard, "iamdar_stats": iamdar_stats}
 
     async def diamond_leaders(self):
         async with self._lock:
