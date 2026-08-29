@@ -145,6 +145,17 @@ class GameWatchCog(commands.Cog):
                         continue
                     if current["sport"] == "MLB":
                         current = await self.sports.enrich_gamewatch_mlb(current)
+                    elif current["sport"] == "NFL" and (
+                        current.get("home_score") != watch["last"].get("home_score")
+                        or current.get("away_score") != watch["last"].get("away_score")
+                    ):
+                        try:
+                            current = await self.sports.enrich_gamewatch_nfl(current)
+                        except Exception:
+                            # A score is still trustworthy when ESPN's summary feed
+                            # lags or fails; omit play text instead of using stale lastPlay.
+                            LOGGER.warning("NFL scoring-play enrichment failed; using score-only update", exc_info=True)
+                            current = {**current, "scoring_plays": []}
                     elapsed = time.monotonic() - watch["last_at"]
                     if current["sport"] == "MLB":
                         messages = mlb_updates(watch["last"], current)

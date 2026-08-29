@@ -111,7 +111,7 @@ def football_updates(previous, current):
     play_text = str(current.get("last_play_text") or "").strip().rstrip(".")
 
     if score_changed:
-        updates.append(format_update(current, summary=play_text or "Score change recorded"))
+        updates.append(format_update(current, summary=_football_scoring_summary(previous, current)))
 
     if current.get("completed") and not previous.get("completed"):
         if not score_changed:
@@ -134,6 +134,44 @@ def football_updates(previous, current):
         elif int(current.get("last_play_yards") or 0) >= NFL_BIG_PLAY_YARDS:
             updates.append(format_update(current, summary=f"Big play: {play_text}"))
     return updates
+
+
+def _football_scoring_summary(previous, current):
+    """Match an NFL score change to a scoring play, never an arbitrary last play."""
+    home_delta = int(current.get("home_score", 0)) - int(previous.get("home_score", 0))
+    away_delta = int(current.get("away_score", 0)) - int(previous.get("away_score", 0))
+    changed_team_id = ""
+    changed_team_name = ""
+    changed_points = 0
+    if home_delta > 0 and away_delta <= 0:
+        changed_team_id = str(current.get("home_team_id") or "")
+        changed_team_name = current.get("home") or "Home team"
+        changed_points = home_delta
+    elif away_delta > 0 and home_delta <= 0:
+        changed_team_id = str(current.get("away_team_id") or "")
+        changed_team_name = current.get("away") or "Away team"
+        changed_points = away_delta
+
+    plays = current.get("scoring_plays") or []
+    exact_score = [
+        play for play in plays
+        if int(play.get("home_score", -1)) == int(current.get("home_score", 0))
+        and int(play.get("away_score", -1)) == int(current.get("away_score", 0))
+        and (not changed_team_id or str(play.get("team_id") or "") == changed_team_id)
+    ]
+    if exact_score:
+        return exact_score[-1].get("text") or "Scoring play recorded"
+    team_and_points = [
+        play for play in plays
+        if changed_team_id
+        and str(play.get("team_id") or "") == changed_team_id
+        and int(play.get("points") or 0) == changed_points
+    ]
+    if team_and_points:
+        return team_and_points[-1].get("text") or "Scoring play recorded"
+    if changed_team_name and changed_points:
+        return f"{changed_team_name} scored {changed_points} point{'s' if changed_points != 1 else ''}"
+    return "Score change recorded"
 
 
 def _ordinal(number):

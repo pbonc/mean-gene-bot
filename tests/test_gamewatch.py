@@ -111,11 +111,36 @@ class GameWatchPolicyTests(unittest.TestCase):
         self.assertTrue(_mlb_team_has_baserunner(walk, "2"))
 
     def test_football_reports_score_without_duplicate_play_message(self):
-        previous = {**game("NFL"), "last_play_id": "10"}
-        current = {**game("NFL", home=7), "last_play_id": "11", "last_play_text": "Smith 25 yard touchdown run", "last_play_yards": 25}
+        previous = {**game("NFL"), "home_team_id": "1", "away_team_id": "2", "last_play_id": "10"}
+        current = {
+            **game("NFL", home=7), "home_team_id": "1", "away_team_id": "2",
+            "last_play_id": "11", "last_play_text": "Smith 25 yard touchdown run", "last_play_yards": 25,
+            "scoring_plays": [{"team_id": "1", "points": 6, "home_score": 7, "away_score": 0, "text": "Smith 25 yard touchdown run"}],
+        }
         updates = football_updates(previous, current)
         self.assertEqual(1, len(updates))
         self.assertIn("touchdown", updates[0])
+
+    def test_football_score_never_uses_stale_non_scoring_last_play(self):
+        previous = {**game("NFL", home=16, away=6), "home": "Broncos", "away": "Vikings", "home_team_id": "7", "away_team_id": "16", "last_play_id": "10"}
+        current = {
+            **game("NFL", home=19, away=6), "home": "Broncos", "away": "Vikings",
+            "home_team_id": "7", "away_team_id": "16", "last_play_id": "11",
+            "last_play_text": "S. Ehlinger pass incomplete short middle", "scoring_plays": [],
+        }
+        self.assertEqual(
+            ["GameWatch NFL: Broncos 19, Vikings 6. Broncos scored 3 points."],
+            football_updates(previous, current),
+        )
+
+    def test_football_extra_point_uses_exact_scoring_kick(self):
+        previous = {**game("NFL", home=19, away=6), "home_team_id": "7", "away_team_id": "16"}
+        current = {
+            **game("NFL", home=20, away=6), "home_team_id": "7", "away_team_id": "16",
+            "last_play_text": "An unrelated play",
+            "scoring_plays": [{"team_id": "7", "points": 1, "home_score": 20, "away_score": 6, "text": "Wil Lutz Kick"}],
+        }
+        self.assertIn("Wil Lutz Kick", football_updates(previous, current)[0])
 
     def test_football_reports_turnover_and_big_play(self):
         previous = {**game("NFL"), "last_play_id": "10"}

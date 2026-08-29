@@ -54,11 +54,22 @@ class TtsCog(commands.Cog):
             await ctx.send(f"{args[1][1:]} has been granted 1 TTS token. Balance: {balance}.")
             return
 
+        if args[0].casefold() == "reset":
+            if not moderator:
+                await ctx.send("Only moderators or the broadcaster can reset TTS.")
+                return
+            discarded = self.service.reset()
+            await ctx.send(f"TTS reset. Active playback cancelled and {discarded} queued message(s) discarded.")
+            return
+
         if args[0].casefold() in {"voices", "status"}:
             if not moderator:
                 await ctx.send("TTS requires moderator access or a TTS token.")
                 return
-            await ctx.send(f"TTS backend: {self.service.backend.name} | Queue: {self.service.queue.qsize()}/{self.service.config.max_queue_depth}")
+            status = self.service.status()
+            active = f"@{status['active']}" if status["active"] else "none"
+            error = f" | Last error: {status['last_error']}" if status["last_error"] else ""
+            await ctx.send(f"TTS backend: {self.service.backend.name} | Worker: {status['worker']} | Playing: {active} | Queue: {status['queued']}/{status['limit']}{error}")
             return
 
         token_balance = self.service.tokens.balance(user_id, login)

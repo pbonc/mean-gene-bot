@@ -14,37 +14,37 @@
       "id": "205029019",
       "login": "tankahdelphia",
       "display": "Tankahdelphia",
-      "direct_support": 7,
+      "direct_support": 26,
       "endorsement_support": 0,
       "status": "active",
       "role": "incumbent",
       "entered_at": "2026-08-20T01:18:09.813597+00:00",
-      "rally_until": null,
-      "rally_session_id": null
+      "rally_until": "2026-09-05T02:35:51.643774+00:00",
+      "rally_session_id": 0
     },
     "livesuieng": {
       "id": "181452597",
       "login": "livesuieng",
       "display": "Livesuieng",
-      "direct_support": 8,
+      "direct_support": 13,
       "endorsement_support": 0,
       "status": "active",
       "role": "challenger",
       "entered_at": "2026-08-20T01:30:34.204556+00:00",
-      "rally_until": null,
-      "rally_session_id": null
+      "rally_until": "2026-09-05T04:29:39.079260+00:00",
+      "rally_session_id": 0
     },
     "fal_the_warlock": {
       "id": "106456923",
       "login": "fal_the_warlock",
       "display": "fal_the_warlock",
-      "direct_support": 13,
+      "direct_support": 22,
       "endorsement_support": 0,
       "status": "active",
       "role": "challenger",
       "entered_at": "2026-08-20T04:00:36.718239+00:00",
-      "rally_until": null,
-      "rally_session_id": null
+      "rally_until": "2026-09-05T02:00:26.158341+00:00",
+      "rally_session_id": 0
     },
     "thederpdawg": {
       "id": "151911086",
@@ -59,6 +59,7 @@
       "rally_session_id": null
     }
   },
+  "commissioner_self_support_attempts": 8,
   "votes": [
     {
       "voter_key": "205029019",
@@ -320,6 +321,267 @@
       "commissioner_graft": false,
       "session_id": 0,
       "timestamp": "2026-08-24T05:16:21.760337+00:00"
+    },
+    {
+      "voter_key": "205029019",
+      "voter_login": "tankahdelphia",
+      "candidate": "tankahdelphia",
+      "points": 2,
+      "commissioner_graft": true,
+      "session_id": 0,
+      "timestamp": "2026-08-25T02:03:57.831093+00:00"
+    },
+    {
+      "voter_key": "106213571",
+      "voter_login": "nate048",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-25T02:04:06.779939+00:00"
+    },
+    {
+      "voter_key": "106456923",
+      "voter_login": "fal_the_warlock",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-25T02:11:14.851569+00:00"
+    },
+    {
+      "voter_key": "181452597",
+      "voter_login": "livesuieng",
+      "candidate": "livesuieng",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-25T02:32:41.077176+00:00"
+    },
+    {
+      "voter_key": "53844636",
+      "voter_login": "uppercumberlandgamers",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-25T03:46:25.811162+00:00"
+    },
+    {
+      "voter_key": "106456923",
+      "voter_login": "fal_the_warlock",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-26T02:35:57.458893+00:00"
+    },
+    {
+      "voter_key": "205029019",
+      "voter_login": "tankahdelphia",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-26T02:51:35.699893+00:00"
+    },
+    {
+      "voter_key": "181452597",
+      "voter_login": "livesuieng",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-26T02:51:40.403707+00:00"
+    },
+    {
+      "voter_key": "106213571",
+      "voter_login": "nate048",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-26T02:51:47.714631+00:00"
+    },
+    {
+      "voter_key": "106456923",
+      "voter_login": "fal_the_warlock",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-27T02:34:22.427169+00:00"
+    },
+    {
+      "voter_key": "106213571",
+      "voter_login": "nate048",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-27T02:35:07.684059+00:00"
+    },
+    {
+      "voter_key": "205029019",
+      "voter_login": "tankahdelphia",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-27T02:35:10.869386+00:00"
+    },
+    {
+      "voter_key": "181452597",
+      "voter_login": "livesuieng",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-27T03:07:08.604034+00:00"
+    },
+    {
+      "voter_key": "75949554",
+      "voter_login": "dartswinger73",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-27T03:11:56.734292+00:00"
+    },
+    {
+      "voter_key": "205029019",
+      "voter_login": "tankahdelphia",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T00:23:06.140886+00:00"
+    },
+    {
+      "voter_key": "106213571",
+      "voter_login": "nate048",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T00:23:13.384040+00:00"
+    },
+    {
+      "voter_key": "106456923",
+      "voter_login": "fal_the_warlock",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T02:03:26.862649+00:00"
+    },
+    {
+      "voter_key": "400482278",
+      "voter_login": "legendcrypt",
+      "candidate": "livesuieng",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T03:20:49.856977+00:00"
+    },
+    {
+      "voter_key": "53844636",
+      "voter_login": "uppercumberlandgamers",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T03:21:37.397305+00:00"
+    },
+    {
+      "voter_key": "71824588",
+      "voter_login": "deputydawg777",
+      "candidate": "livesuieng",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T03:22:13.061247+00:00"
+    },
+    {
+      "voter_key": "181452597",
+      "voter_login": "livesuieng",
+      "candidate": "livesuieng",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T04:50:08.411199+00:00"
+    },
+    {
+      "voter_key": "120207565",
+      "voter_login": "karnave",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T04:51:34.738474+00:00"
+    },
+    {
+      "voter_key": "463136288",
+      "voter_login": "justacone",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-28T04:51:46.482080+00:00"
+    },
+    {
+      "voter_key": "106456923",
+      "voter_login": "fal_the_warlock",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-29T02:00:34.157275+00:00"
+    },
+    {
+      "voter_key": "106213571",
+      "voter_login": "nate048",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-29T02:35:01.031140+00:00"
+    },
+    {
+      "voter_key": "205029019",
+      "voter_login": "tankahdelphia",
+      "candidate": "tankahdelphia",
+      "points": 2,
+      "commissioner_graft": true,
+      "session_id": 0,
+      "timestamp": "2026-08-29T02:35:03.906721+00:00"
+    },
+    {
+      "voter_key": "120207565",
+      "voter_login": "karnave",
+      "candidate": "fal_the_warlock",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-29T02:37:30.821661+00:00"
+    },
+    {
+      "voter_key": "181452597",
+      "voter_login": "livesuieng",
+      "candidate": "tankahdelphia",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-29T04:30:39.942449+00:00"
+    },
+    {
+      "voter_key": "62149025",
+      "voter_login": "caerdwyn",
+      "candidate": "livesuieng",
+      "points": 1,
+      "commissioner_graft": false,
+      "session_id": 0,
+      "timestamp": "2026-08-29T04:31:19.019996+00:00"
     }
   ],
   "lead_challenger": null,
@@ -661,6 +923,266 @@
         "livesuieng"
       ],
       "timestamp": "2026-08-24T02:53:49.774506+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 27,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-25T02:03:43.642407+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 28,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-25T02:07:46.466747+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 29,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-25T02:32:26.226727+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 30,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-25T03:28:15.081153+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 31,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-25T03:28:16.091119+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 32,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-25T03:28:17.118355+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 33,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-26T02:35:50.299705+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 34,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-26T02:49:24.820329+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 35,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-26T02:51:28.285388+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 36,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-27T02:34:10.921567+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 37,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @TheDerpDawg rallies supporters.",
+      "users": [
+        "thederpdawg"
+      ],
+      "timestamp": "2026-08-27T02:34:51.091560+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 38,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-27T02:34:59.335746+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 39,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-27T02:57:17.850451+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 40,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-28T00:22:55.136165+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 41,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-28T02:03:11.314166+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 42,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-28T03:20:35.465765+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 43,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @fal_the_warlock rallies supporters.",
+      "users": [
+        "fal_the_warlock"
+      ],
+      "timestamp": "2026-08-29T02:00:26.158341+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 44,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-29T02:03:28.915126+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 45,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Tankahdelphia rallies supporters.",
+      "users": [
+        "tankahdelphia"
+      ],
+      "timestamp": "2026-08-29T02:35:51.643774+00:00",
+      "priority": "normal",
+      "displayed": false,
+      "display_count": 0
+    },
+    {
+      "id": 46,
+      "coup_id": 1,
+      "type": "rally",
+      "headline": "ON THE TRAIL: @Livesuieng rallies supporters.",
+      "users": [
+        "livesuieng"
+      ],
+      "timestamp": "2026-08-29T04:29:39.079260+00:00",
       "priority": "normal",
       "displayed": false,
       "display_count": 0

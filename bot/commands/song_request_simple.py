@@ -3,6 +3,7 @@ import json
 import logging
 import asyncio
 import difflib
+import time
 from collections import deque
 from twitchio.ext import commands
 from typing import Dict, List, Optional
@@ -308,12 +309,14 @@ class SimpleSongManager:
         self.audio_processes = []  # Track spawned audio processes
         self.song_start_time = None
         self.song_duration = None
+        self.pause_started_at = None
         
         # Cache operation tracking
         self.is_caching = False  # Flag to prevent conflicts during cache operations
         
         # Volume settings
         self.master_volume = 0.3  # 30% default volume (lowered to balance with SFX)
+        self.current_track_volume = self.master_volume
         
         # Hot queue file tracking for cleanup
         self.current_hot_queue_file = None
@@ -2119,6 +2122,10 @@ class SimpleSongManager:
                 self.last_fallback_audio_file = None
                 self.last_fallback_song_info = None
 
+            # A per-song boost never carries into the next track.
+            self.current_track_volume = self.master_volume
+            self.audio_manager.set_music_volume(self.master_volume)
+
             # Unified music playback using AudioManager
             if not self.audio_manager.play_music(audio_file):
                 self.logger.error(f"Failed to play song '{effective_song_info.get('title', 'Unknown')}' by {effective_song_info.get('artist', 'Unknown')} - audio file: {audio_file}")
@@ -2139,6 +2146,7 @@ class SimpleSongManager:
             import time
             self.song_start_time = time.time()
             self.song_duration = effective_song_info.get('duration', 300)  # Default 5 minutes if no duration
+            self.pause_started_at = None
             
             self.logger.info(f"🎵 Playing: {effective_song_info['title']} (requested by {username}) via {self.audio_backend}")
             
@@ -2202,6 +2210,9 @@ class SimpleSongManager:
         self.current_song_info = None
         self.song_start_time = None
         self.song_duration = None
+        self.pause_started_at = None
+        self.current_track_volume = self.master_volume
+        self.audio_manager.set_music_volume(self.master_volume)
         self.logger.info("🔄 Music state cleared")
 
     def pause_music(self):
@@ -2211,7 +2222,9 @@ class SimpleSongManager:
             if self.audio_backend == "pygame" and pygame.mixer.get_init():
                 pygame.mixer.music.pause()
                 self.is_paused = True
+                self.pause_started_at = time.time()
                 self.logger.info("Paused music with pygame")
+                return True
             elif self.audio_backend == "playsound3":
                 self.logger.info("playsound3 does not support pause")
                 return False
@@ -2224,6 +2237,9 @@ class SimpleSongManager:
             if self.audio_backend == "pygame" and pygame.mixer.get_init():
                 pygame.mixer.music.unpause()
                 self.is_paused = False
+                if self.pause_started_at and self.song_start_time:
+                    self.song_start_time += max(0, time.time() - self.pause_started_at)
+                self.pause_started_at = None
                 self.logger.info("Resumed music with pygame")
                 return True
             elif self.audio_backend == "playsound3":
@@ -2234,6 +2250,8 @@ class SimpleSongManager:
     def set_volume(self, volume: float):
         """Set master volume (0.0 to 1.0)"""
         self.master_volume = max(0.0, min(1.0, volume))
+        self.current_track_volume = self.master_volume
+        self.audio_manager.set_music_volume(self.master_volume)
         if self.audio_ready:
             if self.audio_backend == "pygame" and pygame.mixer.get_init():
                 pygame.mixer.music.set_volume(self.master_volume)
@@ -2241,8 +2259,24 @@ class SimpleSongManager:
                 # playsound3 doesn't support volume control
                 pass
 
+    def boost_current_song(self, amount: float = 0.05):
+        """Raise only the active pygame track; the next track resets it."""
+        if not self.audio_ready or not (self.is_playing or self.is_paused):
+            return False, self.current_track_volume
+        if self.audio_backend != "pygame" or not pygame.mixer.get_init():
+            return False, self.current_track_volume
+        self.current_track_volume = min(1.0, self.current_track_volume + max(0.0, amount))
+        # AudioManager restores this value after SFX ducking.
+        self.audio_manager.set_music_volume(self.current_track_volume)
+        pygame.mixer.music.set_volume(self.current_track_volume)
+        self.logger.info("Boosted current song volume to %.0f%%", self.current_track_volume * 100)
+        return True, self.current_track_volume
+
     def is_actually_playing(self):
         """Check if music is actually playing (not just flagged as playing)"""
+        # pygame.get_busy() may be false while paused; pause is still active playback.
+        if self.is_paused:
+            return True
         if self.audio_backend == "pygame" and pygame.mixer.get_init():
             return pygame.mixer.music.get_busy()
         # For other backends, assume playing if flagged (no reliable way to check)
@@ -2548,12 +2582,16 @@ class SimpleSongManager:
                 
             elif self.audio_backend == "pygame":
                 self.logger.info(f"▶️ Starting pygame playback: {audio_file}")
+                self.current_track_volume = self.master_volume
+                self.audio_manager.set_music_volume(self.master_volume)
                 pygame.mixer.music.load(audio_file)
-                pygame.mixer.music.set_volume(self.master_volume)
+                pygame.mixer.music.set_volume(self.current_track_volume)
                 pygame.mixer.music.play()
             
             # Update local state
             self.is_playing = True
+            self.is_paused = False
+            self.pause_started_at = None
             self.current_song = audio_file
             self.current_song_info = (display_info, "System")
             
@@ -2761,9 +2799,9 @@ class SongRequestCog(commands.Cog):
 
     @commands.command(name="srx")
     async def song_request(self, ctx, action_or_request: str = None, *, url: str = None):
-        """Song request system: !srx [number] (FREE) | !srx [youtube_url] (1 quarter) | !srx "title" (search) | !srx add [url] (mod) | !srx hot [url] (mod) | !srx del [number] (mod) | !srx importlocal [folder] (mod) | !srx [start|stop|pause|resume|next|status] (mod - playback control)"""
+        """Song requests plus mod-only start/stop/pause/boost/next/status controls."""
         if not action_or_request:
-            await ctx.send("🎵 **Song Requests:** `!srx 42` (playlist, FREE) | `!srx [youtube_url]` (1 quarter) | `!srx keyword` (search) | `!srx add [url]` (mod) | `!srx hot [url]` (mod) | `!srx del [number]` (mod) | `!srx importlocal [folder]` (mod, mp3 only) | **Playback:** `!srx start/stop/pause/resume/next/status` (mod)")
+            await ctx.send("🎵 **Song Requests:** `!srx 42` (playlist, FREE) | `!srx [youtube_url]` (1 quarter) | `!srx keyword` (search) | `!srx add [url]` (mod) | `!srx hot [url]` (mod) | `!srx del [number]` (mod) | `!srx importlocal [folder]` (mod, mp3 only) | **Playback:** `!srx start/stop/pause/boost/next/status` (mod)")
             return
 
         username = ctx.author.name
@@ -2798,9 +2836,16 @@ class SongRequestCog(commands.Cog):
             if not ctx.author.is_mod:
                 await ctx.send("❌ Only mods can control SRX playback.")
                 return
-            if self.manager.is_playing and not self.manager.is_paused:
-                self.manager.pause_music()
-                await ctx.send("⏸️ SRX paused.")
+            if self.manager.is_paused:
+                if self.manager.resume_music():
+                    await ctx.send("▶️ SRX resumed from where it was paused.")
+                else:
+                    await ctx.send("❌ This audio backend cannot resume music.")
+            elif self.manager.is_playing:
+                if self.manager.pause_music():
+                    await ctx.send("⏸️ SRX paused. Use `!srx pause` again to resume.")
+                else:
+                    await ctx.send("❌ This audio backend cannot pause music.")
             else:
                 await ctx.send("❌ No music currently playing to pause.")
             return
@@ -2813,6 +2858,16 @@ class SongRequestCog(commands.Cog):
                 await ctx.send("▶️ SRX resumed.")
             else:
                 await ctx.send("❌ No paused music to resume.")
+            return
+        elif action_or_request.lower() == "boost":
+            if not ctx.author.is_mod:
+                await ctx.send("❌ Only mods can boost SRX playback.")
+                return
+            boosted, volume = self.manager.boost_current_song(0.05)
+            if boosted:
+                await ctx.send(f"🔊 Current song boosted to {volume * 100:.0f}%. The next song returns to {self.manager.master_volume * 100:.0f}%.")
+            else:
+                await ctx.send("❌ No boostable song is currently playing.")
             return
         elif action_or_request.lower() == "next":
             if not ctx.author.is_mod:
@@ -3650,8 +3705,9 @@ class SongRequestCog(commands.Cog):
 **Playback Control:**
 • `!srx start` - Start music system
 • `!srx stop` - Stop music and disable system
-• `!srx pause` - Pause current song
-• `!srx resume` - Resume paused song
+• `!srx pause` - Toggle pause/resume at the current position
+• `!srx resume` - Resume paused song (legacy alias)
+• `!srx boost` - Raise only the current song by 5 percentage points
 • `!srx next` - Skip to next song
 • `!srx status` - Show playback status & queue
 

@@ -45,6 +45,7 @@ class CoupService:
         self.vote_cooldown_hours = max(0.0, float(vote_cooldown_hours))
         self.lock = threading.RLock()
         self.state = self._load()
+        self.state.setdefault("commissioner_self_support_attempts", 0)
         self._clear_startup_rallies()
 
     def _clear_startup_rallies(self):
@@ -65,7 +66,7 @@ class CoupService:
             "candidates": {}, "votes": [], "lead_challenger": None, "decision": None,
             "finalists": [], "throws": [], "events": [], "history": [],
             "resolved_at": None, "term_pending_start": False, "term_start": None, "term_expires": None,
-            "milestones": {},
+            "milestones": {}, "commissioner_self_support_attempts": 0,
         }
 
     def _load(self):
@@ -146,10 +147,16 @@ class CoupService:
             if self.state["phase"] == "building" and candidate["status"] != "active": return False, "That candidate cannot receive support."
             if self.state["phase"] == "runoff" and target_login not in self.state["finalists"]: return False, "Only runoff participants may receive support."
             if not self._rallied(candidate): return False, f"@{candidate['display']} needs to rally this stream before receiving support."
-            commissioner_graft = (
+            commissioner_self_support = (
                 self.state["phase"] == "building"
                 and voter_login == self.state["commissioner"]["login"]
-                and self.rng.random() < self.graft_chance
+                and target_login == voter_login
+            )
+            if commissioner_self_support:
+                self.state["commissioner_self_support_attempts"] += 1
+            commissioner_graft = (
+                commissioner_self_support
+                and self.state["commissioner_self_support_attempts"] % 4 == 0
             )
             points = 2 if commissioner_graft else 1
             candidate["direct_support"] += points
@@ -252,7 +259,7 @@ class CoupService:
         with self.lock:
             self._refresh_term()
             if self.state["phase"] not in ("eligible", "closed"): return False, "A new coup is not eligible to open."
-            self.state.update(phase="building", coup_id=self.state["coup_id"] + 1, candidates={}, votes=[], lead_challenger=None, decision=None, finalists=[], throws=[], milestones={})
+            self.state.update(phase="building", coup_id=self.state["coup_id"] + 1, candidates={}, votes=[], lead_challenger=None, decision=None, finalists=[], throws=[], milestones={}, commissioner_self_support_attempts=0)
             self._save(); return True, "A new coup is now open for challengers."
 
     def adjust(self, login, amount):

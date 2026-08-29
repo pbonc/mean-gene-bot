@@ -242,6 +242,32 @@ class SportsAPIManager:
         enriched["current_pitchers"] = pitchers
         enriched["milestones"] = milestones
         return enriched
+
+    async def enrich_gamewatch_nfl(self, game: Dict) -> Dict:
+        """Add ESPN scoring plays so score changes are not paired with stale lastPlay."""
+        timeout = aiohttp.ClientTimeout(total=10, connect=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"{self.espn_nfl_base}/summary", params={"event": game["id"]}
+            ) as response:
+                response.raise_for_status()
+                payload = await response.json()
+
+        enriched = dict(game)
+        plays = payload.get("plays") or []
+        enriched["scoring_plays"] = [
+            {
+                "id": str(play.get("id") or ""),
+                "team_id": str((play.get("team") or {}).get("id") or ""),
+                "points": int(play.get("scoreValue") or 0),
+                "home_score": int(play.get("homeScore") or 0),
+                "away_score": int(play.get("awayScore") or 0),
+                "text": str(play.get("text") or "").strip(),
+            }
+            for play in plays
+            if int(play.get("scoreValue") or 0) > 0
+        ]
+        return enriched
     def get_current_streaming_day(self):
         """
         Get the current 'streaming day' date with 5 AM reset.

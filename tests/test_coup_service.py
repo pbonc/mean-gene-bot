@@ -86,19 +86,27 @@ class CoupServiceTests(unittest.TestCase):
         self.assertFalse(ok); self.assertIn("cannot cast", message)
         self.assertEqual(0, self.service.total(self.service._candidate("BigE")))
 
-    def test_commissioner_vote_sometimes_receives_two_point_graft(self):
-        self.enter_rally("BigE")
-        self.service.rng = FixedRng(0.0)
-        ok, message = self.service.support(person("Tankahdelphia"), "BigE")
+    def test_every_fourth_commissioner_self_support_receives_two_point_graft(self):
+        self.enter_rally("Tankahdelphia")
+        self.service.state["commissioner_self_support_attempts"] = 3
+        ok, message = self.service.support(person("Tankahdelphia"), "Tankahdelphia")
         self.assertTrue(ok); self.assertIn("COMMISSIONER GRAFT", message)
-        self.assertEqual(2, self.service.total(self.service._candidate("BigE")))
+        self.assertEqual(2, self.service.total(self.service._candidate("Tankahdelphia")))
         self.assertEqual(2, self.service.state["votes"][-1]["points"])
+        self.assertEqual(4, self.service.state["commissioner_self_support_attempts"])
 
-    def test_commissioner_vote_is_normally_one_point(self):
+    def test_commissioner_support_for_others_never_advances_graft(self):
         self.enter_rally("BigE")
-        self.service.rng = FixedRng(0.99)
+        self.service.state["commissioner_self_support_attempts"] = 3
         self.assertTrue(self.service.support(person("Tankahdelphia"), "BigE")[0])
         self.assertEqual(1, self.service.total(self.service._candidate("BigE")))
+        self.assertEqual(3, self.service.state["commissioner_self_support_attempts"])
+
+    def test_first_three_commissioner_self_support_votes_are_normal(self):
+        self.enter_rally("Tankahdelphia")
+        self.assertTrue(self.service.support(person("Tankahdelphia"), "Tankahdelphia")[0])
+        self.assertEqual(1, self.service.total(self.service._candidate("Tankahdelphia")))
+        self.assertEqual(1, self.service.state["commissioner_self_support_attempts"])
 
     def test_challenger_at_200_sends_top_two_directly_to_runoff(self):
         self.enter_rally("BigE"); self.enter_rally("Tankahdelphia")

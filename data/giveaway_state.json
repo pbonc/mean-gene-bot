@@ -1,20 +1,17 @@
 {
   "is_open": false,
-  "prize": "WAR CHEST",
-  "entry_phrase": "!nda",
+  "prize": "1000 entries!!!",
+  "entry_phrase": "!!",
   "entrants": [
-    "fal_the_warlock",
-    "snipah201z",
-    "tankahdelphia",
-    "deputydawg777",
-    "dangerzonerando",
-    "legendcrypt",
     "livesuieng",
-    "desktoppilotsociety"
+    "deputydawg777",
+    "tankahdelphia",
+    "fal_the_warlock",
+    "snipah201z"
   ],
-  "winner": "snipah201z",
-  "draw_id": 14,
-  "opened_at": "2026-08-24T02:02:26.427240+00:00",
-  "closed_at": "2026-08-24T02:33:43.960212+00:00",
-  "updated_at": "2026-08-24T02:33:48.876070+00:00"
+  "winner": "fal_the_warlock",
+  "draw_id": 16,
+  "opened_at": "2026-08-25T04:27:12.425235+00:00",
+  "closed_at": "2026-08-25T04:49:01.145072+00:00",
+  "updated_at": "2026-08-25T04:49:05.503094+00:00"
 }

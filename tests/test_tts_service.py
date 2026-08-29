@@ -1,7 +1,11 @@
 import asyncio
 import os
 import tempfile
+import threading
+import time
 import unittest
+from unittest import mock
+from dataclasses import replace
 from pathlib import Path
 
 from bot.tts_service import DectalkProcessBackend, TokenStore, TtsConfig, TtsService
@@ -13,6 +17,18 @@ class FakeBackend:
     def __init__(self, ok=True): self.ok = ok; self.calls = []
     def available(self): return True
     def speak(self, text, timeout): self.calls.append((text, timeout)); return self.ok, None if self.ok else "malformed"
+
+
+class ConcurrencyBackend:
+    name = "concurrency-check"
+    def __init__(self): self.lock = threading.Lock(); self.active = 0; self.max_active = 0; self.order = []
+    def available(self): return True
+    def speak(self, text, timeout):
+        with self.lock:
+            self.active += 1; self.max_active = max(self.max_active, self.active); self.order.append(text)
+        time.sleep(.02)
+        with self.lock: self.active -= 1
+        return True, None
 
 
 class Clock:
@@ -32,9 +48,34 @@ class TokenStoreTests(unittest.TestCase):
 
 class DectalkBackendTests(unittest.TestCase):
     def test_inline_commands_are_passed_unchanged_as_one_argument(self):
-        backend = DectalkProcessBackend("C:/DECTalk/say.exe", "-v {voice} {text}", "paul")
-        text = "[:rate 300] [:phoneme on] dZ0n meIdEn"
-        self.assertEqual(["-v", "paul", text], backend._arguments(text))
+        executable = r"C:\dev\perfect-paul\build\us\release\say.exe"
+        backend = DectalkProcessBackend(executable, "{text}", "paul", True)
+        text = "[:rate 300] [:np] [dah<300,30>]"
+        self.assertEqual(
+            [executable, "-pre", "[:phoneme on]", text],
+            backend._command(text),
+        )
+
+    def test_phoneme_prefix_can_be_disabled(self):
+        backend = DectalkProcessBackend("say.exe", "{text}", "paul", False)
+        text = "[:dial67589340] hello"
+        self.assertEqual(["say.exe", text], backend._command(text))
+
+    def test_wave_output_options_precede_untouched_viewer_text(self):
+        backend = DectalkProcessBackend("say.exe", "{text}", "paul", True)
+        text = "[:rate 500] [dah<300,30>]"
+        self.assertEqual(
+            ["say.exe", "-pre", "[:phoneme on]", "-w", r"C:\temp\speech.wav", text],
+            backend._command(text, r"C:\temp\speech.wav"),
+        )
+
+    def test_configuration_defaults_phoneme_mode_on(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            config = TtsConfig.from_env()
+            self.assertTrue(config.dectalk_phoneme_mode)
+            self.assertFalse(config.dectalk_wave_mode)
+            self.assertEqual(20, config.max_synthesis_seconds)
+            self.assertEqual(60, config.max_playback_seconds)
 
 
 class TtsServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -71,6 +112,28 @@ class TtsServiceTests(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.service.queue.join(), 1)
         self.clock.now += 31
         self.assertTrue(self.service.accept("id:1", "one", "One", "third", False)[0])
+
+    async def test_requests_finish_sequentially_in_queue_order(self):
+        backend = ConcurrencyBackend()
+        service = TtsService(replace(self.config, max_queue_depth=3), backend, TokenStore(Path(self.temp.name, "serial_tokens.json")), self.clock)
+        for number in range(3):
+            self.assertTrue(service.accept(f"id:{number}", f"user{number}", f"User{number}", f"message {number}", True)[0])
+        await asyncio.wait_for(service.queue.join(), 2)
+        self.assertEqual(["message 0", "message 1", "message 2"], backend.order)
+        self.assertEqual(1, backend.max_active)
+        service.worker_task.cancel()
+        try: await service.worker_task
+        except asyncio.CancelledError: pass
+
+    async def test_reset_clears_stale_user_ownership_and_queued_requests(self):
+        self.assertTrue(self.service.accept("id:1", "one", "One", "first", True)[0])
+        self.assertTrue(self.service.accept("id:2", "two", "Two", "second", True)[0])
+        discarded = self.service.reset()
+        await asyncio.sleep(0)
+        self.assertEqual(2, discarded)
+        self.assertEqual(set(), self.service.pending_users)
+        self.assertEqual(0, self.service.queue.qsize())
+        self.assertTrue(self.service.accept("id:1", "one", "One", "retry", True)[0])
 
 
 class Author:

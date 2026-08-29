@@ -1,23 +1,41 @@
 {
-  "slots": {},
-  "scores": {
-    "fal_the_warlock": 1,
-    "karnave": 1,
+  "slots": {
+    "nate048": 1,
+    "tankahdelphia": 1,
     "deputydawg777": 1,
+    "fal_the_warlock": 1,
+    "livesuieng": 1,
     "snipah201z": 1,
-    "swfc_ricardo": 1
+    "dartswinger73": 1
   },
-  "last_winner": "swfc_ricardo",
-  "remove_on_win": true,
+  "scores": {
+    "fal_the_warlock": 5,
+    "livesuieng": 4,
+    "nate048": 2,
+    "snipah201z": 2,
+    "deputydawg777": 2
+  },
+  "last_winner": "fal_the_warlock",
+  "remove_on_win": false,
   "wheel_locked": false,
   "last_man_standing": false,
-  "order": [],
+  "order": [
+    "nate048",
+    "tankahdelphia",
+    "deputydawg777",
+    "fal_the_warlock",
+    "livesuieng",
+    "snipah201z",
+    "dartswinger73"
+  ],
   "colors": {
-    "deputydawg777": "#080808",
+    "nate048": "#2dd4bf",
+    "tankahdelphia": "#defec8",
+    "deputydawg777": "#6366f1",
     "fal_the_warlock": "#fc0303",
-    "snipah201z": "#6366f1",
-    "swfc_ricardo": "#f472b6",
-    "karnave": "#fb7185"
+    "livesuieng": "#455455",
+    "snipah201z": "#f59e0b",
+    "dartswinger73": "#a3e635"
   },
   "multiplier": 1,
   "manual_users": []

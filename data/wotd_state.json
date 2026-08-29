@@ -1,9 +1,9 @@
 {
   "is_active": true,
-  "current_word": "jeb bush",
-  "prize_value": 160,
-  "stream_bias_percent": 100,
+  "current_word": "bridge",
+  "prize_value": 10,
+  "stream_bias_percent": 25,
   "winner": null,
-  "last_word": "dong",
-  "last_entries": 155
+  "last_word": "Flor de cana",
+  "last_entries": 5
 }

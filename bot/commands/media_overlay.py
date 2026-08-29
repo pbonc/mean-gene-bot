@@ -339,6 +339,13 @@ class MediaOverlayCog(commands.Cog):
                         await self._maybe_sync_sheet()
                     except Exception:
                         self.logger.exception("Error syncing sheet after add")
+                elif entry != prev_snapshot[cmd]:
+                    # Rebuild the generated callback when an existing command now
+                    # points at a different file (for example, resolving a root/WJ
+                    # filename collision). Callback closures retain the old entry.
+                    self._unregister_media_command(cmd)
+                    self._register_media_command(cmd, entry)
+                    self.logger.info("Refreshed changed media command: !%s", cmd)
             for cmd in list(prev_snapshot.keys()):
                 if cmd not in snapshot:
                     self._unregister_media_command(cmd)
