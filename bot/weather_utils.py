@@ -57,7 +57,7 @@ WEATHER_FILE = os.path.join(WORKSPACE_ROOT, "assets", "txt", "weather_messages.t
 
 async def fetch_weather(location):
     WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY")
-    url = f"http://api.weatherapi.com/v1/current.json?key={WEATHERAPI_KEY}&q={location}&aqi=no"
+    url = f"https://api.weatherapi.com/v1/current.json?key={WEATHERAPI_KEY}&q={location}&aqi=no"
     import logging
     try:
         async with aiohttp.ClientSession() as session:

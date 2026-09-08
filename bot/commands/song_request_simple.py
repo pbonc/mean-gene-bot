@@ -285,7 +285,7 @@ class SimpleSongManager:
     _youtube_download_lock = asyncio.Lock()
     _youtube_url_cooldowns = {}  # {youtube_url: cooldown_until_ts}
     
-    def __init__(self):
+    def __init__(self, audio_manager):
         self.logger = logging.getLogger(__name__)
         self.user_quarters = self.load_quarters()
         self.playlist_cache = self.load_playlist_cache()
@@ -299,7 +299,6 @@ class SimpleSongManager:
         self.current_song = None
         self.current_song_info = None
         self.music_enabled = False
-        from bot.main import audio_manager
         self.audio_manager = audio_manager
         
         # Synchronization for preventing race conditions between manual commands and auto-play
@@ -2733,13 +2732,12 @@ class SimpleSongManager:
         self.quarter_song_snipe_list = []
         self.logger.info("Quarter song snipe list cleared on startup.")
     
-# Initialize manager
-song_manager = SimpleSongManager()
+# The startup composition root supplies the shared manager through the bot.
 
 class SongRequestCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.manager = song_manager
+        self.manager = bot.song_manager
         self.chat_channel = None  # Store channel for error reporting
         self.logger = logging.getLogger(__name__)
         # Clear snipe list on bot startup

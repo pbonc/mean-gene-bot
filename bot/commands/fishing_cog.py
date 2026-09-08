@@ -57,17 +57,16 @@ class FishingCog(commands.Cog):
             tags = " • ".join(x for x in ("New PB" if p["personal_best"] else "", "NEW LAKE RECORD" if p["lake_record"] else "") if x)
             return f"🎣 {p['display_name']} caught a {p['weight']:.1f} lb {p['tier'].title()} {p['species_name']} • +{p['points']} Fishing Points" + (f" • {tags}" if tags else "")
         if kind == "mk1220_launched":
-            noteworthy = [fish for fish in p.get("catches", []) if fish.get("tier") == "diamond" or fish.get("personal_best") or fish.get("lake_record")]
-            if not noteworthy:
-                return f"💥 {p['display_name']} fired a Mk. 1220 and caught 5 fish."
             details = " | ".join(
-                f"{fish['weight']:.1f} lb {fish['species']}"
-                + (" ♦ Diamond" if fish.get("tier") == "diamond" else "")
+                f"{fish['weight']:.1f} lb {fish.get('tier', 'bronze').title()} "
+                f"{SPECIES.get(str(fish.get('species', '')).casefold(), {}).get('name', str(fish.get('species', '')).replace('_', ' ').title())}"
                 + (" • PB" if fish.get("personal_best") else "")
                 + (" • LR" if fish.get("lake_record") else "")
-                for fish in noteworthy
+                for fish in p.get("catches", [])
             )
-            return f"💥 {p['display_name']}'s Mk. 1220 caught 5 fish • {details}"
+            return f"💥 {p['display_name']}'s Mk. 1220 caught {len(p.get('catches', []))} fish • {details}"
+        if kind == "steve_attack":
+            return f"🦈 Steve destroyed {p['display_name']}'s boat. Repairs underway."
         return None
 
     @staticmethod

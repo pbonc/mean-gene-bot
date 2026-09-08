@@ -6,7 +6,6 @@ from typing import Dict, Optional, Tuple
 
 from twitchio.ext import commands
 
-from bot.main import audio_manager
 from bot.commands.base_command import mod_only
 
 
@@ -109,7 +108,7 @@ class WalkinCog(commands.Cog):
             path = path_or_paths
         # Queue SFX via audio_manager
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, audio_manager.play_sfx, path)
+        await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, path)
         # Send text if provided (immediately, not waiting for SFX to finish)
         if text and channel:
             try:

@@ -221,19 +221,30 @@ class FishingServiceTests(unittest.TestCase):
         diamond["payload"] = dict(ordinary["payload"], tier="diamond")
         self.assertIn("Diamond", FishingCog._chat_alert(diamond))
 
-    def test_mk1220_chat_summary_is_compact_unless_catch_is_noteworthy(self):
+    def test_mk1220_chat_summary_lists_every_catch_with_weight_species_and_grade(self):
         from bot.commands.fishing_cog import FishingCog
 
         plain = FishingService._event("mk1220_launched", display_name="Nate", catches=[
             {"species": "Bass", "weight": 7.2, "tier": "gold", "personal_best": False, "lake_record": False}
         ] * 5)
-        self.assertEqual("💥 Nate fired a Mk. 1220 and caught 5 fish.", FishingCog._chat_alert(plain))
+        alert = FishingCog._chat_alert(plain)
+        self.assertIn("caught 5 fish", alert)
+        self.assertEqual(alert.count("7.2 lb Gold Largemouth Bass"), 5)
         notable = FishingService._event("mk1220_launched", display_name="Nate", catches=[
             {"species": "Walleye", "weight": 12.3, "tier": "diamond", "personal_best": True, "lake_record": True}
         ])
         alert = FishingCog._chat_alert(notable)
-        self.assertIn("12.3 lb Walleye", alert); self.assertIn("Diamond", alert)
+        self.assertIn("12.3 lb Diamond Walleye", alert)
         self.assertIn("PB", alert); self.assertIn("LR", alert)
+
+    def test_steve_attack_is_announced_in_chat(self):
+        from bot.commands.fishing_cog import FishingCog
+
+        event = FishingService._event("steve_attack", display_name="Nate")
+        self.assertEqual(
+            "🦈 Steve destroyed Nate's boat. Repairs underway.",
+            FishingCog._chat_alert(event),
+        )
 
     def test_personal_records_lists_each_species_biggest_catch(self):
         from bot.commands.fishing_cog import FishingCog
@@ -531,6 +542,14 @@ class FishingRendererContractTests(unittest.TestCase):
         self.assertIn(".compact .boat.tier-4 .person { left:14px", css)
         self.assertIn(".boat.tier-4.fishing .rod", css)
         self.assertIn("@keyframes yachtCast", css)
+        self.assertIn('String(a.display_name??"").trim().toLowerCase()', renderer)
+        self.assertIn('normalizedUsername==="deputydawg777"&&Number(a.boat_tier)===4', renderer)
+        self.assertIn('el.classList.toggle("sheriff-yacht",isSheriffYacht)', renderer)
+        self.assertIn(".compact .boat.tier-4.sheriff-yacht:before", css)
+        self.assertIn(".compact .boat.tier-4.sheriff-yacht:after", css)
+        self.assertIn(".afk .boat.tier-4.sheriff-yacht:before", css)
+        self.assertIn(".afk .boat.tier-4.sheriff-yacht:after", css)
+        self.assertIn("@keyframes sheriffLightbar", css)
         self.assertIn("pathHitsIsland", renderer)
         self.assertIn("moveBoatTo", renderer)
         self.assertIn("centralIsland", renderer)

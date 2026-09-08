@@ -33,7 +33,7 @@
     let el=nodes.get(a.user_id),isNew=!el;
     if(!a.active){if(el)el.remove();nodes.delete(a.user_id);return}
     if(!el){el=document.createElement("div");el.innerHTML='<div class="boat-art"></div><div class="boat-details"></div><div class="person"></div><div class="rod"></div><div class="fishing-line"></div>';el.className=`boat${(hash(a.user_id+"facing")&1)===1?" facing-left":""}`;boats.appendChild(el);nodes.set(a.user_id,el)}
-    const p=safeBoatPoint(position(a));el.classList.remove("tier-1","tier-2","tier-3","tier-4");el.classList.add(`tier-${a.boat_tier}`);el.dataset.userId=a.user_id;if(!el.dataset.x)el.dataset.x=String(p.x);if(!el.dataset.y)el.dataset.y=String(p.y);el.style.setProperty("--boat-color",a.boat_color);el.style.setProperty("--shirt-color",a.shirt_color);if(isNew){el.style.left=`calc(${p.x}% - ${mode==="compact"?52:75}px)`;el.style.top=`${p.y}px`;el.style.zIndex=String(100+Math.round(p.y))}
+    const p=safeBoatPoint(position(a)),normalizedUsername=String(a.display_name??"").trim().toLowerCase(),isSheriffYacht=normalizedUsername==="deputydawg777"&&Number(a.boat_tier)===4;el.classList.remove("tier-1","tier-2","tier-3","tier-4");el.classList.add(`tier-${a.boat_tier}`);el.classList.toggle("sheriff-yacht",isSheriffYacht);el.dataset.userId=a.user_id;if(!el.dataset.x)el.dataset.x=String(p.x);if(!el.dataset.y)el.dataset.y=String(p.y);el.style.setProperty("--boat-color",a.boat_color);el.style.setProperty("--shirt-color",a.shirt_color);if(isNew){el.style.left=`calc(${p.x}% - ${mode==="compact"?52:75}px)`;el.style.top=`${p.y}px`;el.style.zIndex=String(100+Math.round(p.y))}
   }
   function snapshot(msg){
     document.body.classList.toggle("powered-off",msg.enabled===false);

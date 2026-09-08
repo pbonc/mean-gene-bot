@@ -109,11 +109,26 @@ RESERVED_RPG_COMMANDS = {
     "resetdailies",
 }
 
-# Audio system with volume control
-from bot.main import audio_manager
+# Audio is supplied by the caller; importing this helper never starts playback.
+_audio_manager = None
 
-def playsound_with_volume(path, volume=None):
-    """Unified SFX playback using AudioManager"""
+
+def bind_audio_manager(audio_manager):
+    """Bind the startup-owned service without constructing or starting anything."""
+    global _audio_manager
+    _audio_manager = audio_manager
+
+
+def playsound_with_volume(path, volume=None, *, audio_manager=None):
+    """Preserve playsound(path, volume=None); allow an explicit service override.
+
+    prepare() binds the application service. Standalone callers must bind one or
+    pass it explicitly; importing this module never creates an audio service.
+    """
+    if audio_manager is None:
+        audio_manager = _audio_manager
+    if audio_manager is None:
+        raise RuntimeError("Bind an audio manager or pass audio_manager before playback")
     if volume is not None:
         audio_manager.set_sfx_volume(volume)
     audio_manager.play_sfx(path)
@@ -250,6 +265,7 @@ def get_audio_duration_seconds_truncated(path: str):
 
 class MediaOverlayCog(commands.Cog):
     def __init__(self, bot):
+        self._watcher_task = None
         self.bot = bot
         self.logger = logging.getLogger("media_overlay")
         self._registered = set()
@@ -257,7 +273,8 @@ class MediaOverlayCog(commands.Cog):
         self.executor = ThreadPoolExecutor(max_workers=2)
         self.ytmode_enabled = self._load_ytmode_state()
         # Note: SFX queue removed - audio_manager now handles queuing internally
-        bot.loop.create_task(self._watch_media_folders()) 
+        self._watcher_task = bot.loop.create_task(self._watch_media_folders())
+        self._watcher_task.add_done_callback(self._watcher_done)
 
     def _load_ytmode_state(self) -> bool:
         try:
@@ -304,10 +321,27 @@ class MediaOverlayCog(commands.Cog):
                     pass
                 self._registered.discard(cmd)
 
+    def _watcher_done(self, task):
+        # TwitchIO 2.x unload is synchronous; observe completion without
+        # creating another task that could itself be left behind at shutdown.
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            self.logger.exception("Media folder watcher failed")
+        finally:
+            if getattr(self, "_watcher_task", None) is task:
+                self._watcher_task = None
+
     def cog_unload(self):
-        for cmd in list(self._registered):
+        watcher = getattr(self, "_watcher_task", None)
+        if watcher is not None and not watcher.done() and not watcher.cancelling():
+            watcher.cancel()
+        for cmd in list(getattr(self, "_registered", ())):
             self._unregister_media_command(cmd)
-        self._cleanup_reserved_command_conflicts()
+        if hasattr(self, "bot"):
+            self._cleanup_reserved_command_conflicts()
         try:
             self.executor.shutdown(wait=False)
         except Exception:
@@ -493,13 +527,13 @@ class MediaOverlayCog(commands.Cog):
                     chosen_name = os.path.splitext(os.path.basename(chosen_path))[0].lower()
                     # Play SFX via audio_manager (queues internally)
                     loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, audio_manager.play_sfx, chosen_path)
+                    await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, chosen_path)
                     await ctx.send(f"Played: !{chosen_name}")
                 else:
                     name = os.path.splitext(os.path.basename(path_or_paths))[0].lower()
                     # Play SFX via audio_manager (queues internally)
                     loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, audio_manager.play_sfx, path_or_paths)
+                    await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, path_or_paths)
                     await ctx.send(f"Played: !{name}")
                 # ZAP trigger for SFX commands
                 raffle_cog = self.bot.get_cog("RaffleCog")
@@ -567,10 +601,10 @@ class MediaOverlayCog(commands.Cog):
             if sfx_type == "folder":
                 chosen_path = random.choice(path_or_paths)
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, audio_manager.play_sfx, chosen_path)
+                await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, chosen_path)
             else:
                 loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, audio_manager.play_sfx, path_or_paths)
+                await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, path_or_paths)
         if "image" in entry and not self.ytmode_enabled:
             path, rel_fname = entry["image"]
             ext = os.path.splitext(rel_fname)[1].lower()
@@ -833,14 +867,14 @@ class MediaOverlayCog(commands.Cog):
         if sfx_type in ("flat", "folderfile"):
             path = entry["sfx"][0]
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, audio_manager.play_sfx, path)
+            await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, path)
             await ctx.send(f"Played: !{cmd}")
         elif sfx_type == "folder":
             paths = entry["sfx"][0]
             chosen_path = random.choice(paths)
             chosen_name = os.path.splitext(os.path.basename(chosen_path))[0].lower()
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, audio_manager.play_sfx, chosen_path)
+            await loop.run_in_executor(None, self.bot.audio_manager.play_sfx, chosen_path)
             await ctx.send(f"Played: !{chosen_name}")
         else:
             await ctx.send("❌ Unexpected error in randomsfx.")
@@ -903,7 +937,7 @@ class MediaOverlayCog(commands.Cog):
         
         if level is None:
             # Show current volume
-            current = int(audio_manager.sfx_volume * 100)
+            current = int(self.bot.audio_manager.sfx_volume * 100)
             await ctx.send(f"🔊 Current SFX volume: {current}%")
             return
         
@@ -912,7 +946,7 @@ class MediaOverlayCog(commands.Cog):
             return
         
         # Update SFX volume in audio_manager
-        audio_manager.set_sfx_volume(level / 100.0)
+        self.bot.audio_manager.set_sfx_volume(level / 100.0)
         await ctx.send(f"🔊 SFX volume set to {level}%")
 
     @commands.command(name="play")
@@ -978,4 +1012,5 @@ class MediaOverlayCog(commands.Cog):
 
 
 def prepare(bot):
+    bind_audio_manager(bot.audio_manager)
     bot.add_cog(MediaOverlayCog(bot))

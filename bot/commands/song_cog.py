@@ -43,7 +43,7 @@ class SongCog(commands.Cog):
         Does not show quarter-based (YouTube-only) songs.
         """
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             # Check if music is currently playing
             if not song_manager.is_playing or not song_manager.current_song_info:
@@ -192,7 +192,7 @@ class SongCog(commands.Cog):
             # Check current queue status
             try:
                 # Try to get queue info from song request system
-                from bot.commands.song_request_simple import song_manager
+                song_manager = self.bot.song_manager
                 queue_size = len(song_manager.current_queue) if hasattr(song_manager, 'current_queue') else 0
             except:
                 queue_size = 0
@@ -218,7 +218,7 @@ class SongCog(commands.Cog):
         Usage: !cachestats
         """
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             cache_status = song_manager.get_cache_status()
             
@@ -245,7 +245,7 @@ class SongCog(commands.Cog):
             return
 
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             import os
             
             cache_dir = "C:\\dev\\mean-gene-bot\\data\\music_cache"
@@ -287,7 +287,7 @@ class SongCog(commands.Cog):
         Usage: !quickcache
         """
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             cache_status = song_manager.get_cache_status()
             missing_count = len(cache_status['missing_songs'])
@@ -326,7 +326,7 @@ class SongCog(commands.Cog):
             return
 
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             result = await song_manager.cache_missing_songs(max_num, ctx.channel)
             
@@ -350,7 +350,7 @@ class SongCog(commands.Cog):
         # Smart default batch size based on missing songs
         if batch_size is None:
             try:
-                from bot.commands.song_request_simple import song_manager
+                song_manager = self.bot.song_manager
                 cache_status = song_manager.get_cache_status()
                 missing_count = len(cache_status['missing_songs'])
                 
@@ -375,7 +375,7 @@ class SongCog(commands.Cog):
                 return
 
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             # Get initial status for confirmation
             cache_status = song_manager.get_cache_status()
@@ -399,7 +399,7 @@ class SongCog(commands.Cog):
     async def queue_info(self, ctx):
         """Show detailed queue information including duplicate prevention status"""
         try:
-            from bot.commands.song_request_simple import song_manager
+            song_manager = self.bot.song_manager
             
             queue = song_manager.current_queue
             if not queue:

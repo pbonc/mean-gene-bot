@@ -6,12 +6,15 @@ from collections import OrderedDict
 from aiohttp import web
 import asyncio
 from bot.grid_state import GridManager
+from bot.wheel_state import get_wheel_state, apply_wheel_control, WheelOperationError
 
 overlay_clients = set()
 # Track clients that want AS_overlay messages
 as_overlay_clients = set()
 wotwom_chatters = OrderedDict()
 _runner = None
+_background_tasks = set()
+_lifecycle_lock = asyncio.Lock()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "overlay_static")
@@ -21,51 +24,10 @@ WHEEL_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "d
 RPG_STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_state.json")
 RPG_LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(STATIC_DIR)), "data", "rpg_log.json")
 
-def _load_wheel_state_file():
-    if os.path.exists(WHEEL_STATE_FILE):
-        try:
-            with open(WHEEL_STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data
-        except Exception:
-            return {}
-    return {}
-
-def _save_wheel_state_file(data: dict):
-    try:
-        with open(WHEEL_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-    except Exception:
-        pass
-
 def _wheel_payload_from_file():
-    data = _load_wheel_state_file()
-    slots = {k: int(v) for k, v in data.get("slots", {}).items() if int(v) > 0}
-    scores = {k: int(v) for k, v in data.get("scores", {}).items() if int(v) >= 0}
-    order = [u for u in data.get("order", []) if u in slots]
-    for u in sorted(slots.keys()):
-        if u not in order:
-            order.append(u)
-    colors = {k: v for k, v in data.get("colors", {}).items() if isinstance(v, str)}
-    slots_payload = [
-        {"name": name, "count": int(slots[name]), "color": colors.get(name)}
-        for name in order
-    ]
-    scores_payload = [
-        {"name": name, "score": int(score)}
-        for name, score in sorted(scores.items(), key=lambda x: (-x[1], x[0]))
-    ]
-    total_slots = sum(int(c) for c in slots.values())
-    return {
-        "type": "wheel_state",
-        "slots": slots_payload,
-        "scores": scores_payload,
-        "total_slots": total_slots,
-        "last_winner": data.get("last_winner"),
-        "remove_on_win": bool(data.get("remove_on_win", False)),
-        "wheel_locked": bool(data.get("wheel_locked", False)),
-        "last_man_standing": bool(data.get("last_man_standing", False)),
-    }
+    state = get_wheel_state(WHEEL_STATE_FILE)
+    state.load()
+    return state.get_state_payload()
 
 def _load_rpg_payload_from_files():
     try:
@@ -252,24 +214,15 @@ async def websocket_handler(request):
                     if data.get('type') == 'wheel_control':
                         action = data.get('action')
                         if action in ("set_multiplier", "set_remove_on_win"):
-                            state = _load_wheel_state_file()
-                            state.setdefault("slots", {})
-                            state.setdefault("scores", {})
-                            if action == "set_multiplier":
-                                try:
-                                    multiplier = int(data.get("value"))
-                                except Exception:
-                                    multiplier = 1
-                                if multiplier < 1:
-                                    multiplier = 1
-                                if multiplier > 500:
-                                    multiplier = 500
-                                if state["slots"]:
-                                    state["slots"] = {k: multiplier for k in state["slots"].keys()}
-                            if action == "set_remove_on_win":
-                                state["remove_on_win"] = bool(data.get("value", True))
-                            _save_wheel_state_file(state)
-                            await broadcast_overlay_message(_wheel_payload_from_file())
+                            try:
+                                state = get_wheel_state(WHEEL_STATE_FILE)
+                                apply_wheel_control(state, action, data.get("value", True))
+                            except WheelOperationError:
+                                logging.exception("Wheel operation failed")
+                                await ws.send_json({"type": "wheel_error", "action": action,
+                                                    "message": "Wheel operation failed; no change was committed. Please retry."})
+                            else:
+                                await broadcast_overlay_message(state.get_state_payload())
                 except Exception:
                     pass
     finally:
@@ -623,10 +576,23 @@ def get_relative_path(file_path, filename, base_dir):
     full_path = os.path.join(file_path, filename)
     rel_path = os.path.relpath(full_path, base_dir)
     return f"/cards/{rel_path.replace(os.sep, '/')}"
-async def shutdown():
+async def shutdown(_expected_runner=None):
     global _runner
-    if _runner:
-        await _runner.cleanup()
+    async with _lifecycle_lock:
+        if _expected_runner is not None and _runner is not _expected_runner:
+            return
+        tasks = tuple(_background_tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        try:
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            _background_tasks.difference_update(tasks)
+            runner, _runner = _runner, None
+            if runner is not None:
+                await runner.cleanup()
 
 # Store the most recent ticker message. Start empty so overlays don't
 # receive a welcome/default ticker on connect.
@@ -788,14 +754,23 @@ async def start_overlay_server(host: str = "0.0.0.0", port: int = 8080):
     cards_dir = CARDS_DIR
     if os.path.isdir(cards_dir):
         app.router.add_static('/cards', cards_dir)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-    logging.info(f"[OVERLAY] Server started at http://{host}:{port}")
-    # Start ticker broadcast task
-    asyncio.create_task(as_overlay_task())
-    asyncio.create_task(rpg_state_task())
-    # Keep running forever
-    while True:
-        await asyncio.sleep(3600)
+    global _runner
+    runner = None
+    try:
+        async with _lifecycle_lock:
+            if _runner is not None:
+                raise RuntimeError("Overlay server is already started")
+            runner = web.AppRunner(app)
+            _runner = runner
+            await runner.setup()
+            site = web.TCPSite(runner, host, port)
+            await site.start()
+            logging.info(f"[OVERLAY] Server started at http://{host}:{port}")
+            _background_tasks.add(asyncio.create_task(as_overlay_task()))
+            _background_tasks.add(asyncio.create_task(rpg_state_task()))
+        # The caller owns this serving task and cancels/awaits it on exit.
+        while True:
+            await asyncio.sleep(3600)
+    finally:
+        if runner is not None:
+            await shutdown(runner)

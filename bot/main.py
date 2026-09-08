@@ -51,6 +51,21 @@ from bot.weather_utils import fetch_weather, save_weather_message, get_random_we
 from bot.oauth_refresh import auto_refresh_if_needed
 from bot.telemetry import log_event, tail_events, telemetry_file_path
 from bot.twitch_watchdog import TwitchWatchdogState, WatchdogAction
+from bot.hermes_bridge import HermesChatBridge, HermesRunClient, HermesSettings
+from bot.control_center import ControlCenterServer, ControlCenterSettings, OwnedStatus
+from bot.lore_store import LoreStore
+from bot.lore_capture import LoreCaptureService, LoreCaptureSettings
+from bot.lore_observability import startup_diagnostics
+from bot.discord_operator import (
+    DiscordOperatorService,
+    DiscordOperatorSettings,
+    run_discord_resilient,
+)
+from bot.hermes_debug import (
+    HermesDebugSettings,
+    HermesFlightRecorder,
+    defensive_secrets_from_env,
+)
 
 # Auto-install dependencies on startup
 try:
@@ -99,8 +114,7 @@ except Exception as e:
 # Load .env file
 load_dotenv()
 
-# Instantiate global AudioManager
-audio_manager = AudioManager(music_volume=0.3, sfx_volume=0.6, duck_volume=0.1)
+# Audio is created explicitly by create_bot() during startup.
 
 # Import Discord config after loading .env
 try:
@@ -464,7 +478,8 @@ class Bot(commands.Bot):
         else:
             await ctx.send("Location not found or API error.")
 
-    def __init__(self):
+    def __init__(self, audio_manager):
+        self.audio_manager = audio_manager
         super().__init__(
             token=TWITCH_TOKEN,
             client_id=TWITCH_CLIENT_ID,
@@ -475,6 +490,21 @@ class Bot(commands.Bot):
         )
         self.discord_client = None
         self._last_twitch_activity = time.monotonic()
+        self.lore_store = LoreStore(os.getenv("LORE_DB_PATH", "data/lore.db"))
+        hermes_settings = HermesSettings.from_env()
+        debug_settings = HermesDebugSettings.from_env()
+        self.hermes_debug = HermesFlightRecorder(
+            debug_settings,
+            secrets=defensive_secrets_from_env(),
+        )
+        self.hermes_bridge = HermesChatBridge(
+            settings=hermes_settings,
+            lore_store=self.lore_store,
+            debug_recorder=self.hermes_debug,
+        )
+        self.lore_capture = LoreCaptureService(
+            self.lore_store, self.hermes_bridge.client, LoreCaptureSettings.from_env()
+        )
 
     def _touch_twitch_activity(self):
         self._last_twitch_activity = time.monotonic()
@@ -533,18 +563,31 @@ class Bot(commands.Bot):
                 )
         except Exception as exc:
             logging.error(f"[TELEMETRY] Failed to log event_message: {exc}")
-        # AI chat and pirate list logic
-        if message.author and message.content:
-            import logging
-            import os
-            from datetime import datetime, timedelta
-            content_lower = message.content.lower()
-            bot_names = ["@meangenebot", "@mean_gene_bot", "@mean gene bot"]
-            if any(name in content_lower for name in bot_names):
-                # AI functionality temporarily disabled. Code is preserved for future reactivation.
-                return
+        # Capture only after the existing disabled-command/telemetry eligibility path.
+        try:
+            self.lore_capture.capture(message)
+        except Exception:
+            logging.exception("[LORE] Capture ingress failed; chat processing unaffected")
+        # Explicitly addressed AI prompts are admitted and processed in a
+        # background task; normal TwitchIO command/listener dispatch continues.
+        try:
+            self.hermes_bridge.submit(message)
+        except Exception:
+            logging.exception("[HERMES] Submission ingress failed; chat processing unaffected")
         # Default: pass to base event so listeners/cogs fire
         await super().event_message(message)
+
+    @commands.command(name="gene")
+    async def gene_command(self, ctx):
+        """Thin command adapter into the same Hermes admission/generation path."""
+        content = str(getattr(getattr(ctx, "message", None), "content", "") or "")
+        prompt = content.partition(" ")[2].strip()
+        self.hermes_bridge.submit_prompt(ctx.message, prompt)
+
+    async def close(self):
+        await self.lore_capture.close()
+        await self.hermes_bridge.close()
+        await super().close()
 
     async def event_command(self, ctx):
         self._touch_twitch_activity()
@@ -680,13 +723,58 @@ class Bot(commands.Bot):
 
 if DISCORD_AVAILABLE:
     class DiscordBot(discord_commands.Bot):
-        def __init__(self):
+        def __init__(self, operator_service=None, debug_channel_id=None):
             intents = discord.Intents.default()
             intents.message_content = True
             super().__init__(command_prefix='!', intents=intents)
+            self.operator_service = operator_service
+            self.debug_channel_id = debug_channel_id
             
         async def on_ready(self):
             print(f'[DISCORD] Bot logged in as {self.user}')
+
+        async def on_message(self, message):
+            if message.author == self.user or getattr(message.author, "bot", False):
+                return
+            if self.operator_service is not None:
+                try:
+                    response = await self.operator_service.handle_message(
+                        guild_id=getattr(getattr(message, "guild", None), "id", None),
+                        channel_id=int(message.channel.id),
+                        user_id=int(message.author.id),
+                        content=message.content,
+                    )
+                    if response:
+                        await message.channel.send(response)
+                except Exception:
+                    logging.exception("[DISCORD OPERATOR] Message handling failed")
+                    await message.channel.send("Gene hit a snag, but nothing was changed.")
+            await self.process_commands(message)
+
+        async def on_raw_reaction_add(self, payload):
+            if self.operator_service is None:
+                return
+            try:
+                await self.operator_service.handle_reaction(
+                    guild_id=getattr(payload, "guild_id", None),
+                    channel_id=int(payload.channel_id),
+                    user_id=int(payload.user_id),
+                    message_id=int(payload.message_id),
+                    emoji=str(payload.emoji),
+                )
+            except Exception:
+                logging.exception("[DISCORD OPERATOR] Reaction handling failed safely")
+
+        async def send_operator_message(self, content):
+            if self.operator_service is None or not self.operator_service.settings.channel_id:
+                raise RuntimeError("No authorized Discord operator channel configured")
+            channel_id = self.operator_service.settings.channel_id
+            channel = self.get_channel(channel_id)
+            if channel is None:
+                channel = await self.fetch_channel(channel_id)
+            if not hasattr(channel, "send"):
+                raise RuntimeError(f"Operator channel {channel_id} is not message-capable")
+            return await channel.send(content)
             
         async def send_to_channel(self, message):
             if DISCORD_CHANNEL_ID:
@@ -697,6 +785,28 @@ if DISCORD_AVAILABLE:
                     print(f'[DISCORD ERROR] Channel {DISCORD_CHANNEL_ID} not found')
             else:
                 print('[DISCORD ERROR] No channel ID configured')
+
+        async def send_debug_messages(self, messages):
+            if not self.debug_channel_id:
+                raise RuntimeError("No Discord debug channel configured")
+            channel = self.get_channel(self.debug_channel_id)
+            if channel is None:
+                try:
+                    channel = await self.fetch_channel(self.debug_channel_id)
+                except Exception as error:
+                    raise RuntimeError(
+                        f"Debug channel {self.debug_channel_id} could not be resolved"
+                    ) from error
+            if not hasattr(channel, "send"):
+                raise RuntimeError(
+                    f"Debug channel {self.debug_channel_id} is not message-capable"
+                )
+            for message in messages:
+                await channel.send(message)
+            print(
+                f"[HERMES DEBUG] Delivered Discord telemetry "
+                f"channel={self.debug_channel_id} messages={len(messages)}"
+            )
 else:
     # Dummy DiscordBot class when Discord is not available
     class DiscordBot:
@@ -706,6 +816,15 @@ else:
             pass
         async def send_to_channel(self, message):
             print(f'[DISCORD DISABLED] Would send: {message}')
+
+def create_bot():
+    """Compose the bot with the one audio service shared by its commands."""
+    audio_manager = AudioManager(music_volume=0.3, sfx_volume=0.6, duck_volume=0.1)
+    bot = Bot(audio_manager=audio_manager)
+    from bot.commands.song_request_simple import SimpleSongManager
+    bot.song_manager = SimpleSongManager(audio_manager)
+    return bot
+
 
 async def main():
     if not _acquire_single_instance_lock():
@@ -718,19 +837,6 @@ async def main():
     # Set up signal handlers for graceful shutdown
     def signal_handler(signum, frame):
         print(f"\n[BOT] Received signal {signum}, shutting down gracefully...")
-        # Kill any music processes using brute force approach
-        try:
-            import subprocess
-            # Kill any python processes that might be playing audio
-            try:
-                subprocess.run(['taskkill', '/F', '/IM', 'python.exe'], 
-                             capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                print("[BOT] Killed any remaining python audio processes")
-            except Exception as e:
-                print(f"[BOT] Error killing processes: {e}")
-        except Exception as e:
-            print(f"[BOT] Error cleaning up audio: {e}")
-        
         # Exit the program
         import sys
         sys.exit(0)
@@ -809,6 +915,7 @@ async def main():
     afk_ticker_task = None
     youtube_promo_task = None
     connection_watchdog_task = None
+    control_center = None
 
     async def _force_close_twitch(bot_instance):
         connection = getattr(bot_instance, "_connection", None)
@@ -832,21 +939,29 @@ async def main():
 
     async def shutdown_cleanup():
         print("[BOT] Cleaning up bot connections...")
+        if control_center is not None:
+            try:
+                await control_center.close()
+            except Exception:
+                logging.error("[CONTROL CENTER] Cleanup failed")
         if discord_bot:
             try:
                 await discord_bot.close()
             except Exception as close_error:
-                print(f"[DISCORD] Error during close: {close_error}")      
+                print(f"[DISCORD] Error during close: {close_error}")
         try:
             if bot:
                 await bot.close()
         except AttributeError as close_error:
             print(f"[BOT] Twitch client already cleaned up: {close_error}")
         except Exception as close_error:
-            print(f"[BOT] Error while closing Twitch bot: {close_error}")  
+            print(f"[BOT] Error while closing Twitch bot: {close_error}")
         finally:
             if bot:
-                await _force_close_twitch(bot)
+                try:
+                    await _force_close_twitch(bot)
+                except Exception:
+                    logging.error("[BOT] Forced Twitch cleanup failed")
         for extra_task in (overlay_task, ticker_task, afk_ticker_task, youtube_promo_task, connection_watchdog_task):
             if extra_task and not extra_task.done():
                 extra_task.cancel()
@@ -857,249 +972,292 @@ async def main():
                 await extra_task
             except asyncio.CancelledError:
                 pass
+            except Exception:
+                logging.error("[BOT] Owned background task failed during cleanup")
 
-    # Create and start the bots
     try:
-        print("[BOT] Initializing TwitchIO Bot...")
-        bot = Bot()
-        print("[BOT] TwitchIO Bot initialized successfully")
-    except Exception as bot_init_error:
-        print(f"[BOT] CRITICAL: Failed to initialize TwitchIO Bot: {type(bot_init_error).__name__}: {bot_init_error}")
-        import traceback
-        traceback.print_exc()
-        print("[BOT] Bot initialization failed. Exiting.")
-        await shutdown_cleanup()
-        raise
-    
-    # Initialize Discord bot if token is provided
-    discord_bot = None
-    if DISCORD_AVAILABLE and DISCORD_TOKEN:
+        # Create and start the bots
         try:
-            discord_bot = DiscordBot()
-            bot.discord_client = discord_bot
-            print('[DISCORD] Discord integration enabled')
-        except Exception as discord_error:
-            print(f'[DISCORD] Error setting up Discord: {discord_error}')
-            print('[DISCORD] Continuing without Discord integration')
-            discord_bot = None
-    else:
-        if not DISCORD_AVAILABLE:
-            print('[DISCORD] discord.py not available, Discord integration disabled')
+            print("[BOT] Initializing TwitchIO Bot...")
+            bot = create_bot()
+            print("[BOT] TwitchIO Bot initialized successfully")
+        except Exception as bot_init_error:
+            print(f"[BOT] CRITICAL: Failed to initialize TwitchIO Bot: {type(bot_init_error).__name__}: {bot_init_error}")
+            import traceback
+            traceback.print_exc()
+            print("[BOT] Bot initialization failed. Exiting.")
+            raise
+
+        # Initialize Discord bot if token is provided
+        discord_bot = None
+        operator_settings = DiscordOperatorSettings.from_env()
+        operator_service = None
+        if operator_settings.enabled:
+            hermes_settings = HermesSettings.from_env()
+            if operator_settings.complete and hermes_settings.enabled and hermes_settings.api_key:
+                operator_service = DiscordOperatorService(
+                    operator_settings,
+                    bot.lore_store,
+                    HermesRunClient(hermes_settings),
+                )
+                print('[DISCORD OPERATOR] Private operator surface enabled')
+            else:
+                print('[DISCORD OPERATOR] Incomplete configuration; operator surface disabled (fail closed)')
+        if DISCORD_AVAILABLE and DISCORD_TOKEN:
+            try:
+                discord_bot = DiscordBot(
+                    operator_service=operator_service,
+                    debug_channel_id=operator_settings.channel_id,
+                )
+                bot.discord_client = discord_bot
+                bot.hermes_debug.set_discord_sender(discord_bot.send_debug_messages)
+                if operator_service is not None:
+                    bot.lore_capture.set_moderation_poster(
+                        lambda record: operator_service.post_pending_candidate(
+                            discord_bot.send_operator_message, record
+                        )
+                    )
+                print('[DISCORD] Discord integration enabled')
+            except Exception as discord_error:
+                print(f'[DISCORD] Error setting up Discord: {discord_error}')
+                print('[DISCORD] Continuing without Discord integration')
+                discord_bot = None
         else:
-            print('[DISCORD] Discord token not found, Discord integration disabled')
+            if not DISCORD_AVAILABLE:
+                print('[DISCORD] discord.py not available, Discord integration disabled')
+            else:
+                print('[DISCORD] Discord token not found, Discord integration disabled')
 
-    # Start ticker cycle tasks
-    ticker_task = asyncio.create_task(bot.ticker_cycle_task())
-    afk_ticker_task = asyncio.create_task(bot.afk_ticker_cycle_task())
-    youtube_promo_task = asyncio.create_task(bot.youtube_promo_cycle_task())
-
-    # Automatically load all cogs in bot/commands/
-    commands_dir = os.path.join(os.path.dirname(__file__), "commands")
-    manual_exclusions = {"__init__.py", "base_command.py", "analytics_cog.py"}
-    archived_prefixes = ("rpg_cog",)
-    if os.path.isdir(commands_dir):
-        for filename in os.listdir(commands_dir):
-            if not filename.endswith(".py"):
-                continue
-            if filename in manual_exclusions:
-                continue
-            if any(filename.startswith(prefix) for prefix in archived_prefixes):
-                print(f"[COG] Skipping archived cog {filename}")
-                continue
-            modulename = f"bot.commands.{filename[:-3]}"
-            try:
-                print(f"[COG] Loading {modulename}...")
-                module = importlib.import_module(modulename)
-                if hasattr(module, "prepare"):
-                    module.prepare(bot)
-                    print(f"[COG] ✅ {filename} loaded successfully")
-                else:
-                    print(f"[COG] ⚠️ {filename} has no prepare function")
-            except Exception as e:
-                print(f"[COG] ❌ Failed to load {filename}: {e}")
-                import traceback
-                traceback.print_exc()
-    # Load modnews cog
-    from bot.commands.modnews import prepare as modnews_prepare
-    modnews_prepare(bot)
-
-    main_task_ref = {"task": None, "shutting_down": False}
-
-    def cancel_main_task():
-        task = main_task_ref.get("task")
-        if task and not task.done():
-            task.cancel()
-
-    def shutdown_handler(signum, frame):
-        if main_task_ref.get("shutting_down"):
-            return
-        main_task_ref["shutting_down"] = True
-        print("[BOT] Caught shutdown signal, backing up raffle state...")
-        try:
-            backup_raffle_state()
-        except Exception as err:
-            print(f"[BOT] Failed to back up raffle state: {err}")
-        loop = asyncio.get_event_loop()
-        loop.call_soon_threadsafe(cancel_main_task)
-
-    signal.signal(signal.SIGINT, shutdown_handler)
-    signal.signal(signal.SIGTERM, shutdown_handler)
-
-    # Helper that suppresses the TwitchIO keeper race on shutdown
-    async def run_bot_start(coro_factory, label):
-        try:
-            await coro_factory()
-            if not main_task_ref.get("shutting_down"):
-                raise RuntimeError(f"{label} stopped unexpectedly")
-        except AttributeError as err:
-            err_msg = err.args[0] if err.args else ""
-            if "NoneType' object has no attribute 'cancel'" in err_msg:
-                print(f"[BOT] {label} shutdown race suppressed: {err_msg}")
-                return
-            raise
-
-    async def twitch_connection_watchdog():
-        """Detect sustained Twitch disconnects without fighting TwitchIO reconnects."""
-        reconnect_grace_seconds = max(
-            60,
-            int(os.getenv("TWITCH_RECONNECT_GRACE_SECONDS", "300")),
+        startup_diagnostics(
+            bot.lore_capture.settings,
+            hermes_available=bool(bot.hermes_bridge.settings.enabled and bot.hermes_bridge.settings.api_key),
+            moderation_attached=bool(bot.lore_capture._moderation_poster),
         )
-        watchdog_state = TwitchWatchdogState(reconnect_grace_seconds)
-        while True:
-            await asyncio.sleep(30)
-            if main_task_ref.get("shutting_down") or not bot:
-                continue
-            try:
-                idle_for = time.monotonic() - getattr(bot, "_last_twitch_activity", time.monotonic())
-                channels = getattr(bot, "connected_channels", None) or []
-                connection = getattr(bot, "_connection", None)
-                websocket = getattr(connection, "_websocket", None) if connection else None
-                websocket_closed = bool(websocket and getattr(websocket, "closed", False))
 
-                unhealthy_reason = None
-                if websocket_closed:
-                    unhealthy_reason = "Twitch websocket is closed"
-                elif idle_for > 180 and not channels:
-                    unhealthy_reason = f"No connected Twitch channels for {int(idle_for)}s"
+        # One separate listener, using only already-owned service references.
+        settings = ControlCenterSettings.from_env()
+        try:
+            settings.validate()
+            settings.validate_overlay_port(os.getenv("OVERLAY_PORT", "8080"))
+        except ValueError:
+            logging.warning("[CONTROL CENTER] Disabled: invalid or missing local configuration")
+        else:
+            control_center = ControlCenterServer(settings, OwnedStatus(
+                bot, discord_bot, bot.hermes_bridge, bot.lore_store))
+            await control_center.start()
 
-                result = watchdog_state.observe(bool(unhealthy_reason), time.monotonic())
-                if result.action == WatchdogAction.DISCONNECT_STARTED:
-                    logging.warning(
-                        "[WATCHDOG] %s; allowing TwitchIO up to %ss to reconnect",
-                        unhealthy_reason,
-                        reconnect_grace_seconds,
-                    )
-                elif result.action == WatchdogAction.RECOVERED:
-                    logging.info(
-                        "[WATCHDOG] Twitch connection recovered after %ss",
-                        int(result.disconnected_for),
-                    )
-                elif result.action == WatchdogAction.GRACE_EXCEEDED:
-                    raise RuntimeError(
-                        f"{unhealthy_reason}; reconnect grace exceeded "
-                        f"({int(result.disconnected_for)}s)"
-                    )
-            except Exception as watchdog_error:
-                logging.error("[WATCHDOG] Twitch health check failed: %s", watchdog_error, exc_info=True)
-                raise
+        # Start ticker cycle tasks
+        ticker_task = asyncio.create_task(bot.ticker_cycle_task())
+        afk_ticker_task = asyncio.create_task(bot.afk_ticker_cycle_task())
+        youtube_promo_task = asyncio.create_task(bot.youtube_promo_cycle_task())
 
-    def reload_twitch_token_for_retry():
-        global TWITCH_TOKEN
-        load_dotenv(override=True)
-        latest_token = os.getenv("TWITCH_OAUTH_TOKEN")
-        if not latest_token:
-            return False, "TWITCH_OAUTH_TOKEN is missing after refresh"
-
-        # Keep a normalized token shape for TwitchIO internals.
-        normalized_token = latest_token.replace("oauth:", "")
-        TWITCH_TOKEN = normalized_token
-
-        if bot:
-            http_client = getattr(bot, "_http", None)
-            if http_client is not None:
-                http_client.token = normalized_token
-
-            connection = getattr(bot, "_connection", None)
-            if connection is not None:
-                connection._token = normalized_token
-
-        return True, "Runtime token reloaded"
-
-    # Start both bots concurrently
-    print("[BOT] Starting Twitch bot...")
-    tasks = [run_bot_start(bot.start, "Twitch bot")]
-    
-    if discord_bot:
-        print("[BOT] Adding Discord bot to tasks...")
-        tasks.append(run_bot_start(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot"))
-    
-    connection_watchdog_task = asyncio.create_task(twitch_connection_watchdog())
-
-    print(f"[BOT] Running {len(tasks)} bot tasks + overlay + ticker...")
-    async def create_main_gather(task_group):
-        gather_task = asyncio.gather(
-            *task_group,
-            overlay_task,
-            ticker_task,
-            afk_ticker_task,
-            youtube_promo_task,
-            connection_watchdog_task,
-        )
-        main_task_ref["task"] = gather_task
-        return gather_task
-
-    # Run all tasks concurrently, with a single automatic retry on auth errors
-    try:
-        print("[BOT] Starting overlay server...")
-        print("[BOT] Starting ticker tasks...")
-        main_gather = await create_main_gather(tasks)
-        await main_gather
-    except asyncio.CancelledError:
-        print("[BOT] Main gather cancelled due to shutdown signal.")
-    except Exception as e:
-        error_msg = str(e)
-        print(f"[BOT] Error in main gather: {error_msg}")
-        logging.error(f"[BOT] Main gather error: {e}", exc_info=True)
-        import traceback
-        traceback.print_exc()
-
-        # Check if it's an authentication error and try to refresh token
-        if "Invalid or unauthorized Access Token" in error_msg or "401" in error_msg:
-            print("[BOT] Detected authentication error, attempting token refresh...")
-            try:
-                success, refresh_msg = auto_refresh_if_needed()
-                if success:
-                    print(f"[BOT] Token refresh successful: {refresh_msg}")
-                    token_reload_ok, token_reload_msg = reload_twitch_token_for_retry()
-                    if token_reload_ok:
-                        print(f"[BOT] {token_reload_msg}")
+        # Automatically load all cogs in bot/commands/
+        commands_dir = os.path.join(os.path.dirname(__file__), "commands")
+        manual_exclusions = {"__init__.py", "base_command.py", "analytics_cog.py"}
+        archived_prefixes = ("rpg_cog",)
+        if os.path.isdir(commands_dir):
+            for filename in os.listdir(commands_dir):
+                if not filename.endswith(".py"):
+                    continue
+                if filename in manual_exclusions:
+                    continue
+                if any(filename.startswith(prefix) for prefix in archived_prefixes):
+                    print(f"[COG] Skipping archived cog {filename}")
+                    continue
+                modulename = f"bot.commands.{filename[:-3]}"
+                try:
+                    print(f"[COG] Loading {modulename}...")
+                    module = importlib.import_module(modulename)
+                    if hasattr(module, "prepare"):
+                        module.prepare(bot)
+                        print(f"[COG] ✅ {filename} loaded successfully")
                     else:
-                        print(f"[BOT] Token reload warning: {token_reload_msg}")
-                    # Attempt an automatic restart of bot tasks once
-                    print("[BOT] Attempting automatic restart of bot tasks...")
-                    try:
-                        # Recreate tasks to avoid reusing failed coroutines
-                        new_tasks = [run_bot_start(bot.start, "Twitch bot retry")]
-                        if discord_bot:
-                            new_tasks.append(run_bot_start(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot retry"))
-                        retry_gather = await create_main_gather(new_tasks)
-                        await retry_gather
-                        return
-                    except Exception as retry_error:
-                        print(f"[BOT] Retry failed: {retry_error}")
-                        logging.error(f"[BOT] Retry gather error: {retry_error}", exc_info=True)
-                        print("[BOT] Please restart the bot to use the refreshed token.")
-                        raise
-                else:
-                    print(f"[BOT] Token refresh failed: {refresh_msg}")
-                    print("[BOT] Please manually refresh your Twitch OAuth token.")
-                    raise RuntimeError(refresh_msg)
-            except Exception as refresh_error:
-                print(f"[BOT] Error during token refresh: {refresh_error}")
+                        print(f"[COG] ⚠️ {filename} has no prepare function")
+                except Exception as e:
+                    print(f"[COG] ❌ Failed to load {filename}: {e}")
+                    import traceback
+                    traceback.print_exc()
+        # Load modnews cog
+        from bot.commands.modnews import prepare as modnews_prepare
+        modnews_prepare(bot)
+
+        main_task_ref = {"task": None, "shutting_down": False}
+
+        def cancel_main_task():
+            task = main_task_ref.get("task")
+            if task and not task.done():
+                task.cancel()
+
+        def shutdown_handler(signum, frame):
+            if main_task_ref.get("shutting_down"):
+                return
+            main_task_ref["shutting_down"] = True
+            print("[BOT] Caught shutdown signal, backing up raffle state...")
+            try:
+                backup_raffle_state()
+            except Exception as err:
+                print(f"[BOT] Failed to back up raffle state: {err}")
+            loop = asyncio.get_event_loop()
+            loop.call_soon_threadsafe(cancel_main_task)
+
+        signal.signal(signal.SIGINT, shutdown_handler)
+        signal.signal(signal.SIGTERM, shutdown_handler)
+
+        # Helper that suppresses the TwitchIO keeper race on shutdown
+        async def run_bot_start(coro_factory, label):
+            try:
+                await coro_factory()
+                if not main_task_ref.get("shutting_down"):
+                    raise RuntimeError(f"{label} stopped unexpectedly")
+            except AttributeError as err:
+                err_msg = err.args[0] if err.args else ""
+                if "NoneType' object has no attribute 'cancel'" in err_msg:
+                    print(f"[BOT] {label} shutdown race suppressed: {err_msg}")
+                    return
                 raise
 
-        if not main_task_ref.get("shutting_down"):
-            raise
+        async def twitch_connection_watchdog():
+            """Detect sustained Twitch disconnects without fighting TwitchIO reconnects."""
+            reconnect_grace_seconds = max(
+                60,
+                int(os.getenv("TWITCH_RECONNECT_GRACE_SECONDS", "300")),
+            )
+            watchdog_state = TwitchWatchdogState(reconnect_grace_seconds)
+            while True:
+                await asyncio.sleep(30)
+                if main_task_ref.get("shutting_down") or not bot:
+                    continue
+                try:
+                    idle_for = time.monotonic() - getattr(bot, "_last_twitch_activity", time.monotonic())
+                    channels = getattr(bot, "connected_channels", None) or []
+                    connection = getattr(bot, "_connection", None)
+                    websocket = getattr(connection, "_websocket", None) if connection else None
+                    websocket_closed = bool(websocket and getattr(websocket, "closed", False))
+
+                    unhealthy_reason = None
+                    if websocket_closed:
+                        unhealthy_reason = "Twitch websocket is closed"
+                    elif idle_for > 180 and not channels:
+                        unhealthy_reason = f"No connected Twitch channels for {int(idle_for)}s"
+
+                    result = watchdog_state.observe(bool(unhealthy_reason), time.monotonic())
+                    if result.action == WatchdogAction.DISCONNECT_STARTED:
+                        logging.warning(
+                            "[WATCHDOG] %s; allowing TwitchIO up to %ss to reconnect",
+                            unhealthy_reason,
+                            reconnect_grace_seconds,
+                        )
+                    elif result.action == WatchdogAction.RECOVERED:
+                        logging.info(
+                            "[WATCHDOG] Twitch connection recovered after %ss",
+                            int(result.disconnected_for),
+                        )
+                    elif result.action == WatchdogAction.GRACE_EXCEEDED:
+                        raise RuntimeError(
+                            f"{unhealthy_reason}; reconnect grace exceeded "
+                            f"({int(result.disconnected_for)}s)"
+                        )
+                except Exception as watchdog_error:
+                    logging.error("[WATCHDOG] Twitch health check failed: %s", watchdog_error, exc_info=True)
+                    raise
+
+        def reload_twitch_token_for_retry():
+            global TWITCH_TOKEN
+            load_dotenv(override=True)
+            latest_token = os.getenv("TWITCH_OAUTH_TOKEN")
+            if not latest_token:
+                return False, "TWITCH_OAUTH_TOKEN is missing after refresh"
+
+            # Keep a normalized token shape for TwitchIO internals.
+            normalized_token = latest_token.replace("oauth:", "")
+            TWITCH_TOKEN = normalized_token
+
+            if bot:
+                http_client = getattr(bot, "_http", None)
+                if http_client is not None:
+                    http_client.token = normalized_token
+
+                connection = getattr(bot, "_connection", None)
+                if connection is not None:
+                    connection._token = normalized_token
+
+            return True, "Runtime token reloaded"
+
+        # Start both bots concurrently
+        print("[BOT] Starting Twitch bot...")
+        tasks = [run_bot_start(bot.start, "Twitch bot")]
+
+        if discord_bot:
+            print("[BOT] Adding Discord bot to tasks...")
+            tasks.append(run_discord_resilient(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot"))
+
+        connection_watchdog_task = asyncio.create_task(twitch_connection_watchdog())
+
+        print(f"[BOT] Running {len(tasks)} bot tasks + overlay + ticker...")
+        async def create_main_gather(task_group):
+            gather_task = asyncio.gather(
+                *task_group,
+                overlay_task,
+                ticker_task,
+                afk_ticker_task,
+                youtube_promo_task,
+                connection_watchdog_task,
+            )
+            main_task_ref["task"] = gather_task
+            return gather_task
+
+        # Run all tasks concurrently, with a single automatic retry on auth errors
+        try:
+            print("[BOT] Starting overlay server...")
+            print("[BOT] Starting ticker tasks...")
+            main_gather = await create_main_gather(tasks)
+            await main_gather
+        except asyncio.CancelledError:
+            print("[BOT] Main gather cancelled due to shutdown signal.")
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[BOT] Error in main gather: {error_msg}")
+            logging.error(f"[BOT] Main gather error: {e}", exc_info=True)
+            import traceback
+            traceback.print_exc()
+
+            # Check if it's an authentication error and try to refresh token
+            if "Invalid or unauthorized Access Token" in error_msg or "401" in error_msg:
+                print("[BOT] Detected authentication error, attempting token refresh...")
+                try:
+                    success, refresh_msg = auto_refresh_if_needed()
+                    if success:
+                        print(f"[BOT] Token refresh successful: {refresh_msg}")
+                        token_reload_ok, token_reload_msg = reload_twitch_token_for_retry()
+                        if token_reload_ok:
+                            print(f"[BOT] {token_reload_msg}")
+                        else:
+                            print(f"[BOT] Token reload warning: {token_reload_msg}")
+                        # Attempt an automatic restart of bot tasks once
+                        print("[BOT] Attempting automatic restart of bot tasks...")
+                        try:
+                            # Recreate tasks to avoid reusing failed coroutines
+                            new_tasks = [run_bot_start(bot.start, "Twitch bot retry")]
+                            if discord_bot:
+                                new_tasks.append(run_discord_resilient(lambda: discord_bot.start(DISCORD_TOKEN), "Discord bot retry"))
+                            retry_gather = await create_main_gather(new_tasks)
+                            await retry_gather
+                            return
+                        except Exception as retry_error:
+                            print(f"[BOT] Retry failed: {retry_error}")
+                            logging.error(f"[BOT] Retry gather error: {retry_error}", exc_info=True)
+                            print("[BOT] Please restart the bot to use the refreshed token.")
+                            raise
+                    else:
+                        print(f"[BOT] Token refresh failed: {refresh_msg}")
+                        print("[BOT] Please manually refresh your Twitch OAuth token.")
+                        raise RuntimeError(refresh_msg)
+                except Exception as refresh_error:
+                    print(f"[BOT] Error during token refresh: {refresh_error}")
+                    raise
+
+            if not main_task_ref.get("shutting_down"):
+                raise
     finally:
         await shutdown_cleanup()
 

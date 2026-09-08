@@ -24,6 +24,7 @@ def chunk_message(text, limit=480):
 class SimpleRaffleState:
     def __init__(self, state_file=RAFFLE_STATE_FILE):
         self.state_file = state_file
+        self._persisted_fields = {}
         self.is_open = False
         self.entries_per_chat = 1
         self.entries = {}  # user -> int
@@ -78,6 +79,8 @@ class SimpleRaffleState:
                     pass
                 self.save()
                 return
+            # Retain fields outside this writer's schema (including legacy prize).
+            self._persisted_fields = data.copy()
             self.is_open = data.get("is_open", False)
             self.entries_per_chat = data.get("entries_per_chat", 1)
             self.entries = data.get("entries", {})
@@ -104,6 +107,7 @@ class SimpleRaffleState:
     def save(self):
         sorted_picks = {k: self.picks[k] for k in sorted(self.picks, key=lambda x: int(x))}
         data = {
+            **self._persisted_fields,
             "is_open": self.is_open,
             "entries_per_chat": self.entries_per_chat,
             "entries": self.entries,
